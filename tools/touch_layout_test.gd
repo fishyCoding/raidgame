@@ -41,12 +41,22 @@ func _run() -> void:
 	root.add_child(_pad)
 	await physics_frame
 
-	for screen in SCREENS:
-		_pad.size = Vector2(screen[0], screen[1])
-		await physics_frame
-		_say("")
-		_say("-- %s (%.0f x %.0f)" % [screen[2], screen[0], screen[1]])
-		_measure(Vector2(screen[0], screen[1]))
+	# Every screen in every state the pad has. The contextual controls - the LOOT
+	# button that appears over a body, the UP/DOWN/LET GO that replace the left
+	# hand on a cable - are exactly the ones nobody looks at while moving things
+	# around, and exactly the ones that can end up under a thumb already busy.
+	for state in [["normal", false, false], ["over a body", true, false],
+			["on a cable", false, true], ["a body, on a cable", true, true]]:
+		_pad._looting = state[1]
+		_pad._riding = state[2]
+		for screen in SCREENS:
+			_pad.size = Vector2(screen[0], screen[1])
+			await physics_frame
+			_say("")
+			_say("-- %s, %s (%.0f x %.0f)" % [state[0], screen[2], screen[0], screen[1]])
+			_measure(Vector2(screen[0], screen[1]))
+	_pad._looting = false
+	_pad._riding = false
 
 	input.control_scheme = input.Controls.AUTO
 	_say("")
@@ -64,10 +74,11 @@ func _measure(screen: Vector2) -> void:
 	for pill in _pad._pill_rects():
 		controls.append({"name": String(pill.action), "rect": pill.rect})
 
-	var sticks := [
-		{"name": "move stick", "rect": _ring(_pad._move_home())},
-		{"name": "aim stick", "rect": _ring(_pad._aim_home())},
-	]
+	# Only one stick now, and none at all while riding: the aim stick is gone and
+	# the move stick is replaced by the cable controls.
+	var sticks: Array = []
+	if not _pad._riding:
+		sticks.append({"name": "move stick", "rect": _ring(_pad._move_home())})
 
 	# --- on the screen at all -------------------------------------------------
 	var off: Array[String] = []

@@ -481,7 +481,9 @@ func _draw_loot_prompt(y: float) -> void:
 	var body = _player.loot_target
 	var text := ""
 	if body != null and is_instance_valid(body):
-		text = "F    search %s" % body.get_prompt()
+		# The key is not the control on a phone - the LOOT button that appears
+		# over the thumb is - so the caption names whichever one is true.
+		text = ("LOOT    %s" if PlayerInput.is_touch() else "F    search %s") 			% body.get_prompt()
 	elif _player.loot_message_left > 0.0:
 		text = _player.loot_message
 	if text.is_empty():

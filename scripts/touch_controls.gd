@@ -56,11 +56,13 @@ const HELD_TINT := Color(0.98, 0.78, 0.35, 0.4)
 ##   press   - down while the thumb is down, the ordinary case
 ##   toggle  - latches on, latches off, survives the thumb leaving
 ##   fire    - press, and an aim surface as well: drag from it to keep tracking
+##   swap    - presses whichever hand you are *not* holding, worked out on the
+##             press, because "the other gun" is not a fixed action
 const BUTTONS := [
 	# Right, under the aiming thumb.
 	{"action": &"fire", "label": "FIRE", "at": Vector2(-180.0, -330.0), "r": 86.0,
 		"mode": "fire"},
-	{"action": &"aim", "label": "ADS", "at": Vector2(-350.0, -180.0), "r": 60.0,
+	{"action": &"aim", "label": "ADS", "at": Vector2(-350.0, -180.0), "r": 74.0,
 		"mode": "toggle"},
 	{"action": &"jump", "label": "JUMP", "at": Vector2(-330.0, -420.0), "r": 62.0,
 		"mode": "press"},
@@ -72,6 +74,15 @@ const BUTTONS := [
 	{"action": &"grapple", "label": "HOOK", "at": Vector2(200.0, -390.0), "r": 62.0,
 		"mode": "press", "left": true},
 ]
+
+## Shown only when there is something under your feet worth opening. A body is
+## the whole point of the game and the prompt for it used to be a line of text
+## naming a key - so on a phone the single most important verb in a raid had no
+## control at all, only a caption telling you to press F.
+const LOOT_BUTTON := {
+	"action": &"interact", "label": "LOOT", "at": Vector2(-180.0, -500.0), "r": 70.0,
+	"mode": "press",
+}
 
 ## Riding a cable takes the left hand over entirely: there is no walking on a
 ## zipline, so the stick and its cluster are replaced by the three things that do
@@ -97,6 +108,7 @@ const PILLS_LEFT := [
 	{"action": &"heal", "label": "MEDKIT"},
 ]
 const PILLS_RIGHT := [
+	{"action": &"swap", "label": "SWAP", "mode": "swap"},
 	{"action": &"reload", "label": "RELOAD"},
 	{"action": &"ultimate", "label": "ULT"},
 	{"action": &"throw_1", "label": "FRAG"},
@@ -135,6 +147,8 @@ var _mouse_is_an_echo := false
 var _closing := &""
 ## True while the character is hanging off a cable.
 var _riding := false
+## True while standing over something that can be opened.
+var _looting := false
 
 
 func _ready() -> void:
@@ -183,6 +197,7 @@ func _process(_delta: float) -> void:
 		queue_redraw()
 		return
 
+	_looting = _over_loot()
 	var was_riding := _riding
 	_riding = _on_a_cable()
 	if was_riding != _riding:
@@ -213,6 +228,16 @@ func _exit_tree() -> void:
 func _on_a_cable() -> bool:
 	var player := Net.local_player
 	return player != null and player.get(&"zipline") != null
+
+
+## Whether a body is in reach right now. Asked of the player rather than
+## recomputed, so the button appears exactly when the prompt does.
+func _over_loot() -> bool:
+	var player := Net.local_player
+	if player == null:
+		return false
+	var target: Variant = player.get(&"loot_target")
+	return target != null and is_instance_valid(target)
 
 
 ## Which screen is covering the game, expressed as the action that toggles it.
@@ -291,9 +316,13 @@ func _pointer(id: int, at: Vector2, down: bool) -> bool:
 	# Buttons first, then the stick, then the bare right side. A button inside a
 	# stick's reach has to win, or the ones nearest the corner are unreachable.
 	for pill in _pill_rects():
-		if (pill.rect as Rect2).has_point(at):
+		if not (pill.rect as Rect2).has_point(at):
+			continue
+		if pill.get("mode", "press") == "swap":
+			_hold(id, _other_hand())
+		else:
 			_hold(id, pill.action)
-			return true
+		return true
 	for button in _button_rects():
 		if at.distance_to(button.at) > button.r * 1.15:
 			continue
@@ -301,6 +330,8 @@ func _pointer(id: int, at: Vector2, down: bool) -> bool:
 			"toggle":
 				# No entry in _pressed: a latch has nothing to release.
 				_latched[button.action] = not _latched.get(button.action, false)
+			"swap":
+				_hold(id, _other_hand())
 			"fire":
 				_hold(id, button.action)
 				_take_aim(id, at)
@@ -321,6 +352,19 @@ func _pointer(id: int, at: Vector2, down: bool) -> bool:
 		_take_aim(id, at)
 		return true
 	return false
+
+
+## The hand you are not currently holding, as the action that equips it.
+##
+## Worked out on the press rather than bound once: a single SWAP is the right
+## control for two hands on a phone, and which of the two it means depends on
+## what is in them at the time.
+func _other_hand() -> StringName:
+	var player := Net.local_player
+	var held := 0
+	if player and player.get(&"weapon") != null:
+		held = player.weapon.slot
+	return &"weapon_1" if held != 0 else &"weapon_2"
 
 
 func _take_aim(id: int, at: Vector2) -> void:
@@ -421,13 +465,19 @@ func _button_rects() -> Array:
 ## Riding swaps the left cluster out; the right hand is untouched, because you
 ## can still shoot from a cable.
 func _live_buttons() -> Array:
-	if not _riding:
-		return BUTTONS
 	var out: Array = []
-	for button in BUTTONS:
-		if not button.get("left", false):
-			out.append(button)
-	return out + RIDE_BUTTONS
+	if _riding:
+		# The left cluster is replaced; the right hand is untouched, because you
+		# can still shoot from a cable.
+		for button in BUTTONS:
+			if not button.get("left", false):
+				out.append(button)
+		out.append_array(RIDE_BUTTONS)
+	else:
+		out.append_array(BUTTONS)
+	if _looting:
+		out.append(LOOT_BUTTON)
+	return out
 
 
 func _pill_rects() -> Array:
@@ -443,6 +493,7 @@ func _pill_rects() -> Array:
 	var x := SAFE
 	for pill in PILLS_LEFT:
 		out.append({"action": pill.action, "label": pill.label,
+			"mode": pill.get("mode", "press"),
 			"rect": Rect2(Vector2(x, top), Vector2(wide, PILL_SIZE.y))})
 		x += wide + PILL_GAP
 
@@ -450,6 +501,7 @@ func _pill_rects() -> Array:
 	x = size.x - SAFE - span
 	for pill in PILLS_RIGHT:
 		out.append({"action": pill.action, "label": pill.label,
+			"mode": pill.get("mode", "press"),
 			"rect": Rect2(Vector2(x, top), Vector2(wide, PILL_SIZE.y))})
 		x += wide + PILL_GAP
 	return out

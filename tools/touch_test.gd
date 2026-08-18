@@ -243,6 +243,61 @@ func _run() -> void:
 	await _wait(10)
 	_check("and unlatches", not Input.is_action_pressed(&"aim"))
 
+	# --- swapping hands ------------------------------------------------------
+	#
+	# There was no touch control for this at all: nothing pressed weapon_1 or
+	# weapon_2 and nothing set touch_weapon_slot, so on a phone you were stuck
+	# with whatever you deployed holding. SWAP works out which hand you are *not*
+	# in on the press, because "the other gun" is not a fixed action.
+	# A gun in each hand first. The starting kit is a sidearm only, and equip()
+	# rightly refuses an empty hand - so with the default loadout there is nothing
+	# to swap to and every assertion here passes for the wrong reason.
+	player.inventory.set_slot(Inventory.Slot.PRIMARY,
+		Item.from_weapon(load("res://resources/weapons/assault_rifle.tres")))
+	await _wait(4)
+	player.weapon.equip(0)
+	await _wait(4)
+	_check("holding the primary to start with", player.weapon.slot == 0)
+	var swap := _button_at(&"swap")
+	_check("there is a swap control", swap != Vector2.INF)
+	_touch(7, swap, true)
+	await _wait(6)
+	_touch(7, swap, false)
+	await _wait(6)
+	_say("slot after swap: %d" % player.weapon.slot)
+	_check("swap moves to the other hand", player.weapon.slot == 1)
+	_touch(7, swap, true)
+	await _wait(6)
+	_touch(7, swap, false)
+	await _wait(6)
+	_check("and back again", player.weapon.slot == 0)
+
+	# --- a body under your feet gets its own button --------------------------
+	#
+	# Looting is the point of the game and its only prompt was a caption naming a
+	# key. The button appears exactly when the prompt does and nowhere else.
+	_check("no LOOT button with nothing to loot", _loot_button() == Vector2.INF)
+	_check("and the pad knows it", not _pad._looting)
+	var corpse: Node2D = _drop_a_body(main, player)
+	await _wait(20)
+	_say("loot target: %s" % (player.loot_target.name if player.loot_target else "none"))
+	_check("standing over it is noticed", _pad._looting)
+	var loot_at := _loot_button()
+	_check("a LOOT button appears", loot_at != Vector2.INF)
+	if loot_at != Vector2.INF:
+		_touch(8, loot_at, true)
+		await _wait(6)
+		_touch(8, loot_at, false)
+		await _wait(20)
+		_check("and it opens the body", player._searching != null or player.inventory_open)
+		if player.inventory_open:
+			player._close_screen()
+		await _wait(10)
+	if is_instance_valid(corpse):
+		corpse.queue_free()
+	await _wait(20)
+	_check("and it goes away with the body", not _pad._looting)
+
 	# --- riding a cable ------------------------------------------------------
 	#
 	# Ziplines were unusable on a phone: up is jump *held* and down is the move
@@ -323,6 +378,25 @@ func _run() -> void:
 	_check("the mouse can shoot again on desktop", _has_mouse_binding(&"fire"))
 
 	_finish()
+
+
+## The LOOT button, which only exists while there is something to open.
+func _loot_button() -> Vector2:
+	for button in _pad._button_rects():
+		if button.label == "LOOT":
+			return button.at
+	return Vector2.INF
+
+
+## A searchable body at the player's feet, put there directly rather than by
+## killing something - what is being tested is the button, not the guard AI.
+func _drop_a_body(main: Node, player: Node2D) -> Node2D:
+	var body: Node2D = (load("res://scenes/lootable.tscn") as PackedScene).instantiate()
+	var kit: Inventory = load("res://scripts/weapon.gd").starting_inventory()
+	body.setup(kit, Color(0.6, 0.4, 0.3), Vector2(30, 52), "guard")
+	main.add_child(body)
+	body.global_position = player.global_position
+	return body
 
 
 ## Any cable in the level. Found by method rather than by class name, which
