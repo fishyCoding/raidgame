@@ -176,6 +176,10 @@ var _clips := {}
 ## The zipline is the one sound that is a state rather than an event, so it gets
 ## a player of its own that is started and stopped instead of fired.
 var _zip: AudioStreamPlayer2D
+## Who the single rope sound currently belongs to, and when they last asked for
+## it. See _claim_zip.
+var _zip_owner := 0
+var _zip_frame := -1000
 
 
 func _ready() -> void:
@@ -357,8 +361,14 @@ func hit(headshot := false) -> void:
 ## Called every frame you are on a cable. Starts the ride sound the first time,
 ## and pauses it while you hang still - a rope zip with nobody moving on it is
 ## the wrong sound, and silence is the right one.
-func zipline(at: Vector2, moving: bool) -> void:
-	if _zip == null:
+## One rope, one sound, and with two people on cables at once it belongs to
+## whichever of them is nearer the listener - otherwise the two riders fight over
+## a single player's position and it jumps between them every frame.
+##
+## `source` is the rider's instance id. A source that stops calling loses the
+## claim after a couple of frames, so nothing has to announce that it is done.
+func zipline(at: Vector2, moving: bool, source := 0) -> void:
+	if _zip == null or not _claim_zip(source, at):
 		return
 	_zip.global_position = at
 	_zip.volume_db = RECORDING_TRIM.zipline + master_db
@@ -372,9 +382,31 @@ func zipline(at: Vector2, moving: bool) -> void:
 		_zip.stop()
 
 
-func zipline_stopped() -> void:
-	if _zip:
-		_zip.stop()
+func _claim_zip(source: int, at: Vector2) -> bool:
+	var frame := Engine.get_physics_frames()
+	# Ours already, or nobody has spoken for it lately.
+	if _zip_owner == source or frame - _zip_frame > 2:
+		_zip_owner = source
+		_zip_frame = frame
+		return true
+	var listener := Net.local_player
+	if listener == null:
+		return false
+	if listener.global_position.distance_to(at) 			>= listener.global_position.distance_to(_zip.global_position):
+		return false
+	_zip_owner = source
+	_zip_frame = frame
+	return true
+
+
+func zipline_stopped(source := 0) -> void:
+	if _zip == null:
+		return
+	# Somebody else's rope keeps playing when you step off yours.
+	if source != 0 and _zip_owner != source:
+		return
+	_zip.stop()
+	_zip_owner = 0
 
 
 ## A kill, on the same sample as a hit rather than a sound of its own - one tick

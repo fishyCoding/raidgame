@@ -327,6 +327,9 @@ var inventory: Inventory
 ## itself the instant you fall and the screen that reports the loss is drawn
 ## afterwards - see _leave_the_kit_behind.
 var lost_kit := ""
+## How far down to look for ground on a replica. A few pixels: enough to catch
+## the floor under a standing body, not enough to catch one mid-fall.
+const GROUND_PROBE := 4.0
 ## Set when something is looted, for the HUD to report. Counts down on its own.
 var loot_message := ""
 var loot_message_left := 0.0
@@ -337,6 +340,16 @@ var last_hit_headshot := false
 ## The cable currently being ridden, or null. While riding, gravity and running
 ## are suspended and the body is pinned to the line.
 var zipline: Zipline = null
+## Replicated, because a copy of you on somebody else's machine has no idea you
+## are hanging off a cable - the rope sound was driven from _update_zipline,
+## which only ever runs on the machine doing the riding, so nobody else heard it.
+## A bool rather than the cable itself: which rope it is does not travel, and the
+## position already does.
+var riding := false
+## Where a replica was last frame, to tell a rider who is moving from one who is
+## hanging still. A rider's velocity is pinned to zero, so it cannot be read off
+## that the way a walk can.
+var _ride_last := Vector2.INF
 ## Which throwable slot is being wound up, or -1 for none.
 var throw_slot := -1
 ## How far it is wound up, 0 to 1.
@@ -698,17 +711,44 @@ func _update_replica(delta: float) -> void:
 	_aim_pivot.rotation = aim_angle
 	_aim_pivot.scale.y = facing
 	_body.scale.x = facing
+	# Their rope. Riding pins velocity to zero and moves the body by position, so
+	# "are they actually travelling" has to come from the position itself.
+	if riding:
+		var moving := _ride_last.is_finite() 			and _ride_last.distance_to(global_position) > 0.5
+		_ride_last = global_position
+		if _audio:
+			_audio.zipline(global_position, moving, get_instance_id())
+	elif _ride_last.is_finite():
+		_ride_last = Vector2.INF
+		if _audio:
+			_audio.zipline_stopped(get_instance_id())
+
 	# Their boots, from their replicated velocity - so you hear other players
 	# moving through exactly the same footstep and occlusion path as guards.
-	if is_alive and not is_downed and is_on_floor():
+	if is_alive and not is_downed:
 		_step_travel += absf(velocity.x) * delta
 		if _step_travel >= step_distance:
 			_step_travel = 0.0
-			if _audio:
+			# Tested here rather than gating the accumulation, so it costs one
+			# shape check per step taken instead of one per frame.
+			if _audio and _replica_grounded():
 				# A person, not a patrol. Same recording, its own pitch, and a
 				# few dB up - somebody who can shoot back is worth hearing over
 				# eleven men who are only walking.
 				_audio.player_footstep(global_position)
+
+
+## Whether this body is standing on something, for a copy that never runs
+## move_and_slide.
+##
+## `is_on_floor()` is set by move_and_slide and by nothing else, and a replica
+## does not call it - so on every machine but the owner's it reads false forever.
+## That is why nobody else's footsteps ever played: the check that gated them
+## could not be true on the machine that needed to hear them. Tested against the
+## body's own shape and mask instead, which needs no new synced property and
+## therefore no agreement between the two ends.
+func _replica_grounded() -> bool:
+	return test_move(global_transform, Vector2(0.0, GROUND_PROBE))
 
 
 func _update_timers(delta: float) -> void:
@@ -938,7 +978,7 @@ func _update_zipline(delta: float) -> bool:
 		# footstep every so often - you are hanging off a rope, not walking. It
 		# stops while you hang still, so idling on a cable is silent.
 		if _audio:
-			_audio.zipline(global_position, not is_zero_approx(ride))
+			_audio.zipline(global_position, not is_zero_approx(ride), get_instance_id())
 		return true
 
 	# You cannot pull yourself up a rope from the floor.
@@ -957,6 +997,7 @@ func _update_zipline(delta: float) -> bool:
 				cable = null
 		if cable:
 			zipline = cable
+			riding = true
 			global_position = cable.clamp_to_cable(global_position)
 			velocity = Vector2.ZERO
 			_say_loot("on the cable - UP and DOWN to ride, LET GO to step off"
@@ -971,9 +1012,10 @@ func _update_zipline(delta: float) -> bool:
 ## want to land on something; dropping off the bottom should just be a drop.
 func _leave_zipline(hop := true) -> void:
 	zipline = null
+	riding = false
 	velocity.y = -zipline_release_hop if hop else 0.0
 	if _audio:
-		_audio.zipline_stopped()
+		_audio.zipline_stopped(get_instance_id())
 
 
 ## Going through a body: F opens the two-sided screen with his kit on one side

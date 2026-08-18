@@ -133,7 +133,89 @@ func _run() -> void:
 				last.global_position.distance_to(mine.global_position) < 400.0)
 			_check("and it is placed, not centred", last is AudioStreamPlayer2D)
 
+	# --- the rope ------------------------------------------------------------
+	#
+	# A replica had no idea anyone was on a cable: the sound was driven from
+	# _update_zipline, which only runs on the machine doing the riding. `riding`
+	# is replicated now, and a rider's velocity is pinned to zero so "are they
+	# travelling" comes from the position instead.
+	var cable: Node2D = _find_cable(_main)
+	_check("the level has a cable", cable != null)
+	if cable != null:
+		if _first:
+			mine.zipline = cable
+			mine.riding = true
+			mine.global_position = cable.world_bottom()
+			await _wait(20)
+			Input.action_press(&"jump")
+			await _wait(60)
+			Input.action_release(&"jump")
+			await _wait(10)
+			mine._leave_zipline(false)
+		else:
+			var told := false
+			var rope := false
+			for i in 110:
+				await physics_frame
+				if theirs.riding:
+					told = true
+					if _audio._zip and _audio._zip.playing:
+						rope = true
+			_say("their riding reached me: %s, rope playing: %s" % [told, rope])
+			_check("I am told they are on a cable", told)
+			_check("and the rope makes a noise here", rope)
+		await _wait(30)
+
+	# --- boots ---------------------------------------------------------------
+	#
+	# Nobody else's footsteps ever played. Both replica paths gated on
+	# is_on_floor(), which move_and_slide sets and a replica never calls - so on
+	# the one machine that needed to hear them it was false forever.
+	if _first:
+		# Walk on the spot for a while so the listener has something to hear.
+		var input: Node = root.get_node("PlayerInput")
+		input.touch_move_axis = 1.0
+		await _wait(90)
+		input.touch_move_axis = -1.0
+		await _wait(90)
+		input.touch_move_axis = 0.0
+	else:
+		# Counted modulo the pool size: _next is a ring index, and subtracting two
+		# raw values across a wrap gives a negative count.
+		var pool: int = _audio._players.size()
+		var steps := 0
+		var seen: int = _audio._next
+		# Stand next to them, or their boots are dropped as out of earshot the
+		# same way the shot was.
+		mine.global_position = theirs.global_position + Vector2(60.0, 0.0)
+		for i in 190:
+			await physics_frame
+			while _audio._next != seen:
+				# Only what came from where they are standing. Guards patrol and
+				# make noise of their own, and "some sound happened" was weak
+				# enough to pass with the bug put back - it counted one stray
+				# report and called it a walk.
+				var slot: AudioStreamPlayer2D = _audio._players[seen]
+				if slot.global_position.distance_to(theirs.global_position) < 150.0:
+					steps += 1
+				seen = (seen + 1) % pool
+		_say("footsteps heard from where they were walking: %d" % steps)
+		# A real walk is about ten. One or two is somebody else's boots nearby.
+		_check("I hear the other player walking", steps >= 4)
+		_check("and their replica thinks it is grounded", theirs._replica_grounded())
+
 	_finish()
+
+
+## Any cable in the level, found by method rather than class name.
+func _find_cable(node: Node) -> Node2D:
+	if node.has_method(&"clamp_to_cable"):
+		return node as Node2D
+	for child in node.get_children():
+		var found := _find_cable(child)
+		if found:
+			return found
+	return null
 
 
 func _check(what: String, ok: bool) -> void:

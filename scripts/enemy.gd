@@ -156,6 +156,8 @@ var _burst_timer := 0.0
 var _shooting := false
 var _error := 0.0
 var _alive := true
+## How far down to look for ground on a replica. See _replica_grounded.
+const GROUND_PROBE := 4.0
 var _step_travel := 0.0
 
 ## The slice of a guard that travels to other machines. Plain fields because a
@@ -286,6 +288,19 @@ func _physics_process(delta: float) -> void:
 ## never again: every other machine is left holding "alive, and nearly dead",
 ## for the rest of the raid. It reads as bullets not registering. It is actually
 ## the last word never being said.
+## Whether this body is standing on something, for a copy that never runs
+## move_and_slide.
+##
+## `is_on_floor()` is set by move_and_slide and by nothing else, and a replica
+## does not call it - so on every machine but the owner's it reads false forever.
+## That is why nobody else's footsteps ever played: the check that gated them
+## could not be true on the machine that needed to hear them. Tested against the
+## body's own shape and mask instead, which needs no new synced property and
+## therefore no agreement between the two ends.
+func _replica_grounded() -> bool:
+	return test_move(global_transform, Vector2(0.0, GROUND_PROBE))
+
+
 func _publish_state() -> void:
 	net_aim = _aim_angle
 	net_health = _health
@@ -326,12 +341,11 @@ func _show_replica() -> void:
 		_update_eye(get_physics_process_delta_time())
 		# Their boots, from their replicated velocity, through the same footstep
 		# path everyone else uses.
-		if is_on_floor():
-			_step_travel += absf(velocity.x) * get_physics_process_delta_time()
-			if _step_travel >= step_distance:
-				_step_travel = 0.0
-				if _audio:
-					_audio.guard_footstep(global_position)
+		_step_travel += absf(velocity.x) * get_physics_process_delta_time()
+		if _step_travel >= step_distance:
+			_step_travel = 0.0
+			if _audio and _replica_grounded():
+				_audio.guard_footstep(global_position)
 
 
 ## What the guard's eye is doing, which is the only way the reaction window is

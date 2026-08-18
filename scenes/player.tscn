@@ -48,6 +48,9 @@ properties/7/replication_mode = 2
 properties/8/path = NodePath(".:down_health_left")
 properties/8/spawn = true
 properties/8/replication_mode = 2
+properties/9/path = NodePath(".:riding")
+properties/9/spawn = true
+properties/9/replication_mode = 2
 
 [node name="Player" type="CharacterBody2D" groups=["player"]]
 collision_layer = 4
