@@ -118,6 +118,15 @@ func is_touch() -> bool:
 			return true
 		Controls.DESKTOP:
 			return false
+	return has_touchscreen()
+
+
+## Whether this machine actually sends touch events.
+##
+## Distinct from is_touch(), which is a *choice* and can be forced on a desktop
+## that has no touchscreen at all. Anything that needs to know "will real touches
+## arrive" - as opposed to "should thumbs be catered for" - wants this one.
+func has_touchscreen() -> bool:
 	return OS.has_feature("mobile") \
 		or OS.has_feature("web_ios") or OS.has_feature("web_android")
 

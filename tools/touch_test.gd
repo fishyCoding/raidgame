@@ -123,6 +123,52 @@ func _run() -> void:
 	_check("and reports analog, not just on/off",
 		_input.touch_move_axis > 0.1 and _input.touch_move_axis <= 1.0)
 
+	# --- and the emulated mouse cannot steal it ------------------------------
+	#
+	# On a device Godot emulates a mouse from the *first* touch, and that echo
+	# arrives as its own pointer. It grabbed the move stick as id -1, so every
+	# real drag afterwards - carrying index 0 - was ignored as a different
+	# finger, and the move stick did not work at all while the aim stick did.
+	# Simulated here by driving the mouse at the ring while a finger holds it.
+	var stolen := InputEventMouseButton.new()
+	stolen.button_index = MOUSE_BUTTON_LEFT
+	stolen.pressed = true
+	stolen.position = move_at
+	stolen.global_position = move_at
+	root.push_input(stolen, true)
+	await _wait(4)
+	_check("a mouse echo does not take the stick", _pad._move_id == 0)
+	_check("and the stick keeps reporting", _input.touch_move_axis > 0.1)
+	stolen.pressed = false
+	root.push_input(stolen, true)
+	await _wait(2)
+	_check("nor does letting it go drop the stick", _pad._move_id == 0)
+
+	# The harder half: on a device the echo can arrive *before* the touch it came
+	# from, so _saw_touch is still false and does not save us. Only knowing the
+	# platform sends real touches does - which a headless desktop is not, so it
+	# is told to pretend.
+	_touch(0, move_at + Vector2(90.0, 0.0), false)
+	await _wait(4)
+	_pad._mouse_is_an_echo = true
+	_pad._saw_touch = false
+	stolen.pressed = true
+	root.push_input(stolen, true)
+	await _wait(4)
+	_check("an echo arriving first is ignored outright", _pad._move_id == -2)
+	stolen.pressed = false
+	root.push_input(stolen, true)
+	await _wait(2)
+
+	# And a real finger still works with the echo guard up.
+	_touch(0, move_at, true)
+	await physics_frame
+	_drag(0, move_at + Vector2(90.0, 0.0))
+	await _wait(6)
+	_check("while a real touch still drives it", _pad._move_id == 0
+		and _input.touch_move_axis > 0.1)
+	_pad._mouse_is_an_echo = false
+
 	# --- a second finger aims while the first still walks --------------------
 	var aim_at: Vector2 = _pad._aim_home()
 	_touch(1, aim_at, true)

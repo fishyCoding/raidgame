@@ -2,7 +2,7 @@ extends Control
 
 ## The game, played with thumbs.
 ##
-## Two floating sticks and a set of buttons, drawn in _draw like the rest of the
+## Two thumbsticks and a set of buttons, drawn in _draw like the rest of the
 ## UI here. It writes into the same places a keyboard does - PlayerInput's
 ## touch_move_axis and touch_aim_direction for the sticks, and Input.action_press
 ## for everything else - so no gameplay code knows or cares that a thumb is
@@ -49,14 +49,9 @@ const HELD_TINT := Color(0.98, 0.78, 0.35, 0.4)
 
 ## Every action a thumb can reach, and where. `hold` marks the ones that mean
 ## something for as long as they are down rather than on the press - aiming and
-## crouching are postures, not events.
+## crouching are postures, not events. `left` measures from the left edge rather
+## than the right.
 ##
-## Laid out from the bottom-right corner outwards, in rough order of how often
-## you need them: fire and jump under the thumb, then the two you press in a
-## fight, then the housekeeping along the top where a mis-hit costs nothing.
-## `left` measures from the left edge instead of the right, for the one button
-## the left thumb should own. Everything else is right-thumb work, placed clear
-## of the aim stick's swing and above the readouts along the bottom.
 ## Two clusters and nothing in between. Anything a left thumb does sits by the
 ## move stick; anything a right thumb does sits by the aim stick; the middle of
 ## the screen is the game and stays clear.
@@ -67,10 +62,12 @@ const HELD_TINT := Color(0.98, 0.78, 0.35, 0.4)
 ## are aiming at, with the trigger the largest control on the screen because it
 ## is pressed more than everything else combined.
 const BUTTONS := [
-	# Right, under the aiming thumb.
-	{"action": &"fire", "label": "FIRE", "at": Vector2(-390.0, -150.0), "r": 78.0, "hold": true},
-	{"action": &"aim", "label": "ADS", "at": Vector2(-350.0, -330.0), "r": 62.0, "hold": true},
-	{"action": &"jump", "label": "JUMP", "at": Vector2(-200.0, -390.0), "r": 62.0, "hold": false},
+	# Right, under the aiming thumb. FIRE sits high and hard against the right
+	# edge - directly above the aim stick rather than beside it, so the thumb
+	# rocks up onto the trigger without leaving the stick's side of the screen.
+	{"action": &"fire", "label": "FIRE", "at": Vector2(-180.0, -350.0), "r": 84.0, "hold": true},
+	{"action": &"aim", "label": "ADS", "at": Vector2(-360.0, -290.0), "r": 62.0, "hold": true},
+	{"action": &"jump", "label": "JUMP", "at": Vector2(-330.0, -460.0), "r": 62.0, "hold": false},
 	# Left, under the steering thumb.
 	{"action": &"interact", "label": "USE", "at": Vector2(390.0, -150.0), "r": 62.0,
 		"hold": false, "left": true},
@@ -80,10 +77,8 @@ const BUTTONS := [
 		"hold": false, "left": true},
 ]
 
-## The rest of it, as a strip of pills along the top. Reloading and healing are
-## not things you do mid-leap, and the ultimate and the throws want a deliberate
-## press rather than a thumb that happens to be nearby.
-## Split down the same seam. Kit and information on the left, things you spend on
+## The rest of it, as pills along the top - a deliberate press rather than a
+## thumb that happens to be nearby. Split down the same seam. Kit and information on the left, things you spend on
 ## the right - and the centre of the top edge left alone, because that is where
 ## you are looking.
 const PILLS_LEFT := [
@@ -118,6 +113,10 @@ var _pressed := {}
 ## device every touch also arrives as an emulated mouse click and acting on both
 ## would fire twice.
 var _saw_touch := false
+## True on hardware that sends real touches, where every mouse event is an echo
+## of the first finger and must be ignored outright. Read once rather than asked
+## per event, and held as its own field so a test can pretend to be a phone.
+var _mouse_is_an_echo := false
 ## The action that would shut whatever screen is currently up, or "" when the pad
 ## is in its normal state.
 var _closing := &""
@@ -153,6 +152,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	PlayerInput.controls_changed.connect(_on_controls_changed)
+	_mouse_is_an_echo = PlayerInput.has_touchscreen()
 	visible = false
 
 
@@ -226,8 +226,15 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 		return
 
-	# Desktop, standing in for a finger - and only until a real one shows up.
-	if _saw_touch:
+	# Desktop, standing in for a finger.
+	#
+	# Never on a device. Godot emulates a mouse from the **first** touch, and that
+	# echo arrives as its own pointer - so it grabbed the move stick as id -1 and
+	# every real drag afterwards, carrying index 0, was ignored as a different
+	# finger. The move stick simply did not work, while the aim stick (a second
+	# finger, and therefore un-emulated) was fine. _saw_touch alone was not enough
+	# because the echo can beat the touch it came from.
+	if _saw_touch or _mouse_is_an_echo:
 		return
 	var click := event as InputEventMouseButton
 	if click and click.button_index == MOUSE_BUTTON_LEFT:
