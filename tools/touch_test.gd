@@ -73,14 +73,37 @@ func _run() -> void:
 	_say("%d buttons + %d pills cover %d actions" % [
 		_pad.BUTTONS.size(), _pad.PILLS.size(), reachable.size()])
 
+	# --- a touch must not pull the trigger by itself -------------------------
+	#
+	# Godot emulates a mouse from the first touch and `fire` was bound to the
+	# left button, so every touch anywhere - dragging the movement stick
+	# included - emptied the magazine into the floor. Emulation has to stay (it
+	# is what lets a thumb press the shop's buttons), so the binding goes.
+	# Asserted through the real Input layer, because that is where it went wrong.
+	_check("no mouse button is bound to fire in touch mode",
+		not _has_mouse_binding(&"fire"))
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	Input.parse_input_event(click)
+	await physics_frame
+	_check("so a stray tap does not shoot", not Input.is_action_pressed(&"fire"))
+	click.pressed = false
+	Input.parse_input_event(click)
+	await physics_frame
+
 	var settled := 0
 	while not player.is_on_floor() and settled < 300:
 		await physics_frame
 		settled += 1
 
 	# --- the left stick walks -------------------------------------------------
+	#
+	# Aimed at the ring itself. The sticks are fixed now: they used to appear
+	# wherever the thumb landed, which drew a second joystick under the one
+	# already on screen.
 	var from_x: float = player.global_position.x
-	var move_at := Vector2(_pad.size.x * 0.2, _pad.size.y * 0.8)
+	var move_at: Vector2 = _pad._move_home()
 	_touch(0, move_at, true)
 	await physics_frame
 	_drag(0, move_at + Vector2(90.0, 0.0))
@@ -93,7 +116,7 @@ func _run() -> void:
 		_input.touch_move_axis > 0.1 and _input.touch_move_axis <= 1.0)
 
 	# --- a second finger aims while the first still walks --------------------
-	var aim_at := Vector2(_pad.size.x * 0.8, _pad.size.y * 0.8)
+	var aim_at: Vector2 = _pad._aim_home()
 	_touch(1, aim_at, true)
 	_drag(1, aim_at + Vector2(-70.0, 0.0))
 	await _wait(10)
@@ -135,8 +158,18 @@ func _run() -> void:
 	_check("desktop mode hides the pad", not _pad.visible)
 	_check("and leaves nothing pressed", not Input.is_action_pressed(&"crouch")
 		and is_zero_approx(_input.touch_move_axis))
+	# And the mouse gets its trigger back, or switching to touch once would cost
+	# a desktop player the left button for the rest of the session.
+	_check("the mouse can shoot again on desktop", _has_mouse_binding(&"fire"))
 
 	_finish()
+
+
+func _has_mouse_binding(action: StringName) -> bool:
+	for event in InputMap.action_get_events(action):
+		if event is InputEventMouseButton:
+			return true
+	return false
 
 
 ## Where a button sits on screen right now, or INF if there is no such button.

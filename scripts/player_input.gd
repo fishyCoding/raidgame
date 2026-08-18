@@ -97,6 +97,7 @@ var control_scheme := Controls.AUTO:
 			return
 		control_scheme = value
 		_save_controls()
+		_apply_scheme_to_input_map()
 		controls_changed.emit(is_touch())
 
 ## Raised when the scheme changes, so the on-screen controls can appear or go
@@ -135,6 +136,43 @@ func scheme_name() -> String:
 	return "auto (%s)" % ("touch" if is_touch() else "desktop")
 
 
+## Actions a mouse button can trigger. In touch mode their mouse bindings are
+## taken out of the input map and put back when the scheme changes again.
+##
+## This is not tidiness, it is the difference between a playable build and an
+## unplayable one. Godot emulates a mouse from the first touch, `fire` is bound
+## to the left button, and the result is that **every** touch pulls the trigger -
+## dragging the movement stick empties your magazine into the floor. Emulation
+## cannot simply be switched off, because it is also what lets a thumb press the
+## buttons on the shop and the inventory screen. So the emulation stays and the
+## bindings go: shooting comes from the FIRE button and nothing else.
+const MOUSE_ACTIONS := [&"fire", &"aim"]
+
+## action -> the mouse events lifted out of it, waiting to go back.
+var _stashed_mouse := {}
+
+
+func _apply_scheme_to_input_map() -> void:
+	if is_touch():
+		for action in MOUSE_ACTIONS:
+			if _stashed_mouse.has(action) or not InputMap.has_action(action):
+				continue
+			var lifted: Array[InputEvent] = []
+			for event in InputMap.action_get_events(action):
+				if event is InputEventMouseButton:
+					lifted.append(event)
+			for event in lifted:
+				InputMap.action_erase_event(action, event)
+			_stashed_mouse[action] = lifted
+		return
+
+	for action in _stashed_mouse:
+		for event in _stashed_mouse[action]:
+			if not InputMap.action_has_event(action, event):
+				InputMap.action_add_event(action, event)
+	_stashed_mouse.clear()
+
+
 func _load_controls() -> void:
 	var file := ConfigFile.new()
 	if file.load(CONTROLS_FILE) != OK:
@@ -158,6 +196,9 @@ func _ready() -> void:
 	process_priority = 500
 	process_physics_priority = 500
 	_load_controls()
+	# _load_controls sets the backing value directly, so the setter never ran and
+	# the map is still whatever the project file said.
+	_apply_scheme_to_input_map()
 
 
 func _input(event: InputEvent) -> void:

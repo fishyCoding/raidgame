@@ -8,11 +8,16 @@ extends Control
 ## for everything else - so no gameplay code knows or cares that a thumb is
 ## driving it. Adding an action to the game means adding one line to BUTTONS.
 ##
-## **Floating sticks.** Touch anywhere in the lower half of your side of the
-## screen and the stick appears under your thumb, rather than sitting in a fixed
-## ring you have to find first. On a phone you are looking at the middle of the
-## screen, not at your hands, and a fixed stick means every input starts with a
-## glance down. The resting ring is drawn only as a hint about where the zone is.
+## **The sticks are fixed, and that is deliberate.** They used to float - touch
+## anywhere in your half and the ring appeared under your thumb - which is nicer
+## in theory and was unusable in practice: a ring is drawn at rest so you know
+## where the stick is, you put your thumb on it, and the ring jumps to the exact
+## pixel you touched. It reads as a *second* joystick appearing underneath the
+## first. One ring, always in the same place, is worth more than the theory.
+##
+## Touching anywhere within reach of a ring grabs it, so you do not have to hit
+## it precisely - but the knob is always measured from the ring's own centre, and
+## the ring never moves.
 ##
 ## **Multitouch is the whole problem.** Moving, aiming and firing at once is
 ## three fingers, and Godot only emulates a mouse from the *first* touch - so
@@ -28,8 +33,12 @@ const STICK_KNOB := 40.0
 ## drifts, and a character that strolls off on its own is worse than one that
 ## needs a deliberate push.
 const STICK_DEAD := 0.16
-## The lower band of the screen belongs to the sticks. Above it is the view.
-const STICK_ZONE_TOP := 0.34
+## How far outside the drawn ring still counts as grabbing it. Thumbs are wide
+## and the ring is a picture, not a target.
+const STICK_GRAB := 1.55
+## Kept clear of every edge. A phone has a notch on one side and a home indicator
+## across the bottom, and a control under either is a control you cannot press.
+const SAFE := 54.0
 
 const PANEL := Color(0.08, 0.09, 0.12, 0.5)
 const RING := Color(0.62, 0.68, 0.78, 0.35)
@@ -77,8 +86,6 @@ const PILL_GAP := 8.0
 ## -1 for the mouse standing in for a finger on a desktop.
 var _move_id := -2
 var _aim_id := -2
-var _move_origin := Vector2.ZERO
-var _aim_origin := Vector2.ZERO
 var _move_vec := Vector2.ZERO
 var _aim_vec := Vector2.ZERO
 ## pointer id -> action it is holding down.
@@ -185,35 +192,37 @@ func _pointer(id: int, at: Vector2, down: bool) -> bool:
 			_hold(id, button.action)
 			return true
 
-	if at.y < size.y * STICK_ZONE_TOP:
-		return false
-	if at.x < size.x * 0.5:
-		if _move_id != -2:
-			return false
+	# Within reach of a ring, not merely on the right half of the screen. A thumb
+	# that lands in the empty middle should do nothing at all, rather than snap
+	# the stick to full deflection because the maths says that way is "left".
+	if _move_id == -2 and at.distance_to(_move_home()) <= STICK_RADIUS * STICK_GRAB:
 		_move_id = id
-		_move_origin = at
-		_move_vec = Vector2.ZERO
+		_move_vec = _swing(at - _move_home())
 		return true
-	if _aim_id != -2:
-		return false
-	_aim_id = id
-	_aim_origin = at
-	_aim_vec = Vector2.ZERO
-	return true
+	if _aim_id == -2 and at.distance_to(_aim_home()) <= STICK_RADIUS * STICK_GRAB:
+		_aim_id = id
+		_aim_vec = _point(at - _aim_home())
+		return true
+	return false
 
 
 ## A finger sliding. Only the sticks care.
 func _drag(id: int, at: Vector2) -> bool:
 	if id == _move_id:
-		_move_vec = _swing(at - _move_origin)
+		_move_vec = _swing(at - _move_home())
 		return true
 	if id == _aim_id:
-		# Aim is a direction, not a distance - it points where the thumb is
-		# relative to where it landed, and pushing further does not aim harder.
-		var away := at - _aim_origin
-		_aim_vec = away.normalized() if away.length() > STICK_RADIUS * STICK_DEAD else Vector2.ZERO
+		_aim_vec = _point(at - _aim_home())
 		return true
 	return false
+
+
+## Aim is a direction, not a distance: it points where the thumb is relative to
+## the ring, and pushing further out does not aim harder.
+func _point(offset: Vector2) -> Vector2:
+	if offset.length() <= STICK_RADIUS * STICK_DEAD:
+		return Vector2.ZERO
+	return offset.normalized()
 
 
 func _lift(id: int) -> bool:
@@ -292,28 +301,33 @@ func _button_rects() -> Array:
 	return out
 
 
+## The secondary strip, centred along the top and shrunk to fit if the screen is
+## too narrow to hold it at full size - a pill that runs off the edge is an
+## action you cannot reach, which on a phone means a mechanic that does not
+## exist.
 func _pill_rects() -> Array:
 	var out: Array = []
-	var total := PILLS.size() * PILL_SIZE.x + (PILLS.size() - 1) * PILL_GAP
-	var x := size.x * 0.5 - total * 0.5
+	var wide: float = PILL_SIZE.x
+	var span := PILLS.size() * wide + (PILLS.size() - 1) * PILL_GAP
+	var room := size.x - SAFE * 2.0
+	if span > room:
+		wide = (room - (PILLS.size() - 1) * PILL_GAP) / PILLS.size()
+		span = room
+	var x := size.x * 0.5 - span * 0.5
 	for pill in PILLS:
 		out.append({
 			"action": pill.action, "label": pill.label,
-			"rect": Rect2(Vector2(x, 16.0), PILL_SIZE),
+			"rect": Rect2(Vector2(x, SAFE * 0.4), Vector2(wide, PILL_SIZE.y)),
 		})
-		x += PILL_SIZE.x + PILL_GAP
+		x += wide + PILL_GAP
 	return out
 
 
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
 
-	# Resting in the very corners, where a thumb already is when the phone is
-	# held in two hands - and clear of the readouts across the middle-bottom.
-	_draw_stick(_move_id, _move_origin, _move_vec,
-		Vector2(size.x * 0.13, size.y - 150.0), false)
-	_draw_stick(_aim_id, _aim_origin, _aim_vec,
-		Vector2(size.x * 0.87, size.y - 150.0), true)
+	_draw_stick(_move_id != -2, _move_home(), _move_vec, "MOVE")
+	_draw_stick(_aim_id != -2, _aim_home(), _aim_vec, "AIM")
 
 	for button in _button_rects():
 		var down := _holding(button.action)
@@ -335,14 +349,18 @@ func _holding(action: StringName) -> bool:
 	return _pressed.values().has(action)
 
 
-## A stick where the thumb put it, or a hint at the resting spot when nobody is
-## touching it. The hint is faint on purpose: it is there to say "this half of
-## the screen moves you", not to be aimed at.
-func _draw_stick(id: int, origin: Vector2, vec: Vector2, resting: Vector2,
-		aiming: bool) -> void:
-	var live := id != -2
-	var centre := origin if live else resting
-	var alpha := 1.0 if live else 0.35
+## The two rings never move. Where the knob sits inside one is the only thing
+## that changes, which is what makes them read as one control each.
+func _move_home() -> Vector2:
+	return Vector2(SAFE + STICK_RADIUS, size.y - SAFE - STICK_RADIUS)
+
+
+func _aim_home() -> Vector2:
+	return Vector2(size.x - SAFE - STICK_RADIUS, size.y - SAFE - STICK_RADIUS)
+
+
+func _draw_stick(live: bool, centre: Vector2, vec: Vector2, label: String) -> void:
+	var alpha := 1.0 if live else 0.45
 
 	draw_arc(centre, STICK_RADIUS, 0.0, TAU, 48, Color(RING, RING.a * alpha), 2.0, true)
 	var knob := centre + vec * STICK_RADIUS
@@ -351,6 +369,5 @@ func _draw_stick(id: int, origin: Vector2, vec: Vector2, resting: Vector2,
 
 	if not live:
 		var font := ThemeDB.fallback_font
-		draw_string(font, centre + Vector2(-STICK_RADIUS, STICK_RADIUS + 22.0),
-			"AIM" if aiming else "MOVE", HORIZONTAL_ALIGNMENT_CENTER,
-			STICK_RADIUS * 2.0, 13, Color(LABEL, 0.4))
+		draw_string(font, centre + Vector2(-STICK_RADIUS, 5.0), label,
+			HORIZONTAL_ALIGNMENT_CENTER, STICK_RADIUS * 2.0, 13, Color(LABEL, 0.35))
