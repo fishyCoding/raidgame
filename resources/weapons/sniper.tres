@@ -1,0 +1,39 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+display_name = "Sniper Rifle"
+short_name = "SNIPER"
+report_sound = "rifle"
+loudness_trim = 4.0
+aim_speed_scale = 0.35
+accuracy = 99.0
+handling = 30.0
+recoil = 100.0
+kick_scale = 2.2
+stability = 58.0
+shake_scale = 4.2
+rounds_per_minute = 48.0
+automatic = false
+pellets = 1
+damage = 115.0
+bullet_speed = 14000.0
+bullet_range = 4000.0
+falloff_start = 2200.0
+falloff_end = 4000.0
+min_damage_factor = 0.8
+grid_size = Vector2i(5, 2)
+ammo_type = &".338"
+mag_size = 5
+reserve_ammo = 35
+reload_time = 3.4
+ads_zoom = 0.75
+ads_spread_scale = 0.05
+ads_lead_scale = 2.8
+ads_speed_scale = 1.7
+bullet_color = Color(0.741176, 0.921569, 1, 1)
+bullet_length = 54.0
+bullet_width = 3.0
+

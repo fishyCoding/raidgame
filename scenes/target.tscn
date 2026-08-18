@@ -1,0 +1,32 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/target.gd" id="1_target"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_target"]
+resource_local_to_scene = true
+size = Vector2(44, 72)
+
+[node name="Target" type="StaticBody2D" groups=["hideable"]]
+collision_layer = 8
+collision_mask = 0
+script = ExtResource("1_target")
+
+[node name="Visual" type="Polygon2D" parent="."]
+color = Color(0.4, 0.75, 0.552941, 1)
+polygon = PackedVector2Array(-22, -36, 22, -36, 22, 36, -22, 36)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_target")
+
+[node name="HealthBar" type="Node2D" parent="."]
+position = Vector2(0, -48)
+
+[node name="Back" type="Polygon2D" parent="HealthBar"]
+color = Color(0.145098, 0.164706, 0.196078, 1)
+polygon = PackedVector2Array(-22, -3, 22, -3, 22, 3, -22, 3)
+
+[node name="Fill" type="Polygon2D" parent="HealthBar"]
+position = Vector2(-22, 0)
+color = Color(0.541176, 0.858824, 0.647059, 1)
+polygon = PackedVector2Array(0, -3, 44, -3, 44, 3, 0, 3)
+

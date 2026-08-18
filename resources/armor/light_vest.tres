@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ArmorData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/armor_data.gd" id="1_armor"]
+
+[resource]
+script = ExtResource("1_armor")
+display_name = "Chest Rig"
+short_name = "VEST"
+slot = 1
+protection = 0.35
+max_durability = 90
+failure_point = 0.25
+grid_size = Vector2i(3, 3)
+tint = Color(0.55, 0.5, 0.42, 1)

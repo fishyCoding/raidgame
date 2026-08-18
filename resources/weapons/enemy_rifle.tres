@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+display_name = "Guard Rifle"
+short_name = "GRD"
+accuracy = 46.0
+handling = 40.0
+recoil = 30.0
+stability = 55.0
+rounds_per_minute = 260.0
+automatic = true
+pellets = 1
+damage = 9.0
+bullet_speed = 4200.0
+bullet_range = 1400.0
+falloff_start = 320.0
+falloff_end = 900.0
+min_damage_factor = 0.4
+grid_size = Vector2i(4, 1)
+ammo_type = &"5.56"
+mag_size = 12
+reserve_ammo = 999
+reload_time = 2.4
+bullet_color = Color(1, 0.454902, 0.372549, 1)
+bullet_length = 25.0
+bullet_width = 2.5

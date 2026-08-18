@@ -1,0 +1,114 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
+[ext_resource type="Script" path="res://scripts/weapon.gd" id="2_weapon"]
+[ext_resource type="Script" path="res://scripts/reticle.gd" id="3_reticle"]
+[ext_resource type="Script" path="res://scripts/aim_line.gd" id="4_aimline"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_player"]
+size = Vector2(28, 48)
+
+[sub_resource type="Gradient" id="Gradient_vision"]
+offsets = PackedFloat32Array(0, 0.3, 0.72, 1)
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0.82, 1, 1, 1, 0.42, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture2D" id="GradientTexture2D_vision"]
+gradient = SubResource("Gradient_vision")
+width = 256
+height = 256
+fill = 1
+fill_from = Vector2(0.5, 0.5)
+fill_to = Vector2(1, 0.5)
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_player"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:velocity")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:aim_angle")
+properties/2/spawn = true
+properties/2/replication_mode = 1
+properties/3/path = NodePath(".:facing")
+properties/3/spawn = true
+properties/3/replication_mode = 1
+properties/4/path = NodePath(".:crouch")
+properties/4/spawn = true
+properties/4/replication_mode = 1
+properties/5/path = NodePath(".:health")
+properties/5/spawn = true
+properties/5/replication_mode = 2
+properties/6/path = NodePath(".:is_alive")
+properties/6/spawn = true
+properties/6/replication_mode = 2
+properties/7/path = NodePath(".:is_downed")
+properties/7/spawn = true
+properties/7/replication_mode = 2
+properties/8/path = NodePath(".:down_health_left")
+properties/8/spawn = true
+properties/8/replication_mode = 2
+
+[node name="Player" type="CharacterBody2D" groups=["player"]]
+collision_layer = 4
+collision_mask = 3
+motion_mode = 0
+floor_snap_length = 6.0
+script = ExtResource("1_player")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_player")
+
+[node name="Body" type="Node2D" parent="."]
+
+[node name="Torso" type="Polygon2D" parent="Body"]
+color = Color(0.831373, 0.85098, 0.878431, 1)
+polygon = PackedVector2Array(-14, -24, 14, -24, 14, 24, -14, 24)
+
+[node name="Head" type="Polygon2D" parent="Body"]
+color = Color(0.878431, 0.898039, 0.921569, 1)
+polygon = PackedVector2Array(-9, -24, 9, -24, 9, -11, -9, -11)
+
+[node name="Face" type="Polygon2D" parent="Body"]
+color = Color(0.184314, 0.211765, 0.254902, 1)
+polygon = PackedVector2Array(3, -19, 12, -19, 12, -11, 3, -11)
+
+[node name="AimPivot" type="Node2D" parent="."]
+position = Vector2(0, -6)
+
+[node name="Arm" type="Polygon2D" parent="AimPivot"]
+color = Color(0.976471, 0.639216, 0.301961, 1)
+polygon = PackedVector2Array(6, -4, 32, -2, 32, 3, 6, 5)
+
+[node name="Muzzle" type="Marker2D" parent="AimPivot"]
+position = Vector2(34, 0)
+
+[node name="Vision" type="PointLight2D" parent="."]
+position = Vector2(0, -14)
+energy = 0.95
+shadow_enabled = true
+shadow_filter = 1
+shadow_filter_smooth = 3.0
+texture = SubResource("GradientTexture2D_vision")
+texture_scale = 7.0
+
+[node name="Weapon" type="Node" parent="."]
+script = ExtResource("2_weapon")
+
+[node name="Overlay" type="CanvasLayer" parent="."]
+layer = 3
+follow_viewport_enabled = true
+
+[node name="AimLine" type="Node2D" parent="Overlay"]
+script = ExtResource("4_aimline")
+
+[node name="Reticle" type="Node2D" parent="Overlay"]
+script = ExtResource("3_reticle")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position_smoothing_enabled = true
+position_smoothing_speed = 8.0
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+public_visibility = false
+replication_config = SubResource("SceneReplicationConfig_player")

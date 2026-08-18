@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="BackpackData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/backpack_data.gd" id="1_backpack"]
+
+[resource]
+script = ExtResource("1_backpack")
+display_name = "Sling Bag"
+short_name = "SLING"
+grid_size = Vector2i(4, 2)
+carried_size = Vector2i(2, 1)
+tint = Color(0.47, 0.55, 0.6, 1)

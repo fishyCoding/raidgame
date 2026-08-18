@@ -1,0 +1,644 @@
+[gd_scene format=3 uid="uid://c4q61joeddygp"]
+
+[ext_resource type="PackedScene" path="res://scenes/platform.tscn" id="1_platform"]
+[ext_resource type="Script" uid="uid://xeib8hy0neca" path="res://scripts/hud.gd" id="4_hud"]
+[ext_resource type="Script" uid="uid://bcxfmp5s3q1rv" path="res://scripts/vision_system.gd" id="5_vision"]
+[ext_resource type="PackedScene" path="res://scenes/enemy.tscn" id="6_enemy"]
+[ext_resource type="Script" uid="uid://oshl4qhxdbwj" path="res://scripts/inventory_ui.gd" id="7_invui"]
+[ext_resource type="Script" uid="uid://ds77uggwicvrj" path="res://scripts/screens.gd" id="8_screens"]
+[ext_resource type="Script" uid="uid://dop6bbqsgvhpd" path="res://scripts/shop.gd" id="9_shop"]
+[ext_resource type="PackedScene" path="res://scenes/zipline.tscn" id="10_zip"]
+[ext_resource type="PackedScene" path="res://scenes/spawn_point.tscn" id="11_spawn"]
+[ext_resource type="Script" uid="uid://deaufp2rknqug" path="res://scripts/map_screen.gd" id="12_map"]
+[ext_resource type="Script" uid="uid://dwh6vswml06ja" path="res://scripts/editor_view.gd" id="13_editor"]
+
+[node name="Main" type="Node2D" unique_id=612678245]
+
+[node name="EditorView" type="Node" parent="." unique_id=398121074]
+script = ExtResource("13_editor")
+
+[node name="Background" type="CanvasLayer" parent="." unique_id=1586873920]
+layer = -100
+
+[node name="Sky" type="ColorRect" parent="Background" unique_id=477399845]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0784314, 0.0980392, 0.129412, 1)
+
+[node name="Ambient" type="CanvasModulate" parent="." unique_id=1609251729]
+visible = false
+color = Color(0.137255, 0.152941, 0.192157, 1)
+
+[node name="Air" type="Polygon2D" parent="." unique_id=1645405714]
+visible = false
+z_index = -90
+color = Color(0.164706, 0.192157, 0.239216, 1)
+polygon = PackedVector2Array(-4600, -3000, 4600, -3000, 4600, 3000, -4600, 3000)
+
+[node name="VisionSystem" type="Node" parent="." unique_id=8929692 groups=["vision_system"]]
+script = ExtResource("5_vision")
+
+[node name="World" type="Node2D" parent="." unique_id=1808002648]
+
+[node name="Ground" parent="World" unique_id=1351953584 instance=ExtResource("1_platform")]
+position = Vector2(0, 460)
+size = Vector2(5200, 80)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="WallWest" parent="World" unique_id=950184760 instance=ExtResource("1_platform")]
+position = Vector2(-2475, -526)
+size = Vector2(60, 2000)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="WallEast" parent="World" unique_id=799847715 instance=ExtResource("1_platform")]
+position = Vector2(1889, 14)
+size = Vector2(60, 3000)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling" parent="World" unique_id=346983353 instance=ExtResource("1_platform")]
+position = Vector2(-2058, -44)
+scale = Vector2(1.1200024, 1)
+size = Vector2(820, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling3" parent="World" unique_id=1692240310 instance=ExtResource("1_platform")]
+position = Vector2(-1961, -989)
+scale = Vector2(1.1200024, 1)
+size = Vector2(1000, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling5" parent="World" unique_id=578069771 instance=ExtResource("1_platform")]
+position = Vector2(700, -1237)
+scale = Vector2(1.1200024, 1)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling6" parent="World" unique_id=1666185886 instance=ExtResource("1_platform")]
+position = Vector2(167, -116)
+scale = Vector2(1.1200024, 1)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling12" parent="World" unique_id=1042171004 instance=ExtResource("1_platform")]
+position = Vector2(412.99997, -62)
+rotation = 0.30629456
+scale = Vector2(1.1200024, 1)
+size = Vector2(300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling13" parent="World" unique_id=2003549306 instance=ExtResource("1_platform")]
+position = Vector2(-1199, -779.00006)
+rotation = -0.32972857
+scale = Vector2(1.1200024, 1)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling7" parent="World" unique_id=775398022 instance=ExtResource("1_platform")]
+position = Vector2(-1053, 206)
+scale = Vector2(1.1200024, 1)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling8" parent="World" unique_id=931219379 instance=ExtResource("1_platform")]
+position = Vector2(-198, 202)
+scale = Vector2(1.1200024, 1)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling14" parent="World" unique_id=839576702 instance=ExtResource("1_platform")]
+position = Vector2(-203, -232)
+scale = Vector2(1.1200024, 1)
+size = Vector2(100, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling2" parent="World" unique_id=62472040 instance=ExtResource("1_platform")]
+position = Vector2(-1610, 143)
+rotation = 1.5707964
+scale = Vector2(0.44095403, 1)
+size = Vector2(820, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling9" parent="World" unique_id=919175633 instance=ExtResource("1_platform")]
+position = Vector2(703, 156.99998)
+rotation = 1.5707964
+scale = Vector2(0.44095403, 1)
+size = Vector2(820, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling10" parent="World" unique_id=120535553 instance=ExtResource("1_platform")]
+position = Vector2(621, -8)
+rotation = 3.1415927
+scale = Vector2(0.44095403, 1)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling11" parent="World" unique_id=1192536935 instance=ExtResource("1_platform")]
+position = Vector2(621, -8)
+rotation = 3.1415927
+scale = Vector2(0.44095403, 1)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling4" parent="World" unique_id=1013948245 instance=ExtResource("1_platform")]
+position = Vector2(-1124, -1274)
+rotation = 1.5707964
+scale = Vector2(0.44095403, 1)
+size = Vector2(1300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ControlFloor" parent="World" unique_id=72387994 instance=ExtResource("1_platform")]
+position = Vector2(-2753, -159)
+size = Vector2(860, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ControlFloor3" parent="World" unique_id=1659582442 instance=ExtResource("1_platform")]
+position = Vector2(-1722, -564)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ControlFloor4" parent="World" unique_id=1416207684 instance=ExtResource("1_platform")]
+position = Vector2(-419, -886)
+scale = Vector2(1.9199982, 1)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ControlFloor6" parent="World" unique_id=453859107 instance=ExtResource("1_platform")]
+position = Vector2(-197, -577)
+rotation = 0.00059401256
+scale = Vector2(1.9199982, 1)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ControlFloor7" parent="World" unique_id=484138405 instance=ExtResource("1_platform")]
+position = Vector2(145, -539.00006)
+rotation = 0.00059401256
+scale = Vector2(1.9199982, 1)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ControlFloor8" parent="World" unique_id=585597383 instance=ExtResource("1_platform")]
+position = Vector2(991, -495)
+rotation = 0.00059401256
+scale = Vector2(1.9199982, 1)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ControlFloor5" parent="World" unique_id=1467225872 instance=ExtResource("1_platform")]
+position = Vector2(-620, 53)
+scale = Vector2(1.9199982, 1)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ControlFloor2" parent="World" unique_id=1292578487 instance=ExtResource("1_platform")]
+position = Vector2(-2314, 203)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ControlFloor9" parent="World" unique_id=1667846071 instance=ExtResource("1_platform")]
+position = Vector2(-2442, -1314)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ControlCeiling" parent="World" unique_id=1944703713 instance=ExtResource("1_platform")]
+position = Vector2(-252, -100)
+rotation = 1.5662466
+scale = Vector2(0.6591058, 1)
+size = Vector2(440, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ControlPart4" parent="World" unique_id=1797085687 instance=ExtResource("1_platform")]
+position = Vector2(-2138, 418)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart14" parent="World" unique_id=1463157971 instance=ExtResource("1_platform")]
+position = Vector2(-1880, 422)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart5" parent="World" unique_id=1861095347 instance=ExtResource("1_platform")]
+position = Vector2(-1984, 388)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart20" parent="World" unique_id=1771814175 instance=ExtResource("1_platform")]
+position = Vector2(-2031, -1023)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart21" parent="World" unique_id=737775831 instance=ExtResource("1_platform")]
+position = Vector2(-1773, -1019)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart22" parent="World" unique_id=1972948659 instance=ExtResource("1_platform")]
+position = Vector2(-1877, -1053)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart15" parent="World" unique_id=1761585054 instance=ExtResource("1_platform")]
+position = Vector2(1163, 413)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart16" parent="World" unique_id=953745666 instance=ExtResource("1_platform")]
+position = Vector2(1400, 420)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart17" parent="World" unique_id=1227991662 instance=ExtResource("1_platform")]
+position = Vector2(1269, 386)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart6" parent="World" unique_id=2069504590 instance=ExtResource("1_platform")]
+position = Vector2(-2205, -81)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart12" parent="World" unique_id=1748005593 instance=ExtResource("1_platform")]
+position = Vector2(-1931, -71.99999)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart7" parent="World" unique_id=1897610740 instance=ExtResource("1_platform")]
+position = Vector2(-2051, -111)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart13" parent="World" unique_id=609256053 instance=ExtResource("1_platform")]
+position = Vector2(1178, -185)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart18" parent="World" unique_id=1258648306 instance=ExtResource("1_platform")]
+position = Vector2(1452, -176)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart19" parent="World" unique_id=2071449639 instance=ExtResource("1_platform")]
+position = Vector2(1332, -215)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart9" parent="World" unique_id=1082135577 instance=ExtResource("1_platform")]
+position = Vector2(-602, -906)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart11" parent="World" unique_id=408906902 instance=ExtResource("1_platform")]
+position = Vector2(-311, -907)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart10" parent="World" unique_id=1129331768 instance=ExtResource("1_platform")]
+position = Vector2(-448.00003, -938)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart8" parent="World" unique_id=277216977 instance=ExtResource("1_platform")]
+position = Vector2(-1708, -589.99994)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlDesk2" parent="World" unique_id=1843267623 instance=ExtResource("1_platform")]
+position = Vector2(-1547, -13)
+size = Vector2(140, 24)
+color = Color(0.278431, 0.313726, 0.360784, 1)
+
+[node name="ControlDesk3" parent="World" unique_id=1293606999 instance=ExtResource("1_platform")]
+position = Vector2(-1094, -325)
+scale = Vector2(1, 0.89835685)
+size = Vector2(200, 24)
+color = Color(0.278431, 0.313726, 0.360784, 1)
+
+[node name="ControlDesk4" parent="World" unique_id=553760831 instance=ExtResource("1_platform")]
+position = Vector2(-910, -211)
+scale = Vector2(1, 0.89835685)
+size = Vector2(200, 24)
+color = Color(0.278431, 0.313726, 0.360784, 1)
+
+[node name="ControlDesk5" parent="World" unique_id=142867064 instance=ExtResource("1_platform")]
+position = Vector2(1764, 3106.0002)
+scale = Vector2(1.3680797, 0.89835685)
+size = Vector2(200, 24)
+color = Color(0.278431, 0.313726, 0.360784, 1)
+
+[node name="ControlInnerWall" parent="World" unique_id=1691584734 instance=ExtResource("1_platform")]
+position = Vector2(-999, -134)
+size = Vector2(30, 400)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling2" parent="World" unique_id=1325371114 instance=ExtResource("1_platform")]
+position = Vector2(1221, -903)
+size = Vector2(1300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling3" parent="World" unique_id=1074820447 instance=ExtResource("1_platform")]
+position = Vector2(1221, -903)
+size = Vector2(1300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling4" parent="World" unique_id=1633630238 instance=ExtResource("1_platform")]
+position = Vector2(1181, -153.00002)
+scale = Vector2(0.76391536, 0.73447883)
+size = Vector2(1300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling5" parent="World" unique_id=84744853 instance=ExtResource("1_platform")]
+position = Vector2(2186, 98.99997)
+scale = Vector2(0.76391536, 0.73447883)
+size = Vector2(1300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="Ziplines" type="Node2D" parent="." unique_id=924256746]
+
+[node name="ZipYard" parent="Ziplines" unique_id=1847529886 instance=ExtResource("10_zip")]
+position = Vector2(-1776, 144)
+top = Vector2(208.02429, -181.51111)
+bottom = Vector2(-205.2728, 190.54547)
+speed = 800.0
+
+[node name="ZipYard2" parent="Ziplines" unique_id=227955762 instance=ExtResource("10_zip")]
+position = Vector2(-2267, 90)
+top = Vector2(-153.73157, -169.97064)
+bottom = Vector2(5.855316, 92.10333)
+speed = 800.0
+
+[node name="ZipYard3" parent="Ziplines" unique_id=363385456 instance=ExtResource("10_zip")]
+position = Vector2(-2347, -159)
+top = Vector2(5.329712, -27.849976)
+bottom = Vector2(5.855316, 92.10333)
+speed = 800.0
+
+[node name="ZipYard4" parent="Ziplines" unique_id=2100860766 instance=ExtResource("10_zip")]
+position = Vector2(-2190, -404)
+top = Vector2(294.12784, -206.18933)
+bottom = Vector2(-232.6861, 210.94183)
+speed = 800.0
+
+[node name="ZipYard5" parent="Ziplines" unique_id=562961245 instance=ExtResource("10_zip")]
+position = Vector2(-1264, -753)
+top = Vector2(-136.80609, 17.424194)
+bottom = Vector2(-389.16522, 117.3797)
+speed = 800.0
+
+[node name="ZipYard20" parent="Ziplines" unique_id=527839991 instance=ExtResource("10_zip")]
+position = Vector2(-675, -975)
+top = Vector2(-104.16516, 52.34735)
+bottom = Vector2(-389.16522, 117.3797)
+speed = 800.0
+
+[node name="ZipYard7" parent="Ziplines" unique_id=366791774 instance=ExtResource("10_zip")]
+position = Vector2(280, -1041)
+top = Vector2(338.047, -231.24445)
+bottom = Vector2(-389.16522, 117.3797)
+speed = 800.0
+
+[node name="ZipYard9" parent="Ziplines" unique_id=546928841 instance=ExtResource("10_zip")]
+position = Vector2(1174, -1390)
+top = Vector2(-390.58325, 115.41052)
+bottom = Vector2(78.86279, 458.38477)
+speed = 800.0
+
+[node name="ZipYard8" parent="Ziplines" unique_id=1070833318 instance=ExtResource("10_zip")]
+position = Vector2(546, -788)
+top = Vector2(76.33411, -160.5625)
+bottom = Vector2(-610.1782, 179.66785)
+speed = 800.0
+
+[node name="ZipYard15" parent="Ziplines" unique_id=267086155 instance=ExtResource("10_zip")]
+position = Vector2(1709, -29)
+top = Vector2(-105.52612, -156.67407)
+bottom = Vector2(115.41919, 95.3418)
+speed = 800.0
+
+[node name="ZipYard18" parent="Ziplines" unique_id=562228375 instance=ExtResource("10_zip")]
+position = Vector2(1237, -366)
+rotation = -0.011121668
+top = Vector2(-105.52612, -156.67407)
+bottom = Vector2(90.18652, 98.843445)
+speed = 800.0
+
+[node name="ZipYard19" parent="Ziplines" unique_id=302868900 instance=ExtResource("10_zip")]
+position = Vector2(795, -718)
+top = Vector2(92.14429, -214.33978)
+bottom = Vector2(68.14404, 192.49072)
+speed = 800.0
+
+[node name="ZipYard16" parent="Ziplines" unique_id=1357634951 instance=ExtResource("10_zip")]
+position = Vector2(1516, 182)
+top = Vector2(191.04199, -112.20581)
+bottom = Vector2(-226.68286, 163.97583)
+speed = 800.0
+
+[node name="ZipYard17" parent="Ziplines" unique_id=332146811 instance=ExtResource("10_zip")]
+position = Vector2(1068, 241)
+top = Vector2(-420.27954, -277.83398)
+bottom = Vector2(-226.68286, 163.97583)
+speed = 800.0
+
+[node name="ZipYard10" parent="Ziplines" unique_id=1950945338 instance=ExtResource("10_zip")]
+position = Vector2(-380, -135)
+top = Vector2(146.67236, -130.03552)
+bottom = Vector2(10.616272, 162.93872)
+speed = 800.0
+
+[node name="ZipYard14" parent="Ziplines" unique_id=970687558 instance=ExtResource("10_zip")]
+position = Vector2(-238, -131)
+top = Vector2(154.82135, -154.70227)
+bottom = Vector2(338.86816, -12.330566)
+speed = 800.0
+
+[node name="ZipYard12" parent="Ziplines" unique_id=1289750680 instance=ExtResource("10_zip")]
+position = Vector2(-1078, 252)
+top = Vector2(11.845154, -78.471924)
+bottom = Vector2(10.616272, 162.93872)
+speed = 800.0
+
+[node name="ZipYard13" parent="Ziplines" unique_id=503425835 instance=ExtResource("10_zip")]
+position = Vector2(-256, 237)
+top = Vector2(11.845154, -78.471924)
+bottom = Vector2(10.616272, 162.93872)
+speed = 800.0
+
+[node name="ZipYard11" parent="Ziplines" unique_id=1875150948 instance=ExtResource("10_zip")]
+position = Vector2(-808, -392)
+top = Vector2(360.93622, -587.11774)
+bottom = Vector2(-69.62512, 154.69287)
+speed = 800.0
+
+[node name="ZipYard6" parent="Ziplines" unique_id=798740017 instance=ExtResource("10_zip")]
+position = Vector2(-1352, -761)
+top = Vector2(-74.253784, -260.98285)
+bottom = Vector2(-389.16522, 117.3797)
+speed = 800.0
+
+[node name="ZipYard21" parent="Ziplines" unique_id=1090030523 instance=ExtResource("10_zip")]
+position = Vector2(-1987, -1131)
+top = Vector2(-267.99957, -206.43787)
+bottom = Vector2(-430.66107, 115.664246)
+speed = 800.0
+
+[node name="ZipControl" parent="Ziplines" unique_id=262480997 instance=ExtResource("10_zip")]
+position = Vector2(-1347, -548)
+top = Vector2(-201.10156, -52.34021)
+bottom = Vector2(176.17017, 183.45459)
+speed = 800.0
+
+[node name="Spawns" type="Node2D" parent="." unique_id=1755117685]
+
+[node name="SpawnYard" parent="Spawns" unique_id=385471394 instance=ExtResource("11_spawn")]
+position = Vector2(-2399, 386)
+display_name = "THE YARD"
+
+[node name="SpawnControl" parent="Spawns" unique_id=1298046729 instance=ExtResource("11_spawn")]
+position = Vector2(-2423, -1355)
+display_name = "CONTROL"
+
+[node name="SpawnMast" parent="Spawns" unique_id=752008386 instance=ExtResource("11_spawn")]
+position = Vector2(1703, 365)
+display_name = "MAST DECK"
+
+[node name="SpawnMast2" parent="Spawns" unique_id=432687652 instance=ExtResource("11_spawn")]
+position = Vector2(1749, -958)
+display_name = "MAST DECK"
+
+[node name="Enemies" type="Node2D" parent="." unique_id=1002818592]
+
+[node name="GuardYard" parent="Enemies" unique_id=2096302872 instance=ExtResource("6_enemy")]
+position = Vector2(-1770, 395)
+
+[node name="GuardYard2" parent="Enemies" unique_id=692818654 instance=ExtResource("6_enemy")]
+position = Vector2(-1765, -87)
+
+[node name="GuardYard3" parent="Enemies" unique_id=18484775 instance=ExtResource("6_enemy")]
+position = Vector2(-1715, -662)
+
+[node name="GuardYard11" parent="Enemies" unique_id=1148716876 instance=ExtResource("6_enemy")]
+position = Vector2(-1661, -1030)
+
+[node name="GuardYard4" parent="Enemies" unique_id=1342476506 instance=ExtResource("6_enemy")]
+position = Vector2(-935, 10)
+
+[node name="GuardYard5" parent="Enemies" unique_id=1202221868 instance=ExtResource("6_enemy")]
+position = Vector2(-323, 2)
+
+[node name="GuardYard10" parent="Enemies" unique_id=1665318694 instance=ExtResource("6_enemy")]
+position = Vector2(-343, 381)
+
+[node name="GuardYard6" parent="Enemies" unique_id=1803167443 instance=ExtResource("6_enemy")]
+position = Vector2(-206, -615)
+
+[node name="GuardYard7" parent="Enemies" unique_id=722346007 instance=ExtResource("6_enemy")]
+position = Vector2(-172, -939)
+
+[node name="GuardYard8" parent="Enemies" unique_id=1093148849 instance=ExtResource("6_enemy")]
+position = Vector2(954, -547)
+
+[node name="GuardYard9" parent="Enemies" unique_id=268734520 instance=ExtResource("6_enemy")]
+position = Vector2(923, -205)
+
+[node name="Players" type="Node2D" parent="." unique_id=1382237455]
+
+[node name="Bullets" type="Node2D" parent="." unique_id=228984577]
+
+[node name="WorldOverlay" type="CanvasLayer" parent="." unique_id=1394881968 groups=["world_overlay"]]
+layer = 2
+follow_viewport_enabled = true
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=413737345]
+
+[node name="Controls" type="Label" parent="HUD" unique_id=840067251]
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 400.0
+offset_bottom = 120.0
+theme_override_colors/font_color = Color(0.611765, 0.658824, 0.717647, 1)
+text = "A / D  move          SPACE or W  jump (hold = higher)          CTRL or C  crouch (slow and quiet)
+S + SPACE  drop through blue platforms
+MOUSE  point          LEFT CLICK  fire          RIGHT CLICK  aim (tighter cone, slower walk)
+1-2  hands   3-5  bags          R  reload   H  medkit          F  search / zipline   E  grapple          TAB  inventory   M  map          Q  ultimate   G/T  aim and throw"
+
+[node name="InventoryScreen" type="Control" parent="HUD" unique_id=953197987 groups=["inventory_ui"]]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("7_invui")
+
+[node name="WeaponHUD" type="Control" parent="HUD" unique_id=24343981]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("4_hud")
+
+[node name="MapScreen" type="Control" parent="HUD" unique_id=422202886 groups=["map_screen"]]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("12_map")
+
+[node name="Screens" type="Control" parent="HUD" unique_id=2099260084]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("8_screens")
+
+[node name="Shop" type="Control" parent="HUD" unique_id=663939343 groups=["shop"]]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("9_shop")
+
+[node name="Shop2" type="Control" parent="HUD" unique_id=739109823 groups=["shop"]]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("9_shop")

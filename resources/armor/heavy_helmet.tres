@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ArmorData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/armor_data.gd" id="1_armor"]
+
+[resource]
+script = ExtResource("1_armor")
+display_name = "Combat Helmet"
+short_name = "HELM+"
+slot = 0
+protection = 0.65
+max_durability = 140
+failure_point = 0.25
+grid_size = Vector2i(2, 2)
+tint = Color(0.72, 0.78, 0.86, 1)

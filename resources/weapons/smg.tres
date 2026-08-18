@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+display_name = "Submachine Gun"
+short_name = "SMG"
+accuracy = 44.0
+handling = 92.0
+recoil = 32.0
+stability = 40.0
+rounds_per_minute = 940.0
+automatic = true
+pellets = 1
+damage = 15.0
+bullet_speed = 6600.0
+bullet_range = 1300.0
+falloff_start = 260.0
+falloff_end = 800.0
+min_damage_factor = 0.3
+grid_size = Vector2i(3, 1)
+ammo_type = &"9mm"
+mag_size = 32
+reserve_ammo = 224
+reload_time = 1.7
+ads_zoom = 0.95
+ads_spread_scale = 0.1
+ads_lead_scale = 0.85
+ads_speed_scale = 0.75
+bullet_color = Color(1, 0.756863, 0.407843, 1)
+bullet_length = 23.0
+bullet_width = 2.0
+

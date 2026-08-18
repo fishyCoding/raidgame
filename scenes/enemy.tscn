@@ -1,0 +1,91 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/enemy.gd" id="1_enemy"]
+[ext_resource type="Script" path="res://scripts/weapon.gd" id="2_weapon"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_enemy"]
+resource_local_to_scene = true
+size = Vector2(30, 52)
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_enemy"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:velocity")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:facing")
+properties/2/spawn = true
+properties/2/replication_mode = 1
+properties/3/path = NodePath(".:state")
+properties/3/spawn = true
+properties/3/replication_mode = 2
+properties/4/path = NodePath(".:net_aim")
+properties/4/spawn = true
+properties/4/replication_mode = 1
+properties/5/path = NodePath(".:net_health")
+properties/5/spawn = true
+properties/5/replication_mode = 2
+properties/6/path = NodePath(".:net_alive")
+properties/6/spawn = true
+properties/6/replication_mode = 2
+
+[node name="Enemy" type="CharacterBody2D" groups=["hideable"]]
+collision_layer = 16
+collision_mask = 3
+motion_mode = 0
+floor_snap_length = 6.0
+script = ExtResource("1_enemy")
+
+[node name="Visual" type="Polygon2D" parent="."]
+color = Color(0.85, 0.498039, 0.34902, 1)
+polygon = PackedVector2Array(-15, -26, 15, -26, 15, 26, -15, 26)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_enemy")
+
+[node name="Body" type="Node2D" parent="."]
+
+[node name="Head" type="Polygon2D" parent="Body"]
+color = Color(0.898039, 0.560784, 0.396078, 1)
+polygon = PackedVector2Array(-9, -26, 9, -26, 9, -13, -9, -13)
+
+[node name="Eye" type="Polygon2D" parent="Body"]
+color = Color(1, 0.85098, 0.501961, 1)
+polygon = PackedVector2Array(3, -20, 11, -20, 11, -13, 3, -13)
+
+[node name="AimPivot" type="Node2D" parent="."]
+position = Vector2(0, -6)
+
+[node name="Arm" type="Polygon2D" parent="AimPivot"]
+color = Color(0.937255, 0.788235, 0.552941, 1)
+polygon = PackedVector2Array(6, -3, 26, -2, 26, 3, 6, 4)
+
+[node name="Muzzle" type="Marker2D" parent="AimPivot"]
+position = Vector2(28, 0)
+
+[node name="HealthBar" type="Node2D" parent="."]
+position = Vector2(0, -38)
+
+[node name="Back" type="Polygon2D" parent="HealthBar"]
+color = Color(0.145098, 0.164706, 0.196078, 1)
+polygon = PackedVector2Array(-15, -3, 15, -3, 15, 3, -15, 3)
+
+[node name="Fill" type="Polygon2D" parent="HealthBar"]
+position = Vector2(-15, 0)
+color = Color(0.913725, 0.435294, 0.4, 1)
+polygon = PackedVector2Array(0, -3, 30, -3, 30, 3, 0, 3)
+
+[node name="FloorProbe" type="RayCast2D" parent="."]
+position = Vector2(15, 22)
+target_position = Vector2(0, 22)
+collision_mask = 3
+
+[node name="Weapon" type="Node" parent="."]
+script = ExtResource("2_weapon")
+loadout = PackedStringArray("res://resources/weapons/enemy_rifle.tres")
+hit_mask = 7
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+public_visibility = false
+replication_config = SubResource("SceneReplicationConfig_enemy")

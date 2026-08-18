@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="BackpackData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/backpack_data.gd" id="1_backpack"]
+
+[resource]
+script = ExtResource("1_backpack")
+display_name = "Patrol Pack"
+short_name = "PATROL"
+grid_size = Vector2i(6, 3)
+carried_size = Vector2i(2, 2)
+tint = Color(0.45, 0.58, 0.5, 1)

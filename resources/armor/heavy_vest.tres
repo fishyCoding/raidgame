@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ArmorData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/armor_data.gd" id="1_armor"]
+
+[resource]
+script = ExtResource("1_armor")
+display_name = "Plate Carrier"
+short_name = "PLATE"
+slot = 1
+protection = 0.62
+max_durability = 220
+failure_point = 0.2
+grid_size = Vector2i(3, 3)
+tint = Color(0.45, 0.55, 0.62, 1)

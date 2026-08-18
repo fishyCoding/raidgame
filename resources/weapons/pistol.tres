@@ -1,0 +1,38 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+display_name = "Sidearm"
+short_name = "PISTOL"
+accuracy = 62.0
+handling = 88.0
+recoil = 34.0
+kick_scale = 1.0
+stability = 62.0
+shake_scale = 1.0
+rounds_per_minute = 320.0
+automatic = false
+pellets = 1
+damage = 22.0
+bullet_speed = 6000.0
+bullet_range = 1100.0
+falloff_start = 300.0
+falloff_end = 800.0
+min_damage_factor = 0.4
+grid_size = Vector2i(2, 1)
+sidearm = true
+ammo_type = &"9mm"
+mag_size = 12
+reserve_ammo = 60
+reload_time = 1.5
+ads_zoom = 0.95
+ads_spread_scale = 0.18
+ads_lead_scale = 0.9
+ads_speed_scale = 0.8
+suppressed = true
+loudness_trim = 0.0
+bullet_color = Color(1, 0.882353, 0.658824, 1)
+bullet_length = 22.0
+bullet_width = 2.0

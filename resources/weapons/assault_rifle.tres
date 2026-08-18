@@ -1,0 +1,34 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+display_name = "Assault Rifle"
+short_name = "AR"
+report_sound = "rifle"
+accuracy = 74.0
+handling = 62.0
+recoil = 42.0
+stability = 48.0
+rounds_per_minute = 620.0
+automatic = true
+pellets = 1
+damage = 26.0
+bullet_speed = 8500.0
+bullet_range = 2200.0
+falloff_start = 600.0
+falloff_end = 1500.0
+min_damage_factor = 0.45
+grid_size = Vector2i(4, 2)
+ammo_type = &"5.56"
+mag_size = 30
+reserve_ammo = 180
+reload_time = 2.1
+ads_zoom = 0.92
+ads_spread_scale = 0.12
+ads_lead_scale = 1.0
+bullet_color = Color(1, 0.858824, 0.478431, 1)
+bullet_length = 32.0
+bullet_width = 2.5
+
