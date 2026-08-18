@@ -71,6 +71,27 @@ const HEARING := {
 ## Fallback for anything that does not name a range.
 const MAX_DISTANCE := 1500.0
 
+# --- who made the noise -------------------------------------------------------
+#
+# In a raid with eleven guards and another player in it, the single most useful
+# thing a sound can tell you is which of those two it was. Distance and direction
+# already work; "is that a person" did not, because a remote player used the
+# guard's own footstep and both fired the same report.
+#
+# Two cues, deliberately, because either alone is ambiguous. Guards are pitched
+# **down**, which reads as bigger and duller and survives being far away where a
+# few dB of level does not. Players are a few dB **up**, which reads as closer
+# and more urgent even when the pitch is masked by everything else going on.
+
+## Multiplied into a guard's pitch. Far enough to be a different voice, not so
+## far that a footstep stops sounding like a boot - see guard_footstep, which
+## learnt that the hard way.
+const GUARD_PITCH := 0.88
+## And a little quieter, so a player is the louder of the two at equal distance.
+const GUARD_TRIM := -3.0
+## Anything a person did, yours or another player's.
+const PLAYER_TRIM := 2.0
+
 # --- occlusion ----------------------------------------------------------------
 #
 # Distance alone says how far away something is. It does not say whether there is
@@ -218,9 +239,11 @@ func _ready() -> void:
 
 ## A gun going off. The report is derived from the weapon's own stats, so every
 ## weapon sounds like what it is without anyone tuning a sound per gun.
-func gunshot(data: WeaponData, at: Vector2) -> void:
+func gunshot(data: WeaponData, at: Vector2, from_guard := false) -> void:
 	if data == null:
 		return
+	var trim := GUARD_TRIM if from_guard else PLAYER_TRIM
+	var bias := GUARD_PITCH if from_guard else 1.0
 	# Heavier guns are louder; fast little ones are pulled down so a held trigger
 	# does not drown everything else out.
 	var loudness := lerpf(-13.0, -3.0, clampf(data.get_burst_damage() / 120.0, 0.0, 1.0))
@@ -238,8 +261,8 @@ func gunshot(data: WeaponData, at: Vector2) -> void:
 		# hands, and gone by the next room. See HEARING.suppressed.
 		var base := -1.0 if key == "suppressed" else loudness
 		var carries: float = HEARING.suppressed if key == "suppressed" else HEARING.gunshot
-		_play(_clips[key], at, base + RECORDING_TRIM[key] + data.loudness_trim,
-			randf_range(0.94, 1.06), carries)
+		_play(_clips[key], at, base + RECORDING_TRIM[key] + data.loudness_trim + trim,
+			randf_range(0.94, 1.06) * bias, carries)
 		return
 
 	if not _shots.has(data.short_name):
@@ -247,8 +270,8 @@ func gunshot(data: WeaponData, at: Vector2) -> void:
 	if data.suppressed:
 		loudness -= 14.0
 	loudness += data.loudness_trim
-	_play(_shots[data.short_name], at, loudness, randf_range(0.94, 1.06),
-		HEARING.gunshot)
+	_play(_shots[data.short_name], at, loudness + trim,
+		randf_range(0.94, 1.06) * bias, HEARING.gunshot)
 
 
 ## Your own boots. `loudness` scales the step down without changing its
@@ -276,13 +299,30 @@ func footstep(at: Vector2, heavy := true, loudness := 1.0) -> void:
 func guard_footstep(at: Vector2, loudness := 1.0) -> void:
 	var quieting := linear_to_db(clampf(loudness, 0.01, 1.0))
 	if _clips.has("footstep"):
-		_play(_clips.footstep, at, 2.0 + quieting + RECORDING_TRIM.footstep,
-			randf_range(0.94, 1.08), HEARING.footstep, true, FOOTSTEP_ATTENUATION)
-		_play(_gear, at, -7.0 + quieting, randf_range(0.9, 1.15), HEARING.footstep,
-			true, FOOTSTEP_ATTENUATION)
+		_play(_clips.footstep, at, 2.0 + quieting + RECORDING_TRIM.footstep + GUARD_TRIM,
+			randf_range(0.94, 1.08) * GUARD_PITCH, HEARING.footstep, true,
+			FOOTSTEP_ATTENUATION)
+		_play(_gear, at, -7.0 + quieting, randf_range(0.9, 1.15) * GUARD_PITCH,
+			HEARING.footstep, true, FOOTSTEP_ATTENUATION)
 		return
-	_play(_boot, at, -7.0 + quieting, randf_range(0.82, 1.18), HEARING.footstep,
-		true, FOOTSTEP_ATTENUATION)
+	_play(_boot, at, -7.0 + quieting, randf_range(0.82, 1.18) * GUARD_PITCH,
+		HEARING.footstep, true, FOOTSTEP_ATTENUATION)
+
+
+## Another player's boots.
+##
+## Used to be guard_footstep, which meant the most important sound in the game -
+## somebody who can shoot back is in the room - was indistinguishable from the
+## eleven patrolling men who cannot surprise you. Same recording, at its own
+## pitch, louder, and without the webbing jingle a guard carries.
+func player_footstep(at: Vector2, loudness := 1.0) -> void:
+	var quieting := linear_to_db(clampf(loudness, 0.01, 1.0))
+	if _clips.has("footstep"):
+		_play(_clips.footstep, at, 2.0 + quieting + RECORDING_TRIM.footstep + PLAYER_TRIM,
+			randf_range(0.98, 1.12), HEARING.footstep, true, FOOTSTEP_ATTENUATION)
+		return
+	_play(_footstep, at, -4.0 + quieting, randf_range(0.98, 1.12),
+		HEARING.footstep, true, FOOTSTEP_ATTENUATION)
 
 
 ## A grenade going off: the loudest thing in the game, and the furthest carrying.

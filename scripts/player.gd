@@ -705,7 +705,10 @@ func _update_replica(delta: float) -> void:
 		if _step_travel >= step_distance:
 			_step_travel = 0.0
 			if _audio:
-				_audio.guard_footstep(global_position)
+				# A person, not a patrol. Same recording, its own pitch, and a
+				# few dB up - somebody who can shoot back is worth hearing over
+				# eleven men who are only walking.
+				_audio.player_footstep(global_position)
 
 
 func _update_timers(delta: float) -> void:

@@ -695,6 +695,13 @@ func _make_bullet(origin: Vector2, angle: float, weapon_path: String, mask: int,
 	if data == null:
 		return
 	Bullet.spawn(get_tree(), origin, angle, data, mask, damage_scale, shooter)
+	# Every machine that gets the round gets the report, which is the only way a
+	# gunfight sounds like one from more than one seat. A shooter of 0 is a
+	# guard - see fire() - and guards are pitched down so an ear can tell a
+	# patrol from a person.
+	var audio := get_node_or_null(^"/root/Audio")
+	if audio:
+		audio.gunshot(data, origin, shooter == 0)
 
 
 ## The same arrangement for a thrown gadget. The grenade itself falls under its

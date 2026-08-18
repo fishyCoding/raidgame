@@ -293,8 +293,10 @@ func try_fire(origin: Vector2, angle: float, pressed: bool, held: bool,
 	_since_shot = 0.0
 	ammo_changed.emit(get_mag(), get_reserve())
 
-	if _audio:
-		_audio.gunshot(data, origin)
+	# The report is not played here. A shot exists on every machine as a bullet -
+	# see Net._make_bullet - and that is where the noise belongs: fired from here
+	# it was heard only by whoever pulled the trigger, so another player's gun was
+	# silent and, on a client, so was every guard's.
 
 	var spread := get_spread(move_factor)
 	for i in data.pellets:
