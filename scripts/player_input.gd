@@ -105,13 +105,20 @@ signal controls_changed(touch: bool)
 
 
 ## Whether the game should be driven by thumbs.
+##
+## "mobile" alone is not enough: a **web** export running in Safari on a phone
+## reports its platform as web, so the feature is false and the on-screen
+## controls would never appear on the one device that needs them. Godot exposes
+## web_ios / web_android for exactly this, and the browser build is how the game
+## gets onto a phone without an App Store account - see server/serve_web.ps1.
 func is_touch() -> bool:
 	match control_scheme:
 		Controls.TOUCH:
 			return true
 		Controls.DESKTOP:
 			return false
-	return OS.has_feature("mobile")
+	return OS.has_feature("mobile") \
+		or OS.has_feature("web_ios") or OS.has_feature("web_android")
 
 
 ## The next scheme round the loop, for a button that cycles rather than a menu.
