@@ -724,7 +724,7 @@ func _update_replica(delta: float) -> void:
 			_audio.zipline_stopped(get_instance_id())
 
 	# Their boots, from their replicated velocity - so you hear other players
-	# moving through exactly the same footstep and occlusion path as guards.
+	# moving through exactly the same footstep path as guards.
 	if is_alive and not is_downed:
 		_step_travel += absf(velocity.x) * delta
 		if _step_travel >= step_distance:

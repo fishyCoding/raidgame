@@ -35,7 +35,7 @@ const RECORDING_TRIM := {
 	"rifle": 4.0,
 	"hit": 0.0,
 	"explosion": 4.0,
-	"zipline": -7.0,
+	"zipline": 2.0,
 }
 
 ## Positional players. Enough for a busy fight, few enough to stay cheap.
@@ -92,32 +92,29 @@ const GUARD_TRIM := -3.0
 ## Anything a person did, yours or another player's.
 const PLAYER_TRIM := 2.0
 
-# --- occlusion ----------------------------------------------------------------
+# --- distance ------------------------------------------------------------------
 #
-# Distance alone says how far away something is. It does not say whether there is
-# a wall in the way, and in a level built out of blocks that is most of what you
-# actually want to know: boots one room over and boots in your room are the same
-# distance and completely different problems.
-#
-# So every positional sound casts a ray to the listener and is scored on what it
-# passes through. A clear line is louder than the falloff curve alone would give
-# it; each surface in between takes a bite out of it.
+# Falloff and panning only. Sounds used to raycast to the listener and be scored
+# on the walls in between - a clear line boosted, each surface taking a bite -
+# which was a good model and is gone for now: it made a sound's level depend on
+# level geometry in a way that was hard to predict while everything else about
+# the mix was still moving. Distance is honest and legible. The occlusion is in
+# the history if it is wanted back.
 
-## Added when nothing at all stands between you and the sound. This is the part
-## that makes a guard in the open unmistakable.
-const CLEAR_LINE_DB := 4.0
-## Taken off by the first surface in the way.
-const OCCLUDED_DB := -5.0
-## And by every surface after that, so a sound three rooms deep is gone.
-const OCCLUDED_EXTRA_DB := -4.0
-## Surfaces counted before giving up. Anything past this is inaudible anyway.
-const MAX_OCCLUDERS := 3
-## Nudge past each hit so the next ray does not start inside the wall it just
-## found and immediately hit the same one again.
-const OCCLUDER_STEP := 2.0
+## Put back flat when the occlusion pass went.
+##
+## Every positional sound used to get +4 dB for having a clear line to the
+## listener, which in practice was most of them - so deleting the raycasts
+## quietened the entire game by that much as a side effect. This restores it, so
+## dropping occlusion changed what you hear about *walls* and nothing else.
+const CLEAR_LINE_TRIM := 4.0
 
 ## How sharply sound drops with distance. Above 1 means a fast initial falloff.
-const ATTENUATION := 1.4
+##
+## Was 1.4, alongside an occlusion pass that handed a clear line +4 dB back. With
+## that gone every unobstructed sound lost those 4 dB and the curve underneath it
+## was doing all the work, which put anything past mid-range too far down.
+const ATTENUATION := 0.9
 
 ## Footsteps fall away faster than anything else. A gunshot at half its range
 ## should still be clearly a gunshot; boots at half their range should be well on
@@ -128,12 +125,12 @@ const ATTENUATION := 1.4
 ## footstep range that works out as, in dB below the close volume:
 ##
 ##            225 px    450 px    675 px
-##   1.4       -3.5      -8.4     -16.9   (the shared curve: too flat, all one mush)
-##   2.2       -5.5     -13.2     -26.5   (here)
-##   3.2       -8.0     -19.3     -38.5   (too steep: gone almost as soon as it starts)
+##   1.4       -3.5      -8.4     -16.9   (the shared curve)
+##   2.2       -5.5     -13.2     -26.5   (where this was, with occlusion helping)
+##   1.6       -4.0      -9.6     -19.3   (here: still steeper than the rest, audible further)
 ##
 ## Pick another row and put the number here if it still is not sitting right.
-const FOOTSTEP_ATTENUATION := 2.2
+const FOOTSTEP_ATTENUATION := 1.6
 
 ## How hard sound pans left and right with its position on screen.
 const PANNING := 2.0
@@ -286,10 +283,10 @@ func footstep(at: Vector2, heavy := true, loudness := 1.0) -> void:
 	var quieting := linear_to_db(clampf(loudness, 0.01, 1.0))
 	if _clips.has("footstep"):
 		_play(_clips.footstep, at, base + quieting + RECORDING_TRIM.footstep,
-			randf_range(0.94, 1.08), HEARING.footstep, true, FOOTSTEP_ATTENUATION)
+			randf_range(0.94, 1.08), HEARING.footstep, FOOTSTEP_ATTENUATION)
 		return
 	_play(_footstep if heavy else _footstep_soft, at, base + quieting,
-		randf_range(0.88, 1.12), HEARING.footstep, true, FOOTSTEP_ATTENUATION)
+		randf_range(0.88, 1.12), HEARING.footstep, FOOTSTEP_ATTENUATION)
 
 
 ## Someone else's boots: your footstep recording, at your pitch, with the gear
@@ -304,13 +301,13 @@ func guard_footstep(at: Vector2, loudness := 1.0) -> void:
 	var quieting := linear_to_db(clampf(loudness, 0.01, 1.0))
 	if _clips.has("footstep"):
 		_play(_clips.footstep, at, 2.0 + quieting + RECORDING_TRIM.footstep + GUARD_TRIM,
-			randf_range(0.94, 1.08) * GUARD_PITCH, HEARING.footstep, true,
+			randf_range(0.94, 1.08) * GUARD_PITCH, HEARING.footstep,
 			FOOTSTEP_ATTENUATION)
 		_play(_gear, at, -7.0 + quieting, randf_range(0.9, 1.15) * GUARD_PITCH,
-			HEARING.footstep, true, FOOTSTEP_ATTENUATION)
+			HEARING.footstep, FOOTSTEP_ATTENUATION)
 		return
 	_play(_boot, at, -7.0 + quieting, randf_range(0.82, 1.18) * GUARD_PITCH,
-		HEARING.footstep, true, FOOTSTEP_ATTENUATION)
+		HEARING.footstep, FOOTSTEP_ATTENUATION)
 
 
 ## Another player's boots.
@@ -323,10 +320,10 @@ func player_footstep(at: Vector2, loudness := 1.0) -> void:
 	var quieting := linear_to_db(clampf(loudness, 0.01, 1.0))
 	if _clips.has("footstep"):
 		_play(_clips.footstep, at, 2.0 + quieting + RECORDING_TRIM.footstep + PLAYER_TRIM,
-			randf_range(0.98, 1.12), HEARING.footstep, true, FOOTSTEP_ATTENUATION)
+			randf_range(0.98, 1.12), HEARING.footstep, FOOTSTEP_ATTENUATION)
 		return
 	_play(_footstep, at, -4.0 + quieting, randf_range(0.98, 1.12),
-		HEARING.footstep, true, FOOTSTEP_ATTENUATION)
+		HEARING.footstep, FOOTSTEP_ATTENUATION)
 
 
 ## A grenade going off: the loudest thing in the game, and the furthest carrying.
@@ -336,10 +333,10 @@ func explosion(at: Vector2, scale := 1.0) -> void:
 	# hearing one: a blast is felt through the building, not around it.
 	if _clips.has("explosion"):
 		_play(_clips.explosion, at, loudness + RECORDING_TRIM.explosion,
-			randf_range(0.9, 1.1), HEARING.explosion, false)
+			randf_range(0.9, 1.1), HEARING.explosion)
 		return
 	_play(SoundBank.explosion(), at, loudness, randf_range(0.9, 1.1),
-		HEARING.explosion, false)
+		HEARING.explosion)
 
 
 ## Your round landed. Not positional: this is confirmation, not an event out in
@@ -371,7 +368,7 @@ func zipline(at: Vector2, moving: bool, source := 0) -> void:
 	if _zip == null or not _claim_zip(source, at):
 		return
 	_zip.global_position = at
-	_zip.volume_db = RECORDING_TRIM.zipline + master_db
+	_zip.volume_db = RECORDING_TRIM.zipline + master_db + CLEAR_LINE_TRIM
 	# Stopped and restarted rather than paused: stream_paused does not reliably
 	# take, and a zip picking up from the top when you start moving again sounds
 	# more like a rope than one resuming from the middle of a sample would.
@@ -473,12 +470,8 @@ func _build_gunshot(data: WeaponData) -> AudioStreamWAV:
 ## once on the player, because the pool is shared and the last sound to use a
 ## player would otherwise dictate the range of the next one.
 ##
-## `occludes` is for the handful of sounds that should ignore walls - an
-## explosion is felt through them, and anything already non-positional does not
-## have a line to trace in the first place.
 func _play(stream: AudioStream, at: Vector2, volume_db: float, pitch: float,
-		carries := MAX_DISTANCE, occludes := true,
-		falloff := ATTENUATION) -> void:
+		carries := MAX_DISTANCE, falloff := ATTENUATION) -> void:
 	if stream == null:
 		return
 
@@ -501,49 +494,11 @@ func _play(stream: AudioStream, at: Vector2, volume_db: float, pitch: float,
 	# Set per call, not once on the player: the pool is shared, so the last sound
 	# to use a slot would otherwise dictate the curve of the next one.
 	player.attenuation = falloff
-	player.volume_db = volume_db + master_db + (_occlusion_db(at) if occludes else 0.0)
+	player.volume_db = volume_db + master_db + CLEAR_LINE_TRIM
 	player.pitch_scale = pitch
 	player.play()
 
 
-## What the walls between `at` and the listener do to a sound, in dB.
-##
-## Counts surfaces rather than just asking "blocked or not": one wall muffles,
-## three means it may as well not have happened. Solid geometry only, matching
-## what the vision system treats as sight-blocking - a sound you can hear through
-## a catwalk is one you can also see through, and the two agreeing is what keeps
-## the level readable.
-func _occlusion_db(at: Vector2) -> float:
-	var listener := Net.local_player
-	if listener == null:
-		return 0.0
-	var world := listener.get_world_2d()
-	if world == null:
-		return 0.0
-	var space := world.direct_space_state
-	if space == null:
-		return 0.0
-
-	var target := listener.global_position
-	var from := at
-	var blocked := 0
-	for i in MAX_OCCLUDERS:
-		var query := PhysicsRayQueryParameters2D.create(from, target)
-		query.collision_mask = Layers.WORLD
-		var hit := space.intersect_ray(query)
-		if hit.is_empty():
-			break
-		blocked += 1
-		# Step past the surface we just found and look for the next one.
-		var onward: Vector2 = hit.position
-		var direction := (target - onward).normalized()
-		if direction.is_zero_approx():
-			break
-		from = onward + direction * OCCLUDER_STEP
-
-	if blocked <= 0:
-		return CLEAR_LINE_DB
-	return OCCLUDED_DB + (blocked - 1) * OCCLUDED_EXTRA_DB
 
 
 func _play_ui(stream: AudioStream, volume_db: float, pitch: float) -> void:
@@ -553,6 +508,6 @@ func _play_ui(stream: AudioStream, volume_db: float, pitch: float) -> void:
 	_next_ui = (_next_ui + 1) % _ui_players.size()
 
 	player.stream = stream
-	player.volume_db = volume_db + master_db
+	player.volume_db = volume_db + master_db + CLEAR_LINE_TRIM
 	player.pitch_scale = pitch
 	player.play()

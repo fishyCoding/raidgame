@@ -105,6 +105,39 @@ func _run() -> void:
 		_audio.gunshot(rifle, player.global_position + Vector2(9000.0, 0.0), false))
 	_check("and one out of earshot is dropped entirely", beyond == null)
 
+	# --- and walls no longer change it ---------------------------------------
+	#
+	# Sounds used to raycast to the listener and be scored on what they passed
+	# through. That is gone: level is distance and nothing else, so the same shot
+	# at the same range is the same level whether or not there is a building in
+	# between.
+	var open_air := _played(func() -> void: _audio.gunshot(rifle, near, false))
+	# Straight down through the floor the character is standing on - guaranteed
+	# geometry, at the same distance.
+	var through_floor := _played(func() -> void:
+		_audio.gunshot(rifle, player.global_position + Vector2(0.0, 120.0), false))
+	_say("open %.1f dB, through the floor %.1f dB" % [
+		open_air.volume_db, through_floor.volume_db])
+	_check("a wall does not change the level",
+		is_equal_approx(open_air.volume_db, through_floor.volume_db))
+
+	# --- and the curve is not too steep --------------------------------------
+	#
+	# Godot applies the falloff itself from max_distance and attenuation, so what
+	# is checked here is the shape that was handed to it.
+	_say("falloff: shared %.1f, footsteps %.1f" % [
+		_audio.ATTENUATION, _audio.FOOTSTEP_ATTENUATION])
+	_check("the shared curve is gentle", _audio.ATTENUATION <= 1.0)
+	_check("footsteps still fall away faster than the rest",
+		_audio.FOOTSTEP_ATTENUATION > _audio.ATTENUATION)
+
+	# --- the rope carries ----------------------------------------------------
+	_audio.zipline(near, true, 1)
+	_say("rope at %.1f dB, carries %.0f px" % [
+		_audio._zip.volume_db, _audio._zip.max_distance])
+	_check("the rope is not buried", _audio._zip.volume_db > 0.0)
+	_audio.zipline_stopped(1)
+
 	_finish()
 
 
