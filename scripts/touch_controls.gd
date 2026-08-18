@@ -57,30 +57,54 @@ const HELD_TINT := Color(0.98, 0.78, 0.35, 0.4)
 ## `left` measures from the left edge instead of the right, for the one button
 ## the left thumb should own. Everything else is right-thumb work, placed clear
 ## of the aim stick's swing and above the readouts along the bottom.
+## Two clusters and nothing in between. Anything a left thumb does sits by the
+## move stick; anything a right thumb does sits by the aim stick; the middle of
+## the screen is the game and stays clear.
+##
+## The split is by what the hand is already doing. The left thumb is steering, so
+## it gets the things you do *while* moving - ducking, grabbing a body, throwing
+## a hook. The right thumb is aiming, so it gets the things you do *to* what you
+## are aiming at, with the trigger the largest control on the screen because it
+## is pressed more than everything else combined.
 const BUTTONS := [
-	{"action": &"fire", "label": "FIRE", "at": Vector2(-370.0, -200.0), "r": 60.0, "hold": true},
-	{"action": &"jump", "label": "JUMP", "at": Vector2(-370.0, -350.0), "r": 50.0, "hold": false},
-	{"action": &"grapple", "label": "HOOK", "at": Vector2(-508.0, -272.0), "r": 46.0, "hold": false},
-	{"action": &"interact", "label": "USE", "at": Vector2(-508.0, -136.0), "r": 44.0, "hold": false},
-	{"action": &"aim", "label": "ADS", "at": Vector2(-232.0, -350.0), "r": 44.0, "hold": true},
-	{"action": &"crouch", "label": "DUCK", "at": Vector2(300.0, -150.0), "r": 44.0,
+	# Right, under the aiming thumb.
+	{"action": &"fire", "label": "FIRE", "at": Vector2(-390.0, -150.0), "r": 78.0, "hold": true},
+	{"action": &"aim", "label": "ADS", "at": Vector2(-350.0, -330.0), "r": 62.0, "hold": true},
+	{"action": &"jump", "label": "JUMP", "at": Vector2(-200.0, -390.0), "r": 62.0, "hold": false},
+	# Left, under the steering thumb.
+	{"action": &"interact", "label": "USE", "at": Vector2(390.0, -150.0), "r": 62.0,
+		"hold": false, "left": true},
+	{"action": &"crouch", "label": "DUCK", "at": Vector2(350.0, -330.0), "r": 62.0,
 		"hold": true, "left": true},
+	{"action": &"grapple", "label": "HOOK", "at": Vector2(200.0, -390.0), "r": 62.0,
+		"hold": false, "left": true},
 ]
 
 ## The rest of it, as a strip of pills along the top. Reloading and healing are
 ## not things you do mid-leap, and the ultimate and the throws want a deliberate
 ## press rather than a thumb that happens to be nearby.
-const PILLS := [
-	{"action": &"reload", "label": "RELOAD"},
+## Split down the same seam. Kit and information on the left, things you spend on
+## the right - and the centre of the top edge left alone, because that is where
+## you are looking.
+const PILLS_LEFT := [
+	{"action": &"inventory", "label": "BAG"},
+	{"action": &"map", "label": "MAP"},
 	{"action": &"heal", "label": "MEDKIT"},
+]
+const PILLS_RIGHT := [
+	{"action": &"reload", "label": "RELOAD"},
 	{"action": &"ultimate", "label": "ULT"},
 	{"action": &"throw_1", "label": "FRAG"},
 	{"action": &"throw_2", "label": "SMOKE"},
-	{"action": &"inventory", "label": "BAG"},
-	{"action": &"map", "label": "MAP"},
 ]
-const PILL_SIZE := Vector2(96.0, 44.0)
+const PILL_SIZE := Vector2(118.0, 56.0)
 const PILL_GAP := 8.0
+## Kept clear between the two strips, so they never read as one row.
+const PILL_SPLIT := 60.0
+
+## Everything the pills cover, for anything that wants the whole set.
+static func all_pills() -> Array:
+	return PILLS_LEFT + PILLS_RIGHT
 
 ## Which pointer is driving what. -2 means nobody; a touch index otherwise, and
 ## -1 for the mouse standing in for a finger on a desktop.
@@ -94,6 +118,33 @@ var _pressed := {}
 ## device every touch also arrives as an emulated mouse click and acting on both
 ## would fire twice.
 var _saw_touch := false
+## The action that would shut whatever screen is currently up, or "" when the pad
+## is in its normal state.
+var _closing := &""
+
+
+## Which screen is covering the game, expressed as the action that toggles it.
+##
+## The shop is deliberately not here: it has a button of its own, and offering a
+## second way out of it that skips the button would be a way to deploy without
+## having pressed READY.
+func _close_action() -> StringName:
+	for node in get_tree().get_nodes_in_group(&"map_screen"):
+		var screen := node as CanvasItem
+		if screen and screen.visible:
+			return &"map"
+	for node in get_tree().get_nodes_in_group(&"inventory_ui"):
+		var screen := node as CanvasItem
+		if screen and screen.visible:
+			return &"inventory"
+	return &""
+
+
+## Where the close button sits: top-right, away from both thumbs' resting
+## positions so it is never the thing you hit by accident.
+func _close_rect() -> Rect2:
+	var box := Vector2(150.0, 62.0)
+	return Rect2(Vector2(size.x - SAFE - box.x, SAFE * 0.4), box)
 
 
 func _ready() -> void:
@@ -120,12 +171,25 @@ func _process(_delta: float) -> void:
 	if help:
 		help.visible = not touch
 
-	var wanted := touch and not PlayerInput.wants_cursor()
+	# A screen being up hides the pad - it would be drawn straight over the map -
+	# but hiding it also takes away the button that opened the thing, and the map
+	# could then never be closed. So the pad does not disappear, it shrinks to
+	# the one control that is still meaningful.
+	_closing = _close_action() if touch and PlayerInput.wants_cursor() else &""
+
+	var wanted := touch and (not PlayerInput.wants_cursor() or _closing != &"")
 	if wanted != visible:
 		visible = wanted
 		if not wanted:
 			_release_everything()
 	if not visible:
+		return
+	if _closing != &"":
+		# Nothing is held while a screen is up, and a thumb still down on FIRE
+		# when the map opened must not stay down behind it.
+		if not _pressed.is_empty() or not _move_vec.is_zero_approx():
+			_release_everything()
+		queue_redraw()
 		return
 
 	# Written every frame rather than on change: these are levels, and a stick
@@ -180,6 +244,13 @@ func _input(event: InputEvent) -> void:
 func _pointer(id: int, at: Vector2, down: bool) -> bool:
 	if not down:
 		return _lift(id)
+
+	# With a screen up, the close button is the only thing on the pad.
+	if _closing != &"":
+		if _close_rect().has_point(at):
+			_hold(id, _closing)
+			return true
+		return false
 
 	# Buttons first, then sticks: a button sitting inside a stick's zone should
 	# be a button, or the two nearest the corner would be unreachable.
@@ -306,25 +377,43 @@ func _button_rects() -> Array:
 ## action you cannot reach, which on a phone means a mechanic that does not
 ## exist.
 func _pill_rects() -> Array:
+	var count := PILLS_LEFT.size() + PILLS_RIGHT.size()
+	var gaps := (PILLS_LEFT.size() - 1 + PILLS_RIGHT.size() - 1) * PILL_GAP
+	var room := size.x - SAFE * 2.0 - PILL_SPLIT
+	# Shrunk to fit rather than allowed to run off the edge, which on a phone
+	# would mean an action you simply cannot reach.
+	var wide: float = minf(PILL_SIZE.x, (room - gaps) / count)
+	var top := SAFE * 0.4
+
 	var out: Array = []
-	var wide: float = PILL_SIZE.x
-	var span := PILLS.size() * wide + (PILLS.size() - 1) * PILL_GAP
-	var room := size.x - SAFE * 2.0
-	if span > room:
-		wide = (room - (PILLS.size() - 1) * PILL_GAP) / PILLS.size()
-		span = room
-	var x := size.x * 0.5 - span * 0.5
-	for pill in PILLS:
-		out.append({
-			"action": pill.action, "label": pill.label,
-			"rect": Rect2(Vector2(x, SAFE * 0.4), Vector2(wide, PILL_SIZE.y)),
-		})
+	var x := SAFE
+	for pill in PILLS_LEFT:
+		out.append({"action": pill.action, "label": pill.label,
+			"rect": Rect2(Vector2(x, top), Vector2(wide, PILL_SIZE.y))})
+		x += wide + PILL_GAP
+
+	# Laid out from the right edge backwards, so the strip hugs its own corner
+	# however wide the screen turns out to be.
+	var span := PILLS_RIGHT.size() * wide + (PILLS_RIGHT.size() - 1) * PILL_GAP
+	x = size.x - SAFE - span
+	for pill in PILLS_RIGHT:
+		out.append({"action": pill.action, "label": pill.label,
+			"rect": Rect2(Vector2(x, top), Vector2(wide, PILL_SIZE.y))})
 		x += wide + PILL_GAP
 	return out
 
 
 func _draw() -> void:
 	var font := ThemeDB.fallback_font
+
+	if _closing != &"":
+		var box := _close_rect()
+		var down := _holding(_closing)
+		draw_rect(box, HELD_TINT if down else PANEL)
+		draw_rect(box, ACCENT if down else RING, false, 2.0)
+		draw_string(font, box.position + Vector2(0.0, 38.0), "CLOSE",
+			HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, ACCENT if down else LABEL)
+		return
 
 	_draw_stick(_move_id != -2, _move_home(), _move_vec, "MOVE")
 	_draw_stick(_aim_id != -2, _aim_home(), _aim_vec, "AIM")

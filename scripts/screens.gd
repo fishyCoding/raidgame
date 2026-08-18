@@ -29,6 +29,8 @@ var _knocked_out := false
 ## and leaving the session frees the body out from under a screen that is still
 ## being drawn.
 var _carried := ""
+## Set by a tap on the screens that otherwise wait for a key. See _input.
+var _tapped := false
 var _player: Player
 var _shop: Node
 var _map: Node
@@ -199,22 +201,52 @@ func _process(delta: float) -> void:
 	_clock += delta
 
 	if phase == Phase.BRIEFING:
-		# Any of the obvious keys gets you moving.
+		# Any of the obvious keys gets you moving - or a tap, on a device that
+		# has none of them.
 		if _clock > 0.4 and (Input.is_action_just_pressed(&"restart")
 				or Input.is_action_just_pressed(&"map")
-				or Input.is_action_just_pressed(&"jump")):
+				or Input.is_action_just_pressed(&"jump")
+				or _took_tap()):
 			_start_raid()
 		return
 
-	if phase == Phase.EXTRACTED and _clock > 1.0 and Input.is_action_just_pressed(&"restart"):
+	if phase == Phase.EXTRACTED and _clock > 1.0 \
+			and (Input.is_action_just_pressed(&"restart") or _took_tap()):
 		_back_to_the_kit_menu()
 		return
 	if phase == Phase.INTRO and _clock >= INTRO_TIME:
 		phase = Phase.PLAYING
 	# Dead is dead: the only input that means anything now is "again".
-	if phase == Phase.DEAD and _clock > 1.2 and Input.is_action_just_pressed(&"restart"):
+	if phase == Phase.DEAD and _clock > 1.2 \
+			and (Input.is_action_just_pressed(&"restart") or _took_tap()):
 		_back_to_the_kit_menu()
 	queue_redraw()
+
+
+## A tap anywhere, for the screens that otherwise sit and wait for a key.
+##
+## These three all told you to press ENTER, which on a phone is advice you cannot
+## take - the briefing in particular would hold the raid shut forever. Only read
+## in touch mode, so a stray click on a desktop cannot skip a death screen you
+## were still reading.
+func _input(event: InputEvent) -> void:
+	if not PlayerInput.is_touch():
+		return
+	if phase != Phase.BRIEFING and phase != Phase.DEAD and phase != Phase.EXTRACTED:
+		return
+	var touch := event as InputEventScreenTouch
+	var click := event as InputEventMouseButton
+	if (touch and touch.pressed) \
+			or (click and click.pressed and click.button_index == MOUSE_BUTTON_LEFT):
+		_tapped = true
+		get_viewport().set_input_as_handled()
+
+
+func _took_tap() -> bool:
+	if not _tapped:
+		return false
+	_tapped = false
+	return true
 
 
 ## Out of the raid and back to the counter. The only way out of a run, whichever
@@ -342,7 +374,7 @@ func _draw_extracted() -> void:
 		draw_string(font, Vector2(0.0, centre.y + 44.0), "carried out:  %s" % _carried,
 			HORIZONTAL_ALIGNMENT_CENTER, size.x, 14, Color(DIM, fade))
 
-	draw_string(font, Vector2(0.0, centre.y + 96.0), "ENTER  kit up for the next one",
+	draw_string(font, Vector2(0.0, centre.y + 96.0), ("TAP  kit up for the next one" if PlayerInput.is_touch() else "ENTER  kit up for the next one"),
 		HORIZONTAL_ALIGNMENT_CENTER, size.x, 15, Color(TITLE, fade * 0.9))
 
 
@@ -369,5 +401,5 @@ func _draw_death() -> void:
 		draw_string(font, Vector2(0.0, centre.y + 44.0), "lost on the body:  %s" % _carried,
 			HORIZONTAL_ALIGNMENT_CENTER, size.x, 14, Color(DIM, fade))
 
-	draw_string(font, Vector2(0.0, centre.y + 96.0), "ENTER  buy another kit",
+	draw_string(font, Vector2(0.0, centre.y + 96.0), ("TAP  buy another kit" if PlayerInput.is_touch() else "ENTER  buy another kit"),
 		HORIZONTAL_ALIGNMENT_CENTER, size.x, 15, Color(TITLE, fade * 0.9))

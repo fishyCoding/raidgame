@@ -116,7 +116,14 @@ func _draw() -> void:
 		draw_string(font, here + Vector2(14.0, 4.0), "YOU",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, YOU)
 
-	var hint := "ENTER or M  close" if briefing else "M  close"
+	# On a phone there is no ENTER and no M. The briefing is dismissed by a tap
+	# anywhere (Screens._input) and the map by the CLOSE button the touch pad
+	# shrinks to while a screen is up (TouchControls._close_action).
+	var hint := ""
+	if PlayerInput.is_touch():
+		hint = "TAP  close" if briefing else "CLOSE  top right"
+	else:
+		hint = "ENTER or M  close" if briefing else "M  close"
 	draw_string(font, Vector2(0.0, size.y - 54.0), hint,
 		HORIZONTAL_ALIGNMENT_CENTER, size.x, 14, ACCENT)
 

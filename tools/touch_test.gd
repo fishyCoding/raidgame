@@ -43,6 +43,14 @@ func _run() -> void:
 	shop.visible = false
 	await _wait(20)
 
+	# Out of the briefing and actually playing. The preamble above leaves Screens
+	# in BRIEFING, and in touch mode a briefing eats the first tap by design - it
+	# is how you dismiss it without a keyboard - which would otherwise swallow the
+	# first touch of every test below it.
+	var screens: Node = main.get_node("HUD/Screens")
+	screens.phase = screens.Phase.PLAYING
+	await _wait(5)
+
 	var player: Node2D = net.local_player
 	if player == null:
 		_say("FAILED: never got a character")
@@ -64,14 +72,14 @@ func _run() -> void:
 	var reachable := {}
 	for entry in _pad.BUTTONS:
 		reachable[entry.action] = true
-	for entry in _pad.PILLS:
+	for entry in _pad.all_pills():
 		reachable[entry.action] = true
 	for action in ["fire", "jump", "grapple", "interact", "aim", "crouch",
 			"reload", "heal", "ultimate", "throw_1", "throw_2", "inventory", "map"]:
 		_check("%s has a button" % action, reachable.has(StringName(action)))
 	# move_left/right/down come off the stick rather than a button.
 	_say("%d buttons + %d pills cover %d actions" % [
-		_pad.BUTTONS.size(), _pad.PILLS.size(), reachable.size()])
+		_pad.BUTTONS.size(), _pad.all_pills().size(), reachable.size()])
 
 	# --- a touch must not pull the trigger by itself -------------------------
 	#
@@ -151,6 +159,29 @@ func _run() -> void:
 	_touch(3, duck, false)
 	await _wait(10)
 	_check("and stands back up", not Input.is_action_pressed(&"crouch"))
+
+	# --- and you can get back out of a screen --------------------------------
+	#
+	# Opening the map hides the pad, which used to take away the very pill that
+	# opened it: the map went up and could never come down. The pad now shrinks
+	# to a CLOSE button instead of vanishing.
+	var map_pill := _button_at(&"map")
+	_touch(4, map_pill, true)
+	await _wait(4)
+	_touch(4, map_pill, false)
+	await _wait(20)
+	var map_screen: CanvasItem = get_first_node_in_group(&"map_screen")
+	_check("the MAP pill opens the map", map_screen != null and map_screen.visible)
+	_check("the pad is still there", _pad.visible)
+	_check("shrunk to a way out", _pad._closing == &"map")
+
+	var close: Rect2 = _pad._close_rect()
+	_touch(5, close.get_center(), true)
+	await _wait(4)
+	_touch(5, close.get_center(), false)
+	await _wait(20)
+	_check("and CLOSE shuts it again", not map_screen.visible)
+	_check("with the full pad back", _pad._closing == &"" and _pad.visible)
 
 	# --- switching back to desktop puts it away ------------------------------
 	_input.control_scheme = _input.Controls.DESKTOP
