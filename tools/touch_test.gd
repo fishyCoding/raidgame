@@ -169,13 +169,21 @@ func _run() -> void:
 		and _input.touch_move_axis > 0.1)
 	_pad._mouse_is_an_echo = false
 
-	# --- a second finger aims while the first still walks --------------------
-	var aim_at: Vector2 = _pad._aim_home()
+	# --- a second finger aims by dragging, anywhere on the right -------------
+	#
+	# No ring to find and no ring to stay inside: the whole right side is the aim
+	# surface, and it reports motion rather than a direction - the same path a
+	# mouse takes, so the aiming code cannot tell them apart.
+	var aim_at := Vector2(_pad.size.x * 0.7, _pad.size.y * 0.5)
+	var before_aim: float = player.aim_angle
 	_touch(1, aim_at, true)
-	_drag(1, aim_at + Vector2(-70.0, 0.0))
-	await _wait(10)
-	_say("aim vector %s, aim angle %.2f" % [_input.touch_aim_direction, player.aim_angle])
-	_check("the aim stick points the gun", absf(player.aim_angle) > PI * 0.5)
+	for i in 8:
+		aim_at += Vector2(0.0, -22.0)
+		_drag(1, aim_at)
+		await physics_frame
+	await _wait(6)
+	_say("aim %.2f -> %.2f rad by dragging" % [before_aim, player.aim_angle])
+	_check("dragging the right side aims", not is_equal_approx(before_aim, player.aim_angle))
 	_check("while the move stick is still held", _input.touch_move_axis > 0.1)
 
 	# --- and a third fires ----------------------------------------------------
@@ -185,26 +193,101 @@ func _run() -> void:
 	await _wait(4)
 	_check("three fingers at once: firing", Input.is_action_pressed(&"fire"))
 	_check("still walking", _input.touch_move_axis > 0.1)
-	_check("still aiming", not _input.touch_aim_direction.is_zero_approx())
+	# Holding the trigger brings the sights up as well, so a fight does not cost
+	# a second thumb.
+	_check("and holding fire aims too", Input.is_action_pressed(&"aim"))
+
+	# Dragging from the fire button keeps tracking while it shoots.
+	var tracked: float = player.aim_angle
+	var from := fire
+	for i in 6:
+		from += Vector2(0.0, 26.0)
+		_drag(2, from)
+		await physics_frame
+	await _wait(4)
+	_check("and can still be dragged to track", not is_equal_approx(tracked, player.aim_angle))
 
 	# --- and letting go lets go ----------------------------------------------
-	_touch(2, fire, false)
-	_touch(1, aim_at + Vector2(-70.0, 0.0), false)
+	_touch(2, from, false)
+	_touch(1, aim_at, false)
 	_touch(0, move_at + Vector2(90.0, 0.0), false)
 	await _wait(4)
 	_check("fire released", not Input.is_action_pressed(&"fire"))
+	_check("and the sights drop with it", not Input.is_action_pressed(&"aim"))
 	_check("move centred", is_zero_approx(_input.touch_move_axis))
-	_check("aim released", _input.touch_aim_direction.is_zero_approx())
 
-	# --- a held button stays held --------------------------------------------
+	# --- crouch latches, it is not held --------------------------------------
+	#
+	# A posture you have to keep a thumb on is a posture you cannot hold while
+	# doing anything else, and on a phone every held button costs a finger.
 	var duck := _button_at(&"crouch")
 	_touch(3, duck, true)
-	await _wait(30)
-	_check("crouch is held down, not tapped", Input.is_action_pressed(&"crouch"))
-	_check("and the character actually crouched", player.crouch > 0.5)
 	_touch(3, duck, false)
+	await _wait(30)
+	_check("crouch latches on after the thumb leaves", Input.is_action_pressed(&"crouch"))
+	_check("and the character actually crouched", player.crouch > 0.5)
+	_touch(3, duck, true)
+	_touch(3, duck, false)
+	await _wait(20)
+	_check("and pressing again stands back up", not Input.is_action_pressed(&"crouch"))
+
+	# --- so does ADS, for aiming without shooting ----------------------------
+	var ads := _button_at(&"aim")
+	_touch(3, ads, true)
+	_touch(3, ads, false)
 	await _wait(10)
-	_check("and stands back up", not Input.is_action_pressed(&"crouch"))
+	_check("ADS latches", Input.is_action_pressed(&"aim"))
+	_check("without firing", not Input.is_action_pressed(&"fire"))
+	_touch(3, ads, true)
+	_touch(3, ads, false)
+	await _wait(10)
+	_check("and unlatches", not Input.is_action_pressed(&"aim"))
+
+	# --- riding a cable ------------------------------------------------------
+	#
+	# Ziplines were unusable on a phone: up is jump *held* and down is the move
+	# stick pushed down, and the on-screen hint said "W up, S down, F to let go",
+	# which is not advice a thumb can take. Riding now replaces the left hand with
+	# three buttons that mean exactly those three things.
+	var cable: Node2D = _find_cable(main)
+	_check("the level has a cable to ride", cable != null)
+	if cable == null:
+		_finish()
+		return
+	# Put on at the bottom, so riding up has somewhere to go. Dropped on wherever
+	# the character happened to be standing, it started at the top, rode 12 px and
+	# stepped straight off the end - which reads as the button not working.
+	player.zipline = cable
+	player.global_position = cable.world_bottom()
+	await _wait(6)
+	_check("the pad knows we are on a cable", _pad._riding)
+
+	var riding := {}
+	for button in _pad._button_rects():
+		riding[button.action] = button
+	_check("UP is offered", riding.has(&"jump"))
+	_check("DOWN is offered", riding.has(&"move_down"))
+	_check("LET GO is offered", riding.has(&"interact"))
+	_check("and the move stick is gone", not _pad._holding(&"move_left"))
+
+	var rode_from: Vector2 = player.global_position
+	_touch(6, (riding[&"jump"] as Dictionary).at, true)
+	await _wait(30)
+	_say("rode %.0f px up the cable" % rode_from.distance_to(player.global_position))
+	_check("UP moves you along it",
+		rode_from.distance_to(player.global_position) > 20.0)
+	_touch(6, (riding[&"jump"] as Dictionary).at, false)
+	await _wait(4)
+
+	# Still on it, and LET GO is the way off.
+	if player.zipline != null:
+		_touch(6, (riding[&"interact"] as Dictionary).at, true)
+		await _wait(4)
+		_touch(6, (riding[&"interact"] as Dictionary).at, false)
+		await _wait(10)
+	_check("LET GO steps off it", player.zipline == null)
+	await _wait(6)
+	_check("and the move stick comes back", not _pad._riding)
 
 	# --- and you can get back out of a screen --------------------------------
 	#
@@ -240,6 +323,19 @@ func _run() -> void:
 	_check("the mouse can shoot again on desktop", _has_mouse_binding(&"fire"))
 
 	_finish()
+
+
+## Any cable in the level. Found by method rather than by class name, which
+## keeps enemy.gd-style compile poisoning off the table and does not care where
+## the level files them.
+func _find_cable(node: Node) -> Node2D:
+	if node.has_method(&"clamp_to_cable"):
+		return node as Node2D
+	for child in node.get_children():
+		var found := _find_cable(child)
+		if found:
+			return found
+	return null
 
 
 func _has_mouse_binding(action: StringName) -> bool:

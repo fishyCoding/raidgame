@@ -956,7 +956,9 @@ func _update_zipline(delta: float) -> bool:
 			zipline = cable
 			global_position = cable.clamp_to_cable(global_position)
 			velocity = Vector2.ZERO
-			_say_loot("on the cable - W up, S down, F to let go")
+			_say_loot("on the cable - UP and DOWN to ride, LET GO to step off"
+				if PlayerInput.is_touch()
+				else "on the cable - W up, S down, F to let go")
 			return true
 		_interact_spent = true
 	return false

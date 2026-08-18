@@ -2,31 +2,33 @@ extends Control
 
 ## The game, played with thumbs.
 ##
-## Two thumbsticks and a set of buttons, drawn in _draw like the rest of the
-## UI here. It writes into the same places a keyboard does - PlayerInput's
-## touch_move_axis and touch_aim_direction for the sticks, and Input.action_press
-## for everything else - so no gameplay code knows or cares that a thumb is
-## driving it. Adding an action to the game means adding one line to BUTTONS.
+## Drawn in _draw like the rest of the UI here, and it writes where a keyboard
+## writes - PlayerInput.touch_move_axis for the stick, PlayerInput.add_aim_motion
+## for the aim, and Input.action_press for the buttons - so no gameplay code
+## knows or cares that a thumb is driving it.
 ##
-## **The sticks are fixed, and that is deliberate.** They used to float - touch
-## anywhere in your half and the ring appeared under your thumb - which is nicer
-## in theory and was unusable in practice: a ring is drawn at rest so you know
-## where the stick is, you put your thumb on it, and the ring jumps to the exact
-## pixel you touched. It reads as a *second* joystick appearing underneath the
-## first. One ring, always in the same place, is worth more than the theory.
+## **The left hand steers, the right hand aims, and only the left hand has a
+## stick.** Aiming used to be a second stick in the opposite corner, which meant
+## a thumb pinned inside one 96 px circle for a whole raid. Now the entire right
+## side is the aim surface: put a thumb down anywhere that is not a button and
+## drag, exactly like a trackpad. Aim arrives as *motion* rather than as a
+## direction for the same reason a mouse does - "turn this far from where you
+## were" survives the camera leaning off centre, "point exactly there" does not.
 ##
-## Touching anywhere within reach of a ring grabs it, so you do not have to hit
-## it precisely - but the knob is always measured from the ring's own centre, and
-## the ring never moves.
+## **FIRE is an aim surface too.** Holding it shoots and brings the sights up at
+## once, and you can keep dragging from it to track a target while firing - which
+## is the whole of a fight, and would otherwise need a third thumb.
+##
+## **Two toggles, not two holds.** Crouch and ADS latch. A posture you have to
+## hold a button for is a posture you cannot hold while doing anything else, and
+## on a phone every held button costs a finger you have not got.
 ##
 ## **Multitouch is the whole problem.** Moving, aiming and firing at once is
 ## three fingers, and Godot only emulates a mouse from the *first* touch - so
-## this reads InputEventScreenTouch/Drag by index and never relies on the mouse
-## on a real device. Mouse events are handled too, but only until a genuine touch
-## arrives: that is what lets the controls be tried on a desktop, and what stops
-## the emulated-mouse echo of a real touch being counted twice.
+## this reads InputEventScreenTouch/Drag by index, and ignores the mouse outright
+## on hardware that sends real touches, where every mouse event is an echo of the
+## first finger and stole the move stick.
 
-## Radius of the ring a stick swings in, and of the knob you push around it.
 const STICK_RADIUS := 96.0
 const STICK_KNOB := 40.0
 ## Below this the stick reads as centred. Generous: a thumb resting on glass
@@ -39,6 +41,9 @@ const STICK_GRAB := 1.55
 ## Kept clear of every edge. A phone has a notch on one side and a home indicator
 ## across the bottom, and a control under either is a control you cannot press.
 const SAFE := 54.0
+## Screen pixels of drag per pixel of aim. One to one: the aiming code has a
+## sensitivity of its own already, and two multipliers to tune is one too many.
+const AIM_DRAG := 1.0
 
 const PANEL := Color(0.08, 0.09, 0.12, 0.5)
 const RING := Color(0.62, 0.68, 0.78, 0.35)
@@ -47,40 +52,45 @@ const LABEL := Color(0.88, 0.91, 0.95, 0.85)
 const ACCENT := Color(0.98, 0.78, 0.35)
 const HELD_TINT := Color(0.98, 0.78, 0.35, 0.4)
 
-## Every action a thumb can reach, and where. `hold` marks the ones that mean
-## something for as long as they are down rather than on the press - aiming and
-## crouching are postures, not events. `left` measures from the left edge rather
-## than the right.
-##
-## Two clusters and nothing in between. Anything a left thumb does sits by the
-## move stick; anything a right thumb does sits by the aim stick; the middle of
-## the screen is the game and stays clear.
-##
-## The split is by what the hand is already doing. The left thumb is steering, so
-## it gets the things you do *while* moving - ducking, grabbing a body, throwing
-## a hook. The right thumb is aiming, so it gets the things you do *to* what you
-## are aiming at, with the trigger the largest control on the screen because it
-## is pressed more than everything else combined.
+## How a button behaves:
+##   press   - down while the thumb is down, the ordinary case
+##   toggle  - latches on, latches off, survives the thumb leaving
+##   fire    - press, and an aim surface as well: drag from it to keep tracking
 const BUTTONS := [
-	# Right, under the aiming thumb. FIRE sits high and hard against the right
-	# edge - directly above the aim stick rather than beside it, so the thumb
-	# rocks up onto the trigger without leaving the stick's side of the screen.
-	{"action": &"fire", "label": "FIRE", "at": Vector2(-180.0, -350.0), "r": 84.0, "hold": true},
-	{"action": &"aim", "label": "ADS", "at": Vector2(-360.0, -290.0), "r": 62.0, "hold": true},
-	{"action": &"jump", "label": "JUMP", "at": Vector2(-330.0, -460.0), "r": 62.0, "hold": false},
+	# Right, under the aiming thumb.
+	{"action": &"fire", "label": "FIRE", "at": Vector2(-180.0, -330.0), "r": 86.0,
+		"mode": "fire"},
+	{"action": &"aim", "label": "ADS", "at": Vector2(-350.0, -180.0), "r": 60.0,
+		"mode": "toggle"},
+	{"action": &"jump", "label": "JUMP", "at": Vector2(-330.0, -420.0), "r": 62.0,
+		"mode": "press"},
 	# Left, under the steering thumb.
 	{"action": &"interact", "label": "USE", "at": Vector2(390.0, -150.0), "r": 62.0,
-		"hold": false, "left": true},
+		"mode": "press", "left": true},
 	{"action": &"crouch", "label": "DUCK", "at": Vector2(350.0, -330.0), "r": 62.0,
-		"hold": true, "left": true},
+		"mode": "toggle", "left": true},
 	{"action": &"grapple", "label": "HOOK", "at": Vector2(200.0, -390.0), "r": 62.0,
-		"hold": false, "left": true},
+		"mode": "press", "left": true},
+]
+
+## Riding a cable takes the left hand over entirely: there is no walking on a
+## zipline, so the stick and its cluster are replaced by the three things that do
+## mean something there. Up and down are *held*, which is exactly why they could
+## not stay as they were - "W up, S down" is not advice a thumb can take, and it
+## was the whole reason ziplines were unusable on a phone.
+const RIDE_BUTTONS := [
+	{"action": &"jump", "label": "UP", "at": Vector2(200.0, -400.0), "r": 68.0,
+		"mode": "press", "left": true},
+	{"action": &"move_down", "label": "DOWN", "at": Vector2(200.0, -180.0), "r": 68.0,
+		"mode": "press", "left": true},
+	{"action": &"interact", "label": "LET GO", "at": Vector2(390.0, -290.0), "r": 60.0,
+		"mode": "press", "left": true},
 ]
 
 ## The rest of it, as pills along the top - a deliberate press rather than a
-## thumb that happens to be nearby. Split down the same seam. Kit and information on the left, things you spend on
-## the right - and the centre of the top edge left alone, because that is where
-## you are looking.
+## thumb that happens to be nearby. Split down the same seam: kit and information
+## on the left, things you spend on the right, and the centre of the top edge
+## left alone because that is where you are looking.
 const PILLS_LEFT := [
 	{"action": &"inventory", "label": "BAG"},
 	{"action": &"map", "label": "MAP"},
@@ -94,56 +104,37 @@ const PILLS_RIGHT := [
 ]
 const PILL_SIZE := Vector2(118.0, 56.0)
 const PILL_GAP := 8.0
-## Kept clear between the two strips, so they never read as one row.
 const PILL_SPLIT := 60.0
+
 
 ## Everything the pills cover, for anything that wants the whole set.
 static func all_pills() -> Array:
 	return PILLS_LEFT + PILLS_RIGHT
 
+
 ## Which pointer is driving what. -2 means nobody; a touch index otherwise, and
 ## -1 for the mouse standing in for a finger on a desktop.
 var _move_id := -2
-var _aim_id := -2
 var _move_vec := Vector2.ZERO
-var _aim_vec := Vector2.ZERO
+## The pointer currently dragging to aim, and where it was a moment ago. It may
+## be a bare finger on the right of the screen or one holding FIRE down.
+var _aim_id := -2
+var _aim_last := Vector2.ZERO
 ## pointer id -> action it is holding down.
 var _pressed := {}
-## Set by the first real touch. From then on the mouse is ignored, because on a
-## device every touch also arrives as an emulated mouse click and acting on both
-## would fire twice.
+## action -> latched on. Toggles live here rather than in _pressed: the thumb
+## leaves and the state stays.
+var _latched := {}
+## Set by the first real touch, after which the mouse is an echo.
 var _saw_touch := false
 ## True on hardware that sends real touches, where every mouse event is an echo
-## of the first finger and must be ignored outright. Read once rather than asked
-## per event, and held as its own field so a test can pretend to be a phone.
+## of the first finger and must be ignored outright. Held as its own field so a
+## test can pretend to be a phone.
 var _mouse_is_an_echo := false
-## The action that would shut whatever screen is currently up, or "" when the pad
-## is in its normal state.
+## The action that would shut whatever screen is up, or "" in the normal state.
 var _closing := &""
-
-
-## Which screen is covering the game, expressed as the action that toggles it.
-##
-## The shop is deliberately not here: it has a button of its own, and offering a
-## second way out of it that skips the button would be a way to deploy without
-## having pressed READY.
-func _close_action() -> StringName:
-	for node in get_tree().get_nodes_in_group(&"map_screen"):
-		var screen := node as CanvasItem
-		if screen and screen.visible:
-			return &"map"
-	for node in get_tree().get_nodes_in_group(&"inventory_ui"):
-		var screen := node as CanvasItem
-		if screen and screen.visible:
-			return &"inventory"
-	return &""
-
-
-## Where the close button sits: top-right, away from both thumbs' resting
-## positions so it is never the thing you hit by accident.
-func _close_rect() -> Rect2:
-	var box := Vector2(150.0, 62.0)
-	return Rect2(Vector2(size.x - SAFE - box.x, SAFE * 0.4), box)
+## True while the character is hanging off a cable.
+var _riding := false
 
 
 func _ready() -> void:
@@ -160,21 +151,23 @@ func _on_controls_changed(_touch: bool) -> void:
 	# Whatever was held is not held any more, and a scheme swap mid-press would
 	# otherwise leave an action stuck down for the rest of the session.
 	_release_everything()
+	_latched.clear()
+	_set_action(&"crouch", false)
+	_set_action(&"aim", false)
 
 
 func _process(_delta: float) -> void:
 	var touch := PlayerInput.is_touch()
 	# "A / D move ... SPACE jump" is a lie on a phone, and it sits exactly where
-	# the pills go. Toggled from here rather than by the label itself, because
-	# whether there is a keyboard is this node's subject.
+	# the pills go.
 	var help := get_parent().get_node_or_null(^"Controls") as CanvasItem
 	if help:
 		help.visible = not touch
 
 	# A screen being up hides the pad - it would be drawn straight over the map -
 	# but hiding it also takes away the button that opened the thing, and the map
-	# could then never be closed. So the pad does not disappear, it shrinks to
-	# the one control that is still meaningful.
+	# could then never be closed. So the pad shrinks to the one control that is
+	# still meaningful rather than disappearing.
 	_closing = _close_action() if touch and PlayerInput.wants_cursor() else &""
 
 	var wanted := touch and (not PlayerInput.wants_cursor() or _closing != &"")
@@ -185,25 +178,63 @@ func _process(_delta: float) -> void:
 	if not visible:
 		return
 	if _closing != &"":
-		# Nothing is held while a screen is up, and a thumb still down on FIRE
-		# when the map opened must not stay down behind it.
 		if not _pressed.is_empty() or not _move_vec.is_zero_approx():
 			_release_everything()
 		queue_redraw()
 		return
 
+	var was_riding := _riding
+	_riding = _on_a_cable()
+	if was_riding != _riding:
+		# The left hand's controls are about to be swapped out from under a thumb
+		# that may still be down on one of them.
+		_release_everything()
+
 	# Written every frame rather than on change: these are levels, and a stick
 	# that stops reporting because nothing moved reads as the thumb lifting.
-	PlayerInput.touch_move_axis = _move_vec.x
-	PlayerInput.touch_aim_direction = _aim_vec
-	# Down on the move stick is the drop-through-a-platform input, exactly as
-	# S is on a keyboard. Held, not tapped, so it pairs with jump the same way.
-	_set_action(&"move_down", _move_vec.y > 0.55)
+	PlayerInput.touch_move_axis = 0.0 if _riding else _move_vec.x
+	# Down on the move stick drops you through a one-way platform, exactly as S
+	# does. Not while riding: down means down the cable there, and the RIDE
+	# buttons drive that directly.
+	if not _riding:
+		_set_action(&"move_down", _move_vec.y > 0.55)
+
+	# The two latches, plus the one that is not a latch: holding the trigger aims
+	# as well as shoots, so the sights come up without spending a second thumb.
+	_set_action(&"crouch", _latched.get(&"crouch", false))
+	_set_action(&"aim", _latched.get(&"aim", false) or _holding(&"fire"))
 	queue_redraw()
 
 
 func _exit_tree() -> void:
 	_release_everything()
+
+
+func _on_a_cable() -> bool:
+	var player := Net.local_player
+	return player != null and player.get(&"zipline") != null
+
+
+## Which screen is covering the game, expressed as the action that toggles it.
+##
+## The shop is deliberately not here: it has a button of its own, and offering a
+## second way out that skips the button would be a way to deploy without ever
+## having pressed READY.
+func _close_action() -> StringName:
+	for node in get_tree().get_nodes_in_group(&"map_screen"):
+		var screen := node as CanvasItem
+		if screen and screen.visible:
+			return &"map"
+	for node in get_tree().get_nodes_in_group(&"inventory_ui"):
+		var screen := node as CanvasItem
+		if screen and screen.visible:
+			return &"inventory"
+	return &""
+
+
+func _close_rect() -> Rect2:
+	var box := Vector2(150.0, 62.0)
+	return Rect2(Vector2(size.x - SAFE - box.x, SAFE * 0.4), box)
 
 
 # --- pointers -----------------------------------------------------------------
@@ -231,9 +262,8 @@ func _input(event: InputEvent) -> void:
 	# Never on a device. Godot emulates a mouse from the **first** touch, and that
 	# echo arrives as its own pointer - so it grabbed the move stick as id -1 and
 	# every real drag afterwards, carrying index 0, was ignored as a different
-	# finger. The move stick simply did not work, while the aim stick (a second
-	# finger, and therefore un-emulated) was fine. _saw_touch alone was not enough
-	# because the echo can beat the touch it came from.
+	# finger. _saw_touch alone was not enough: the echo can beat the touch it
+	# came from.
 	if _saw_touch or _mouse_is_an_echo:
 		return
 	var click := event as InputEventMouseButton
@@ -252,55 +282,64 @@ func _pointer(id: int, at: Vector2, down: bool) -> bool:
 	if not down:
 		return _lift(id)
 
-	# With a screen up, the close button is the only thing on the pad.
 	if _closing != &"":
 		if _close_rect().has_point(at):
 			_hold(id, _closing)
 			return true
 		return false
 
-	# Buttons first, then sticks: a button sitting inside a stick's zone should
-	# be a button, or the two nearest the corner would be unreachable.
+	# Buttons first, then the stick, then the bare right side. A button inside a
+	# stick's reach has to win, or the ones nearest the corner are unreachable.
 	for pill in _pill_rects():
 		if (pill.rect as Rect2).has_point(at):
 			_hold(id, pill.action)
 			return true
 	for button in _button_rects():
-		if at.distance_to(button.at) <= button.r * 1.15:
-			_hold(id, button.action)
-			return true
+		if at.distance_to(button.at) > button.r * 1.15:
+			continue
+		match button.mode:
+			"toggle":
+				# No entry in _pressed: a latch has nothing to release.
+				_latched[button.action] = not _latched.get(button.action, false)
+			"fire":
+				_hold(id, button.action)
+				_take_aim(id, at)
+			_:
+				_hold(id, button.action)
+		return true
 
-	# Within reach of a ring, not merely on the right half of the screen. A thumb
-	# that lands in the empty middle should do nothing at all, rather than snap
-	# the stick to full deflection because the maths says that way is "left".
-	if _move_id == -2 and at.distance_to(_move_home()) <= STICK_RADIUS * STICK_GRAB:
+	if not _riding and at.distance_to(_move_home()) <= STICK_RADIUS * STICK_GRAB:
+		if _move_id != -2:
+			return false
 		_move_id = id
 		_move_vec = _swing(at - _move_home())
 		return true
-	if _aim_id == -2 and at.distance_to(_aim_home()) <= STICK_RADIUS * STICK_GRAB:
-		_aim_id = id
-		_aim_vec = _point(at - _aim_home())
+
+	# Anywhere else on the right is the aim surface. No ring to find and no ring
+	# to stay inside - put a thumb down and drag.
+	if at.x > size.x * 0.5 and _aim_id == -2:
+		_take_aim(id, at)
 		return true
 	return false
 
 
-## A finger sliding. Only the sticks care.
+func _take_aim(id: int, at: Vector2) -> void:
+	_aim_id = id
+	_aim_last = at
+
+
+## A finger sliding. The stick measures from its ring; the aim measures from
+## wherever the finger was a moment ago.
 func _drag(id: int, at: Vector2) -> bool:
+	var ours := false
 	if id == _move_id:
 		_move_vec = _swing(at - _move_home())
-		return true
+		ours = true
 	if id == _aim_id:
-		_aim_vec = _point(at - _aim_home())
-		return true
-	return false
-
-
-## Aim is a direction, not a distance: it points where the thumb is relative to
-## the ring, and pushing further out does not aim harder.
-func _point(offset: Vector2) -> Vector2:
-	if offset.length() <= STICK_RADIUS * STICK_DEAD:
-		return Vector2.ZERO
-	return offset.normalized()
+		PlayerInput.add_aim_motion((at - _aim_last) * AIM_DRAG)
+		_aim_last = at
+		ours = true
+	return ours
 
 
 func _lift(id: int) -> bool:
@@ -311,7 +350,6 @@ func _lift(id: int) -> bool:
 		ours = true
 	if id == _aim_id:
 		_aim_id = -2
-		_aim_vec = Vector2.ZERO
 		ours = true
 	if _pressed.has(id):
 		_set_action(_pressed[id], false)
@@ -344,9 +382,7 @@ func _release_everything() -> void:
 	_move_id = -2
 	_aim_id = -2
 	_move_vec = Vector2.ZERO
-	_aim_vec = Vector2.ZERO
 	PlayerInput.touch_move_axis = 0.0
-	PlayerInput.touch_aim_direction = Vector2.ZERO
 
 
 ## How far round the ring a thumb has pushed, 0 to 1, with the dead zone taken
@@ -363,26 +399,37 @@ func _swing(offset: Vector2) -> Vector2:
 # --- drawing ------------------------------------------------------------------
 
 
-## Where each button is this frame. Measured from the bottom-right corner so the
-## layout survives a screen of any shape - which on phones is the normal case.
+func _move_home() -> Vector2:
+	return Vector2(SAFE + STICK_RADIUS, size.y - SAFE - STICK_RADIUS)
+
+
+## Where each button is this frame. Measured from a corner so the layout survives
+## a screen of any shape - which on phones is the normal case.
 func _button_rects() -> Array:
 	var out: Array = []
-	for button in BUTTONS:
+	for button in _live_buttons():
 		var offset: Vector2 = button.at
-		# Both anchors hang off the bottom; only the horizontal edge differs.
 		var at := Vector2(offset.x if button.get("left", false) else size.x + offset.x,
 			size.y + offset.y)
 		out.append({
 			"action": button.action, "label": button.label, "r": button.r,
-			"hold": button.hold, "at": at,
+			"mode": button.mode, "at": at,
 		})
 	return out
 
 
-## The secondary strip, centred along the top and shrunk to fit if the screen is
-## too narrow to hold it at full size - a pill that runs off the edge is an
-## action you cannot reach, which on a phone means a mechanic that does not
-## exist.
+## Riding swaps the left cluster out; the right hand is untouched, because you
+## can still shoot from a cable.
+func _live_buttons() -> Array:
+	if not _riding:
+		return BUTTONS
+	var out: Array = []
+	for button in BUTTONS:
+		if not button.get("left", false):
+			out.append(button)
+	return out + RIDE_BUTTONS
+
+
 func _pill_rects() -> Array:
 	var count := PILLS_LEFT.size() + PILLS_RIGHT.size()
 	var gaps := (PILLS_LEFT.size() - 1 + PILLS_RIGHT.size() - 1) * PILL_GAP
@@ -399,8 +446,6 @@ func _pill_rects() -> Array:
 			"rect": Rect2(Vector2(x, top), Vector2(wide, PILL_SIZE.y))})
 		x += wide + PILL_GAP
 
-	# Laid out from the right edge backwards, so the strip hugs its own corner
-	# however wide the screen turns out to be.
 	var span := PILLS_RIGHT.size() * wide + (PILLS_RIGHT.size() - 1) * PILL_GAP
 	x = size.x - SAFE - span
 	for pill in PILLS_RIGHT:
@@ -408,6 +453,16 @@ func _pill_rects() -> Array:
 			"rect": Rect2(Vector2(x, top), Vector2(wide, PILL_SIZE.y))})
 		x += wide + PILL_GAP
 	return out
+
+
+func _holding(action: StringName) -> bool:
+	return _pressed.values().has(action)
+
+
+## A control reads as on when a thumb is on it or when it is latched, so a toggle
+## looks the same as a hold while it is doing the same thing.
+func _lit(action: StringName) -> bool:
+	return _holding(action) or _latched.get(action, false)
 
 
 func _draw() -> void:
@@ -422,37 +477,33 @@ func _draw() -> void:
 			HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, ACCENT if down else LABEL)
 		return
 
-	_draw_stick(_move_id != -2, _move_home(), _move_vec, "MOVE")
-	_draw_stick(_aim_id != -2, _aim_home(), _aim_vec, "AIM")
+	if not _riding:
+		_draw_stick(_move_id != -2, _move_home(), _move_vec, "MOVE")
+
+	# A hint at the aim surface, not a control. Faint, and only while nobody is
+	# using it: once a thumb is down, the character turning is the feedback.
+	if _aim_id == -2:
+		draw_string(font, Vector2(size.x * 0.5, size.y * 0.44), "drag anywhere to aim",
+			HORIZONTAL_ALIGNMENT_CENTER, size.x * 0.5 - SAFE, 15, Color(LABEL, 0.22))
 
 	for button in _button_rects():
-		var down := _holding(button.action)
+		var down := _lit(button.action)
 		draw_circle(button.at, button.r, HELD_TINT if down else PANEL)
 		draw_arc(button.at, button.r, 0.0, TAU, 32, ACCENT if down else RING, 2.0, true)
 		draw_string(font, button.at + Vector2(-button.r, 5.0), button.label,
-			HORIZONTAL_ALIGNMENT_CENTER, button.r * 2.0, 15, ACCENT if down else LABEL)
+			HORIZONTAL_ALIGNMENT_CENTER, button.r * 2.0, 16, ACCENT if down else LABEL)
+		# A latch says so, or there is no telling a toggle from a button you
+		# happen to still be touching.
+		if button.mode == "toggle" and _latched.get(button.action, false):
+			draw_arc(button.at, button.r + 7.0, 0.0, TAU, 32, Color(ACCENT, 0.55), 2.0, true)
 
 	for pill in _pill_rects():
 		var rect: Rect2 = pill.rect
-		var down := _holding(pill.action)
+		var down := _lit(pill.action)
 		draw_rect(rect, HELD_TINT if down else PANEL)
 		draw_rect(rect, ACCENT if down else RING, false, 1.5)
-		draw_string(font, rect.position + Vector2(0.0, 28.0), pill.label,
-			HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 13, ACCENT if down else LABEL)
-
-
-func _holding(action: StringName) -> bool:
-	return _pressed.values().has(action)
-
-
-## The two rings never move. Where the knob sits inside one is the only thing
-## that changes, which is what makes them read as one control each.
-func _move_home() -> Vector2:
-	return Vector2(SAFE + STICK_RADIUS, size.y - SAFE - STICK_RADIUS)
-
-
-func _aim_home() -> Vector2:
-	return Vector2(size.x - SAFE - STICK_RADIUS, size.y - SAFE - STICK_RADIUS)
+		draw_string(font, rect.position + Vector2(0.0, 36.0), pill.label,
+			HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 14, ACCENT if down else LABEL)
 
 
 func _draw_stick(live: bool, centre: Vector2, vec: Vector2, label: String) -> void:

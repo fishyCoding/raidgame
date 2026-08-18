@@ -445,3 +445,14 @@ func get_aim_direction(_from: Node2D) -> Vector2:
 	if not touch_aim_direction.is_zero_approx():
 		_last_aim = touch_aim_direction.normalized()
 	return _last_aim
+
+
+## Aim delivered as movement rather than as a direction.
+##
+## A dragging thumb is a mouse: it says "turn this far from where you were", not
+## "point exactly there". Fed into the same accumulator the mouse uses so the
+## aiming code cannot tell them apart - and deliberately not through _input's
+## mouse branch, which only listens while the pointer is captured, and on a phone
+## it never is.
+func add_aim_motion(motion: Vector2) -> void:
+	_mouse_motion += motion
