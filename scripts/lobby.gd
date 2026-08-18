@@ -90,8 +90,8 @@ func _build() -> void:
 	_shop.deployed.connect(_on_queue)
 	_shop.open(_kit)
 
-	# Added after the shop so it is on top of it: the shop stops mouse input over
-	# its whole rect, and a button underneath that would never be clicked.
+	# Added after the shop so they are on top of it: the shop stops mouse input
+	# over its whole rect, and a button underneath it would never be clicked.
 	var alone := Button.new()
 	alone.text = "play alone"
 	alone.flat = true
@@ -100,6 +100,16 @@ func _build() -> void:
 	alone.custom_minimum_size = Vector2(120.0, 34.0)
 	alone.pressed.connect(_on_solo)
 	add_child(alone)
+
+	var test := Button.new()
+	test.text = "test drive"
+	test.flat = true
+	test.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	test.position = Vector2(186.0, -62.0)
+	test.custom_minimum_size = Vector2(120.0, 34.0)
+	test.tooltip_text = "straight into an empty level, fully kitted - no shop, no briefing"
+	test.pressed.connect(_on_test_drive)
+	add_child(test)
 
 	_status = Label.new()
 	_status.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
@@ -131,6 +141,45 @@ func _on_solo() -> void:
 	Net.staged_kit = _kit
 	Net.play_solo()
 	_enter_level()
+
+
+## An empty level, one of you, everything already in your hands.
+##
+## Not the same thing as playing alone, which is a real run and therefore starts
+## at the counter - everything you take in has to be bought, and that rule is the
+## whole game. This deliberately breaks it, because what it is for is not a raid:
+## it is jumping, grappling, shooting a wall and seeing how the camera feels,
+## which you want to do fifty times in a row without buying a rifle each time.
+##
+## The status quo it replaces is four screens and a countdown between changing a
+## number and feeling the difference. On a phone, where the loop already runs
+## through a deploy, that gap is most of the cost of trying anything.
+func _on_test_drive() -> void:
+	Net.staged_kit = _test_kit()
+	Net.test_drive = true
+	Net.play_solo()
+	_enter_level()
+
+
+## One of everything, so nothing goes untested for want of affording it. Built by
+## hand rather than bought, because the shop is exactly what this path skips.
+func _test_kit() -> Inventory:
+	var kit := Weapon.starting_inventory()
+	kit.set_slot(Inventory.Slot.PRIMARY,
+		Item.from_weapon(load("res://resources/weapons/assault_rifle.tres")))
+	kit.set_worn(Inventory.Wear.HELMET,
+		Item.from_armor(load("res://resources/armor/light_helmet.tres")))
+	kit.set_worn(Inventory.Wear.VEST,
+		Item.from_armor(load("res://resources/armor/light_vest.tres")))
+	# The bag first: rounds need somewhere to go, and five pockets do not hold a
+	# session's worth of shooting at things.
+	kit.set_backpack(Item.from_backpack(load("res://resources/backpacks/patrol_pack.tres")))
+	kit.set_ultimate(Item.from_gadget(load("res://resources/gadgets/overload.tres")))
+	kit.set_throwable(0, Item.from_gadget(load("res://resources/gadgets/frag.tres")))
+	kit.set_throwable(1, Item.from_gadget(load("res://resources/gadgets/smoke.tres")))
+	kit.add_rounds(&"5.56", 200)
+	kit.add_rounds(&"9mm", 100)
+	return kit
 
 
 ## Opens the level as a server nobody is sitting at. Reached only from the

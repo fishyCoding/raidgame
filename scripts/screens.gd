@@ -117,6 +117,14 @@ func _wire_shop() -> void:
 	if _kit != null:
 		if _player:
 			_player.give_kit(_kit)
+		# Trying the controls out rather than playing: straight in, no map, no
+		# fade. Cleared as it is read so it cannot carry into a real run.
+		if Net.test_drive:
+			Net.test_drive = false
+			get_tree().paused = false
+			phase = Phase.PLAYING
+			_clock = 0.0
+			return
 		get_tree().paused = true
 		_on_deployed()
 		return

@@ -64,6 +64,14 @@ var local_player: Node2D = null
 ## the countdown ends - see Player.give_kit.
 var staged_kit: Inventory = null
 
+## Set by the menu's TEST DRIVE button: go straight into the level, kitted, with
+## no shop, no briefing and no intro.
+##
+## Consumed by Screens the moment it acts on it, so it cannot leak into the next
+## run - a real raid that quietly skipped the briefing because of a button you
+## pressed ten minutes ago would be a difficult thing to explain to yourself.
+var test_drive := false
+
 ## True once host() or join() has succeeded. Single player counts: it is a
 ## session of one.
 var in_session := false
