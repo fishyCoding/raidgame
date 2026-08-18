@@ -104,7 +104,10 @@ func _draw() -> void:
 	_panel_fade = lerpf(1.0, PANEL_FADE_AIMED, _player.focus)
 
 	var data := _weapon.data
-	var origin := Vector2(MARGIN, size.y - PANEL_SIZE.y - MARGIN)
+	# Bottom-left is the move stick's corner when there is one, so the gun card
+	# goes to the top-left instead of underneath a thumb.
+	var origin := Vector2(MARGIN, 68.0) if PlayerInput.is_touch() \
+		else Vector2(MARGIN, size.y - PANEL_SIZE.y - MARGIN)
 
 	draw_rect(Rect2(origin, PANEL_SIZE), _fade(PANEL_BG))
 	draw_rect(Rect2(origin, Vector2(3.0, PANEL_SIZE.y)), _fade(ACCENT))
@@ -136,7 +139,11 @@ func _draw() -> void:
 	elif mag <= 0:
 		draw_string(_font, Vector2(x + mag_width + 74.0, y), "R TO RELOAD",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, _fade(LOW_AMMO))
-	_draw_slots(Vector2(origin.x, origin.y - 30.0))
+	# Under the card when it is at the top of the screen, over it when it is at
+	# the bottom - either way the pair reads as one block rather than one of them
+	# hanging off the edge.
+	_draw_slots(Vector2(origin.x,
+		origin.y + PANEL_SIZE.y + 22.0 if PlayerInput.is_touch() else origin.y - 30.0))
 
 
 ## Player health, bottom centre, plus the aim state so it is obvious at a glance
@@ -386,11 +393,20 @@ func _draw_gadgets() -> void:
 	if kit == null:
 		return
 
-	var tile := Vector2(126.0, 44.0)
+	# Wide enough for the longest pairing it has to hold: a six-letter short name
+	# on the left and READY on the right, which at 126 printed one through the
+	# other.
+	var tile := Vector2(142.0, 44.0)
 	var gap := 8.0
 	# Anchored to the right of the health bar, which is centred - so the two read
 	# as one strip across the bottom rather than as furniture in a corner.
-	var origin := Vector2(size.x * 0.5 + 150.0, size.y - MARGIN - tile.y)
+	#
+	# With thumbs, the right of the bar is the aim stick's corner, so the row
+	# moves to sit centred *above* the bar instead. Same strip, stacked.
+	var row := tile.x * Inventory.THROWABLE_SLOTS + (tile.x + gap * 2.0)
+	var origin := Vector2(size.x * 0.5 - row * 0.5, size.y - MARGIN - tile.y - 56.0) \
+		if PlayerInput.is_touch() \
+		else Vector2(size.x * 0.5 + 150.0, size.y - MARGIN - tile.y)
 
 	var ult: Item = kit.ultimate
 	var running: bool = _player.overload_left > 0.0

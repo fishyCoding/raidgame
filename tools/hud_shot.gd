@@ -66,6 +66,16 @@ func _run() -> void:
 	await _wait(10)
 	await _save("res://tools/scr_hud_overload.png")
 	print("hud_shot | saved scr_hud_overload.png")
+
+	# And the same raid played with thumbs. Forced rather than waiting to be on a
+	# phone - looking at the layout on a desktop is what the switch is for.
+	player.overload_left = 0.0
+	var input: Node = root.get_node("PlayerInput")
+	input.control_scheme = input.Controls.TOUCH
+	await _wait(20)
+	await _save("res://tools/scr_hud_touch.png")
+	print("hud_shot | saved scr_hud_touch.png")
+	input.control_scheme = input.Controls.AUTO
 	quit()
 
 

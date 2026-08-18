@@ -27,6 +27,7 @@ var _port := Net.DEFAULT_PORT
 
 var _shop: Control
 var _status: Label
+var _controls: Button
 var _kit: Inventory
 
 
@@ -111,6 +112,20 @@ func _build() -> void:
 	test.pressed.connect(_on_test_drive)
 	add_child(test)
 
+	# Cycles auto / touch / desktop and remembers the answer. On this screen
+	# rather than buried in a settings menu because the reason to touch it is to
+	# look at the on-screen controls on a PC, which you do constantly while they
+	# are being built and never again afterwards.
+	_controls = Button.new()
+	_controls.flat = true
+	_controls.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_controls.position = Vector2(-232.0, -62.0)
+	_controls.custom_minimum_size = Vector2(200.0, 34.0)
+	_controls.tooltip_text = "auto follows the device; force touch to see the thumbsticks on a PC"
+	_controls.pressed.connect(_on_cycle_controls)
+	add_child(_controls)
+	_refresh_controls_label()
+
 	_status = Label.new()
 	_status.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	_status.position = Vector2(190.0, -56.0)
@@ -135,6 +150,16 @@ func _on_queue() -> void:
 	# on arrival, and doing that mid-connection is how you end up with two of
 	# them fighting over the same name.
 	set_process(true)
+
+
+func _on_cycle_controls() -> void:
+	PlayerInput.cycle_controls()
+	_refresh_controls_label()
+
+
+func _refresh_controls_label() -> void:
+	if _controls:
+		_controls.text = "controls: %s" % PlayerInput.scheme_name()
 
 
 func _on_solo() -> void:

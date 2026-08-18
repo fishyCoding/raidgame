@@ -79,12 +79,78 @@ var _mouse_motion := Vector2.ZERO
 ## cursor comes back; the rest of the time it is captured and hidden.
 const CURSOR_GROUPS := [&"shop", &"inventory_ui", &"map_screen"]
 
+## Which way the game is being played.
+##
+## AUTO is right almost always - a phone is a phone and a PC is a PC - but it has
+## to be overridable, because the whole reason to build touch controls on a
+## desktop is to look at them without a deploy in the loop. Switching is
+## instant: nothing about a control scheme needs a restart.
+enum Controls { AUTO, TOUCH, DESKTOP }
+
+## Where the choice is remembered. A setting you have to make again every launch
+## is one you stop using.
+const CONTROLS_FILE := "user://controls.cfg"
+
+var control_scheme := Controls.AUTO:
+	set(value):
+		if control_scheme == value:
+			return
+		control_scheme = value
+		_save_controls()
+		controls_changed.emit(is_touch())
+
+## Raised when the scheme changes, so the on-screen controls can appear or go
+## away without polling for it.
+signal controls_changed(touch: bool)
+
+
+## Whether the game should be driven by thumbs.
+func is_touch() -> bool:
+	match control_scheme:
+		Controls.TOUCH:
+			return true
+		Controls.DESKTOP:
+			return false
+	return OS.has_feature("mobile")
+
+
+## The next scheme round the loop, for a button that cycles rather than a menu.
+func cycle_controls() -> void:
+	control_scheme = ((control_scheme + 1) % Controls.size()) as Controls
+
+
+func scheme_name() -> String:
+	match control_scheme:
+		Controls.TOUCH:
+			return "touch"
+		Controls.DESKTOP:
+			return "desktop"
+	return "auto (%s)" % ("touch" if is_touch() else "desktop")
+
+
+func _load_controls() -> void:
+	var file := ConfigFile.new()
+	if file.load(CONTROLS_FILE) != OK:
+		return
+	var saved: int = file.get_value("controls", "scheme", Controls.AUTO)
+	if saved >= 0 and saved < Controls.size():
+		# Set the backing value directly: going through the setter here would
+		# save the file we have just read and announce a change nobody has made.
+		control_scheme = saved as Controls
+
+
+func _save_controls() -> void:
+	var file := ConfigFile.new()
+	file.set_value("controls", "scheme", int(control_scheme))
+	file.save(CONTROLS_FILE)
+
 
 func _ready() -> void:
 	# Run after every gameplay node so one-frame flags are cleared only once
 	# everyone has had a chance to read them.
 	process_priority = 500
 	process_physics_priority = 500
+	_load_controls()
 
 
 func _input(event: InputEvent) -> void:
@@ -139,7 +205,10 @@ func wants_cursor() -> bool:
 ## Checked here rather than in wants_cursor(), which is about what the *game*
 ## wants and is deliberately answerable with no display attached.
 func _update_mouse_mode() -> void:
-	var free := wants_cursor() or not _window_has_focus()
+	# Thumbs do not need the pointer taking away from them, and on a phone there
+	# is no pointer to take. Capturing it would also hide the cursor on a desktop
+	# testing touch mode, which is the one place you still need to see it.
+	var free := is_touch() or wants_cursor() or not _window_has_focus()
 	var wanted := Input.MOUSE_MODE_VISIBLE if free else Input.MOUSE_MODE_CAPTURED
 	if Input.mouse_mode != wanted:
 		Input.mouse_mode = wanted

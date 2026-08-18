@@ -11,6 +11,7 @@
 [ext_resource type="PackedScene" path="res://scenes/spawn_point.tscn" id="11_spawn"]
 [ext_resource type="Script" uid="uid://deaufp2rknqug" path="res://scripts/map_screen.gd" id="12_map"]
 [ext_resource type="Script" uid="uid://dwh6vswml06ja" path="res://scripts/editor_view.gd" id="13_editor"]
+[ext_resource type="Script" path="res://scripts/touch_controls.gd" id="14_touch"]
 
 [node name="Main" type="Node2D" unique_id=612678245]
 
@@ -601,6 +602,16 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("4_hud")
 
+[node name="TouchControls" type="Control" parent="HUD" unique_id=771044213]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("14_touch")
+
 [node name="MapScreen" type="Control" parent="HUD" unique_id=422202886 groups=["map_screen"]]
 process_mode = 3
 layout_mode = 3
@@ -624,16 +635,6 @@ mouse_filter = 2
 script = ExtResource("8_screens")
 
 [node name="Shop" type="Control" parent="HUD" unique_id=663939343 groups=["shop"]]
-process_mode = 3
-layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-script = ExtResource("9_shop")
-
-[node name="Shop2" type="Control" parent="HUD" unique_id=739109823 groups=["shop"]]
 process_mode = 3
 layout_mode = 3
 anchors_preset = 15
