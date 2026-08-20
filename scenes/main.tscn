@@ -115,7 +115,7 @@ tint = Color(0.427451, 0.470588, 0.545098, 1)
 [node name="BackPanelYard12" parent="Backdrop" unique_id=1435718686 instance=ExtResource("15_decor")]
 texture_filter = 4
 texture_repeat = 2
-position = Vector2(-1786.9999, -1248)
+position = Vector2(-1787, -1248)
 scale = Vector2(-0.88, 1)
 texture = ExtResource("6_muem4")
 size = Vector2(1500, 500)

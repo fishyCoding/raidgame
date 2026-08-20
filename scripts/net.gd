@@ -856,6 +856,86 @@ func _hook_news(who: int, anchor: Vector2) -> void:
 		hook.release()
 
 
+# --- landing hard -------------------------------------------------------------
+
+
+## Somebody hit the ground from a height, and it carried.
+##
+## The mirror image of a recon arrow. An arrow is you painting other people;
+## this is you painting yourself, which is why it is the only reveal in the game
+## that has to reach every machine rather than staying on the one that worked it
+## out - the point of it is what it does to *their* screens.
+##
+## Relayed through the host like the hook news, because a client's rpc() only
+## reaches the server in this topology.
+func fall_heard(at: Vector2, drop: float) -> void:
+	if not is_networked():
+		_fall_landed(peer_id(), at, drop)
+		return
+	if is_host:
+		_fall_landed(peer_id(), at, drop)
+		for peer in multiplayer.get_peers():
+			_fall_news.rpc_id(peer, peer_id(), at, drop)
+	else:
+		_ask_fall_news.rpc_id(1, at, drop)
+
+
+@rpc("any_peer", "reliable")
+func _ask_fall_news(at: Vector2, drop: float) -> void:
+	if not is_host:
+		return
+	var who := multiplayer.get_remote_sender_id()
+	# Here first, then everybody else - skipping the machine that told us, which
+	# has already played its own landing.
+	_fall_landed(who, at, drop)
+	for peer in multiplayer.get_peers():
+		if peer != who:
+			_fall_news.rpc_id(peer, who, at, drop)
+
+
+@rpc("authority", "reliable")
+func _fall_news(who: int, at: Vector2, drop: float) -> void:
+	_fall_landed(who, at, drop)
+
+
+## What a heavy landing does on this machine: it makes the noise, the guards
+## near it go and look, and anybody close enough to have heard it gets to see
+## who it was through the walls for a few seconds.
+##
+## How far it carries and how long it lasts are read off the faller's own node
+## rather than sent. They are exports on player.tscn, so every machine already
+## has the same numbers, and a client cannot quietly claim it was a quiet
+## landing.
+func _fall_landed(who: int, at: Vector2, drop: float) -> void:
+	var faller := player_for(who)
+	if faller == null:
+		return
+	var height: float = faller.fall_ping_height
+	var radius: float = faller.fall_ping_radius
+	var audio := get_node_or_null(^"/root/Audio")
+	if audio:
+		audio.hard_landing(at, clampf((drop - height) / maxf(height, 1.0), 0.0, 1.0))
+
+	# The guards are the host's to think for, so only the host tells them.
+	if is_host or not is_networked():
+		for node in get_tree().get_nodes_in_group(&"hideable"):
+			var guard := node as Node2D
+			if guard == null or not guard.has_method(&"heard"):
+				continue
+			if guard.global_position.distance_to(at) <= radius:
+				guard.heard(at)
+
+	# And whoever was close enough to hear it now knows exactly where it came
+	# from. You are never in your own hideable set, so you cannot light yourself
+	# up - which is right: you already know where you are.
+	if local_player == null or local_player == faller:
+		return
+	if local_player.global_position.distance_to(at) > radius:
+		return
+	faller.set_meta(&"revealed_until",
+		Time.get_ticks_msec() * 0.001 + faller.fall_ping_time)
+
+
 # --- bodies on the floor ------------------------------------------------------
 #
 # A guard dies on the host and nowhere else, so the corpse he leaves was created

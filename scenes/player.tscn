@@ -51,6 +51,9 @@ properties/8/replication_mode = 2
 properties/9/path = NodePath(".:riding")
 properties/9/spawn = true
 properties/9/replication_mode = 2
+properties/10/path = NodePath(".:stowed")
+properties/10/spawn = true
+properties/10/replication_mode = 2
 
 [node name="Player" type="CharacterBody2D" groups=["player"]]
 collision_layer = 4
@@ -83,8 +86,11 @@ position = Vector2(0, -6)
 color = Color(0.976471, 0.639216, 0.301961, 1)
 polygon = PackedVector2Array(6, -4, 32, -2, 32, 3, 6, 5)
 
-[node name="Muzzle" type="Marker2D" parent="AimPivot"]
+[node name="Muzzle" type="Marker2D" parent="AimPivot/Arm"]
 position = Vector2(34, 0)
+
+[node name="Ear" type="AudioListener2D" parent="."]
+position = Vector2(0, -14)
 
 [node name="Vision" type="PointLight2D" parent="."]
 position = Vector2(0, -14)

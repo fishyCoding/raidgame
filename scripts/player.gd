@@ -124,14 +124,43 @@ extends CharacterBody2D
 ## The hop you get for letting go, so stepping off lands you somewhere.
 @export var zipline_release_hop := 220.0
 
+@export_group("Slinging the gun")
+## Seconds to get the gun out of the way when both hands are wanted for a rope.
+## Short: this is the part you do not get to think about, and the cost is the
+## draw at the other end, not this.
+@export_range(0.05, 1.0) var stow_time := 0.16
+## How far down and back the gun swings when it is slung, in degrees off
+## straight down, and how much shorter it reads once it is there.
+@export_range(0.0, 60.0) var stow_lean := 24.0
+@export_range(0.3, 1.0) var stow_shorten := 0.68
+
+@export_group("Shooting off the ground")
+## Seconds for the cone to settle again after landing. Not instant on purpose:
+## with a hard switch the way to shoot straight mid-fight would be to time the
+## shot for the exact frame your boots touched, which is a worse game than
+## either staying on the ground or accepting the penalty.
+@export_range(0.0, 2.0) var air_settle_time := 0.4
+## The shortest drop that gives you away, in pixels. A character is 48 px
+## tall, so this is a couple of storeys - well past a jump, well past stepping
+## off a crate, and about what it costs to skip a ladder you should have used.
+@export var fall_ping_height := 340.0
+## How far the landing carries. Between a footstep (900) and a gunshot (1500):
+## far enough that dropping into a room is a decision, near enough that it does
+## not hand the whole level your position.
+@export var fall_ping_radius := 1150.0
+## How long anyone who heard it can see you through the walls afterwards. Short
+## on purpose - it says "he is over there, now", not "he is yours for the next
+## ten seconds".
+@export var fall_ping_time := 3.5
+
 @export_group("Grapple")
 ## Hooks you carry. Everyone starts with these - the grapple is not kit you shop
 ## for, it is part of how you move, and a level built around reaching high ground
 ## cannot assume you decided to buy the means of getting there.
-@export var grapple_charges := 2
+@export var grapple_charges := 1
 ## Seconds for one spent hook to come back. They recharge one at a time, so
 ## firing both means a long wait rather than two short ones.
-@export var grapple_recharge := 20.0
+@export var grapple_recharge := 25.0
 ## How hard the line reels you in, pixels per second squared.
 @export var grapple_pull := 3400.0
 ## Ceiling on the speed it will reel you to.
@@ -242,8 +271,10 @@ const ARC_STEPS := 90
 const KICK_REFERENCE := 260.0
 
 @onready var _aim_pivot: Node2D = $AimPivot
+@onready var _arm: Polygon2D = $AimPivot/Arm
+@onready var _ear: AudioListener2D = $Ear
 @onready var _body: Node2D = $Body
-@onready var _muzzle: Marker2D = $AimPivot/Muzzle
+@onready var _muzzle: Marker2D = $AimPivot/Arm/Muzzle
 @onready var _camera: Camera2D = $Camera2D
 @onready var _overlay: CanvasLayer = $Overlay
 @onready var _vision: PointLight2D = $Vision
@@ -269,6 +300,10 @@ signal health_changed(health: float, max_health: float)
 ## the reveal is otherwise entirely one-sided: the shooter watches you through a
 ## wall for eight seconds and the first you know of it is being shot.
 signal scanned()
+
+## Raised when a landing was heavy enough to carry. The reveal itself is Net's
+## business - this is for anything local that wants to react to it.
+signal landed_hard(drop: float)
 
 signal revived()
 signal died(knocked_out: bool)
@@ -376,6 +411,24 @@ var _aim_base := 0.0
 ## Where the scope's wander has got to. Only advanced while aimed, so lowering
 ## the gun and bringing it back up does not resume mid-swing.
 var _sway_phase := 0.0
+
+## Both hands busy - on a cable, or on the hook. Replicated, because a character
+## seen with his gun up while hanging off a rope is a lie the other player will
+## act on, and this is the one bit of it the other machine cannot work out for
+## itself.
+var stowed := false
+## How far the gun is out of the way: 0 up and ready, 1 slung. Not replicated -
+## it is a sixth of a second of ramp either way, and every machine can run it off
+## `stowed` more cheaply than it could be sent.
+var stow := 0.0
+## Where the gun is actually pointing, once the sling has had its say. The aim
+## angle while the gun is up; swung down with it while it is not. The reticle
+## rides this rather than the aim, so the crosshair follows the muzzle down and
+## comes back up with it.
+var gun_angle := 0.0
+## 1 with both feet off the ground. Eased rather than switched - see
+## _get_air_factor().
+var _air_spread := 0.0
 var _jump_velocity: float
 var _jump_gravity: float
 var _fall_gravity: float
@@ -410,6 +463,11 @@ var _reticle_radius := 0.0
 var _base_zoom := Vector2.ONE
 var _step_travel := 0.0
 var _was_on_floor := true
+## The highest point since your boots left the ground, as a Y - so the smallest
+## number is the top of the arc. What the drop is measured from.
+var _fall_apex := 0.0
+## Last frame's height, only so a teleport can be told from a fall.
+var _fall_last_y := 0.0
 ## Set when the cable check reads the interact key but does not take it, so the
 ## loot check can act on the same press instead of it being swallowed.
 var _interact_spent := false
@@ -443,6 +501,11 @@ func _ready() -> void:
 	_camera.enabled = mine
 	if mine:
 		_camera.make_current()
+		# Sound is panned from the listener, and without one that is the camera -
+		# which leans down range while you aim, by most of a half-screen with the
+		# scope's ads_lead_scale on it. That put a shot fired at your own feet out
+		# to one side while scoped. The ear belongs on the head.
+		_ear.make_current()
 	_overlay.visible = mine
 	# The lamp especially. It is a shadow-casting light, and a second one walking
 	# about the level throws a second set of shadows off every wall from a place
@@ -668,6 +731,7 @@ func _physics_process(delta: float) -> void:
 		# pulls you back down onto whatever you launched from, and the cables run
 		# past floors that would otherwise stop you halfway up.
 		_update_aim(delta)
+		_update_stow(delta)
 		_update_weapon()
 		_update_reticle()
 		_update_shake(delta)
@@ -678,6 +742,7 @@ func _physics_process(delta: float) -> void:
 	_update_loot(delta)
 	_update_inventory_keys()
 	_update_aim(delta)
+	_update_stow(delta)
 	# On the line, _reel_in owns the velocity: running would fight the pull with
 	# ground friction, and the jump step applies its own full gravity on top of
 	# the scaled sag that makes the swing. Steering is handled in _reel_in, so
@@ -714,6 +779,9 @@ func _update_replica(delta: float) -> void:
 	_aim_pivot.rotation = aim_angle
 	_aim_pivot.scale.y = facing
 	_body.scale.x = facing
+	# Their gun goes away too. `stowed` came over the wire; the ramp off it is
+	# run here rather than sent.
+	_update_stow(delta)
 	# Their rope. Riding pins velocity to zero and moves the body by position, so
 	# "are they actually travelling" has to come from the position itself.
 	if riding:
@@ -758,8 +826,12 @@ func _update_timers(delta: float) -> void:
 	if is_on_floor():
 		_coyote_timer = coyote_time
 		_jumping = false
+		_air_spread = move_toward(_air_spread, 0.0, delta / maxf(air_settle_time, 0.01))
 	else:
 		_coyote_timer -= delta
+		# Straight to full the moment your boots leave: the cost of jumping into
+		# a fight has to land while you are in the air, not a beat later.
+		_air_spread = 1.0
 
 	_buffer_timer -= delta
 	_invulnerable = maxf(_invulnerable - delta, 0.0)
@@ -1016,6 +1088,9 @@ func _update_zipline(delta: float) -> bool:
 func _leave_zipline(hop := true) -> void:
 	zipline = null
 	riding = false
+	# However far down the cable brought you, the fall starts here.
+	_fall_apex = global_position.y
+	_fall_last_y = global_position.y
 	velocity.y = -zipline_release_hop if hop else 0.0
 	if _audio:
 		_audio.zipline_stopped(get_instance_id())
@@ -1275,6 +1350,53 @@ func _update_aim(delta: float) -> void:
 	_body.scale.x = facing
 
 
+## Slinging the gun and bringing it back up.
+##
+## Both hands are wanted for a cable or a hook, so the gun goes away while you
+## are on one - and the cost is not the putting away, it is the draw at the far
+## end, which is the weapon's own equip time. That is the whole point of it:
+## stepping off a rope leaves you holding nothing for as long as swapping to
+## that gun would take, so riding across the level to reposition mid-fight is a
+## decision with a bill attached rather than a free ride.
+##
+## Runs on every machine, off `stowed`, so what you see somebody else holding is
+## what they are actually able to shoot with.
+func _update_stow(delta: float) -> void:
+	if is_local():
+		stowed = riding or _hook != null or is_grappling()
+
+	# Away quickly, back at whatever the gun weighs - so the pose finishes coming
+	# up on the same frame the trigger starts working again.
+	var ramp := stow_time
+	if not stowed:
+		ramp = weapon.data.get_equip_time() if weapon.data else stow_time
+	stow = move_toward(stow, 1.0 if stowed else 0.0, delta / maxf(ramp, 0.01))
+	if is_local():
+		# One clock for the draw, and it is the animation. The gun works again on
+		# the frame the arm finishes bringing it up and not before - a separate
+		# equip timer running alongside is how it ends up firing from a pose that
+		# is still halfway down.
+		if stow > 0.0:
+			weapon.put_away()
+		elif weapon.stowed:
+			weapon.bring_up()
+
+	gun_angle = aim_angle
+	if is_zero_approx(stow) and is_zero_approx(_arm.rotation):
+		return
+
+	# Slung is a pose on the *body*, not on the gun: down and a little behind,
+	# wherever the aim happens to be pointing. The pivot is turned by aim_angle
+	# and mirrored by facing, and a mirror maps a local angle t to aim_angle +
+	# facing * t - so that is inverted here to land the arm on a world angle.
+	var rest := Vector2(-facing * tan(deg_to_rad(stow_lean)), 1.0).angle()
+	_arm.rotation = wrapf((rest - aim_angle) * facing, -PI, PI) * stow
+	_arm.scale.x = lerpf(1.0, stow_shorten, stow)
+	# Back out to world, by the same mirror rule, so the crosshair can be hung
+	# off the muzzle wherever the sling has taken it.
+	gun_angle = aim_angle + facing * _arm.rotation
+
+
 ## How far off the wander has taken the sight this frame, in radians.
 ##
 ## Two turns at an irrational ratio rather than one, so the drift never comes
@@ -1407,6 +1529,7 @@ func _update_weapon() -> void:
 		PlayerInput.is_fire_just_pressed() and not inventory_open,
 		PlayerInput.is_fire_held() and not inventory_open,
 		_get_move_factor(),
+		_get_air_factor(),
 	)
 
 
@@ -1690,6 +1813,14 @@ func _get_move_factor() -> float:
 	return clampf(absf(velocity.x) / maxf(max_speed, 1.0), 0.0, 1.0)
 
 
+## 1 with both feet off the ground, easing back to 0 over air_settle_time once
+## they are back on it. Feeds a cone several times wider than running does -
+## being in the air is the one place you cannot brace against anything, and a
+## jump that dodges a shot should not also land one.
+func _get_air_factor() -> float:
+	return _air_spread
+
+
 func _update_reticle() -> void:
 	# No gun, no reticle. Leaving it up while crawling would read as though you
 	# could still shoot something.
@@ -1703,12 +1834,25 @@ func _update_reticle() -> void:
 	# full camera zoom, not just the aiming part - pulling the base framing back
 	# would otherwise shrink the reticle along with the world.
 	_reticle.radius = _reticle_radius * lerpf(1.0, ads_reticle_scale, focus) / get_camera_zoom()
+	# Gone on the rope, and faded back in over the draw rather than snapped on
+	# at the end of it - so the sight picture arrives with the muzzle. Done with
+	# alpha rather than by hiding the nodes, because everything below still has
+	# to be kept current: a crosshair that stopped tracking while invisible
+	# would pop back in wherever it was left.
+	var up := 1.0 - stow
+	_reticle.modulate.a = up
+	# A grenade you can still throw keeps its arc, whatever the gun is doing.
+	_aim_line.modulate.a = 1.0 if _aim_line.showing_arc else up
 	# The overlay layer follows the viewport, so positions on it are world
 	# positions - hence global_position rather than an offset from the player.
-	_reticle.global_position = global_position + aim_direction * _reticle.radius
-	_reticle.rotation = aim_angle
+	# Hung off the gun rather than off the aim, so slinging it takes the
+	# crosshair down with the muzzle and the draw carries it back up. They are
+	# the same angle whenever the gun is actually in your hands.
+	var pointing := Vector2.RIGHT.rotated(gun_angle)
+	_reticle.global_position = global_position + pointing * _reticle.radius
+	_reticle.rotation = gun_angle
 
-	_reticle.spread = weapon.get_spread(_get_move_factor())
+	_reticle.spread = weapon.get_spread(_get_move_factor(), _get_air_factor())
 	_reticle.is_reloading = weapon.is_reloading()
 	_reticle.reload_progress = weapon.get_reload_progress()
 	_reticle.is_empty = weapon.get_mag() <= 0
@@ -1727,7 +1871,10 @@ func _update_footsteps(delta: float) -> void:
 	var on_floor := is_on_floor()
 
 	if on_floor and not _was_on_floor:
-		_step()
+		# A landing that carried makes its own noise, and a much bigger one - it
+		# should not also click like an ordinary step.
+		if not _land(global_position.y - _fall_apex):
+			_step()
 		_step_travel = 0.0
 	elif on_floor:
 		_step_travel += absf(velocity.x) * delta
@@ -1738,7 +1885,37 @@ func _update_footsteps(delta: float) -> void:
 		# Land on the front foot rather than half a stride in.
 		_step_travel = step_distance * 0.5
 
+	# Where the drop is counted from. Reset whenever you are being carried
+	# rather than falling: riding the mast cable down is not a fall, and a swing
+	# on the line only starts counting from the moment you let go of it.
+	#
+	# The last case is a jump in height no fall could have produced - a spawn,
+	# an extraction, a revive, or the frame after a cable ride, during which
+	# this function is not called at all. Anything moved rather than dropped
+	# starts counting again from where it was put.
+	var moved := absf(global_position.y - _fall_last_y)
+	_fall_last_y = global_position.y
+	if on_floor or riding or is_grappling() or moved > max_fall_speed * delta * 2.0 + 8.0:
+		_fall_apex = global_position.y
+	else:
+		_fall_apex = minf(_fall_apex, global_position.y)
+
 	_was_on_floor = on_floor
+
+
+## Hitting the ground. True if the drop was far enough to be heard, in which
+## case it has already made its own noise.
+##
+## Handed to Net rather than played here, because unlike a footstep this is not
+## a sound you make on your own machine and replicate for flavour - it is a
+## reveal, and the whole of its effect happens on other people's screens.
+func _land(drop: float) -> bool:
+	if drop < fall_ping_height or not is_alive:
+		return false
+	Net.fall_heard(global_position, drop)
+	landed_hard.emit(drop)
+	_say_loot("that landing carried")
+	return true
 
 
 func _step() -> void:

@@ -467,6 +467,21 @@ func _eye_position() -> Vector2:
 # --- states -------------------------------------------------------------------
 
 
+## Something loud happened over there - somebody hitting the ground hard, so
+## far. Deliberately not a sighting: the guard walks over to look rather than
+## opening fire at a noise, and goes back to his beat if nothing is there. A
+## guard already in a fight is not distracted by it.
+##
+## Only ever called on the machine that thinks for this guard - see
+## Net._fall_landed.
+func heard(at: Vector2) -> void:
+	if not is_brain() or _health <= 0.0 or state == State.ALERT:
+		return
+	_last_seen = at
+	state = State.SEARCH
+	_search_timer = search_time
+
+
 func _enter_alert() -> void:
 	if state != State.ALERT:
 		_react_total = reaction_time * randf_range(

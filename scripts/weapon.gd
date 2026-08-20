@@ -31,6 +31,14 @@ const STARTING_WEAPON := "res://resources/weapons/pistol.tres"
 
 ## How much of the run-and-gun penalty survives while aiming.
 @export_range(0.0, 1.0) var focus_move_penalty_scale := 0.35
+## Extra cone with both feet off the ground, as a multiple of the full
+## run-and-gun penalty. Deliberately several times it: running is a choice
+## about how fast you cross open ground, but jumping into a fight is a way of
+## being hard to hit, and that has to cost the shot or it is simply free.
+@export_range(0.0, 8.0) var air_penalty_scale := 3.2
+## How much aiming buys back while airborne. Much less than it buys on the
+## ground, because a sight steadies a braced gun and you are not braced.
+@export_range(0.0, 1.0) var focus_air_penalty_scale := 0.8
 
 ## The holder's kit. Assigned by the player or the guard before this node is
 ## used; a default one is built in _ready if nobody supplied it.
@@ -49,6 +57,11 @@ var _cooldown := 0.0
 var _reload_left := 0.0
 var _reload_total := 0.0
 var _equip_left := 0.0
+## Gun slung, both hands on a rope. Not a timer: it lasts as long as the rope
+## does, and bring_up() starts the ordinary draw from it - so coming off a cable
+## costs exactly what swapping to the same gun costs, which is a number the
+## weapon already has an opinion about.
+var stowed := false
 var _since_shot := 0.0
 ## Semi-auto guns need the trigger released before they will fire again.
 var _trigger_held := false
@@ -210,16 +223,22 @@ func tick(delta: float) -> void:
 		kick = move_toward(kick, 0.0, kick * data.get_kick_recovery() * delta + 0.0005)
 
 
-## Current cone half-angle, including bloom, the run-and-gun penalty, and however
-## far into the sights the shooter currently is.
-func get_spread(move_factor := 0.0) -> float:
+## Current cone half-angle, including bloom, the run-and-gun penalty, whether the
+## shooter's feet are on the ground, and however far into the sights they
+## currently are.
+func get_spread(move_factor := 0.0, air_factor := 0.0) -> float:
 	if data == null:
 		return 0.0
 	var aimed := clampf(focus, 0.0, 1.0)
 	var cone := data.get_base_spread() + bloom
 	var penalty := data.get_move_penalty() * clampf(move_factor, 0.0, 1.0)
+	# Its own term rather than more move factor: they are different mistakes,
+	# and a sight does much less about this one.
+	var airborne := data.get_move_penalty() * air_penalty_scale \
+		* clampf(air_factor, 0.0, 1.0)
 	return cone * lerpf(1.0, data.ads_spread_scale, aimed) \
-		+ penalty * lerpf(1.0, focus_move_penalty_scale, aimed)
+		+ penalty * lerpf(1.0, focus_move_penalty_scale, aimed) \
+		+ airborne * lerpf(1.0, focus_air_penalty_scale, aimed)
 
 
 func is_reloading() -> bool:
@@ -227,7 +246,21 @@ func is_reloading() -> bool:
 
 
 func is_equipping() -> bool:
-	return _equip_left > 0.0
+	return stowed or _equip_left > 0.0
+
+
+## Puts it away. Nothing fires and nothing reloads until it comes back up: you
+## are holding a cable with the hand the gun was in.
+func put_away() -> void:
+	stowed = true
+
+
+## Back in your hands. Deliberately does not start an equip timer of its own:
+## the draw is the arm coming up, and player.gd holds this stowed for exactly as
+## long as that takes. Two clocks for one draw is how a gun ends up working a
+## frame or two before it looks like it does.
+func bring_up() -> void:
+	stowed = false
 
 
 func get_reload_progress() -> float:
@@ -270,7 +303,7 @@ func _finish_reload() -> void:
 ## Called every physics frame with the current trigger state.
 ## Returns true on the frame a shot actually leaves the barrel.
 func try_fire(origin: Vector2, angle: float, pressed: bool, held: bool,
-		move_factor := 0.0) -> bool:
+		move_factor := 0.0, air_factor := 0.0) -> bool:
 	var item := _item()
 	if item == null:
 		return false
@@ -298,7 +331,7 @@ func try_fire(origin: Vector2, angle: float, pressed: bool, held: bool,
 	# it was heard only by whoever pulled the trigger, so another player's gun was
 	# silent and, on a client, so was every guard's.
 
-	var spread := get_spread(move_factor)
+	var spread := get_spread(move_factor, air_factor)
 	for i in data.pellets:
 		_spawn_bullet(origin, angle + _pellet_offset(i, spread))
 
