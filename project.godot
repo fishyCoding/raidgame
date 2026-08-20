@@ -207,6 +207,10 @@ virtual_controller/ios/enable_button_y=true
 
 3d/physics_engine="Jolt Physics"
 
+[audio]
+
+general/2d_panning_strength=1.0
+
 [rendering]
 
 rendering_device/driver.windows="d3d12"

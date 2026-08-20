@@ -51,12 +51,22 @@ const KILL_TICK_GAP := 0.085
 ## is deliberately not one number: what a sound tells you depends entirely on how
 ## far away it can possibly be.
 ##
-## Footsteps are the short one on purpose. If you can hear boots, someone is
-## close enough to matter - near enough to be on your screen, at the framing the
-## camera actually uses. A footstep audible across the level tells you only that
-## the level has guards in it, which you already knew.
+## Boots are two entries, not one, and the gap between them is the point.
+##
+## A guard walking is the least useful sound in the game: there are eleven of
+## them, they are always walking, and one audible across the yard tells you only
+## that the level has guards in it - which you already knew. A *person* walking
+## is the most useful sound in the game, because there is one of them and he can
+## shoot back. They used to share a range, so the eleven drowned the one.
+##
+## The player now carries as far as a rifle does. That is deliberate and it is
+## the whole change: somebody moving is worth knowing about at the same distance
+## somebody shooting is, and it is the only sound in the game that means a
+## fight is coming rather than that one has already started.
 const HEARING := {
 	"footstep": 900.0,
+	"guard_footstep": 620.0,
+	"player_footstep": 1500.0,
 	"reload": 760.0,
 	"gunshot": 1500.0,
 	## A suppressed weapon is loud enough in your hands and dead a room away.
@@ -116,10 +126,16 @@ const CLEAR_LINE_TRIM := 4.0
 ## was doing all the work, which put anything past mid-range too far down.
 const ATTENUATION := 0.9
 
-## Footsteps fall away faster than anything else. A gunshot at half its range
-## should still be clearly a gunshot; boots at half their range should be well on
-## their way out, because the thing boots tell you is "someone is close" and a
-## flat curve just smears vague shuffling across the level.
+## Boots fall away faster than anything else - but only a guard's.
+##
+## A gunshot at half its range should still be clearly a gunshot; a guard at half
+## his should be well on his way out, because what his boots tell you is "someone
+## is close" and a flat curve just smears vague shuffling across the level.
+##
+## Another player is the opposite case and uses the shared curve instead. On this
+## one, stretching the range alone would have bought almost nothing: at 1.6, half
+## of any range is already 19 dB down, so a longer reach would have been longer
+## silence. See player_footstep().
 ##
 ## Godot's 2D falloff is (1 - distance/max) ^ attenuation. Against the 900 px
 ## footstep range that works out as, in dB below the close volume:
@@ -133,6 +149,11 @@ const ATTENUATION := 0.9
 const FOOTSTEP_ATTENUATION := 1.6
 
 ## How hard sound pans left and right with its position on screen.
+##
+## Multiplied by the project's audio/general/2d_panning_strength, which ships at
+## 0.5 - so this was quietly landing on 1.0, the engine default, while the line
+## above claimed hard panning. That setting is 1.0 now, and this is the whole of
+## the number again.
 const PANNING := 2.0
 
 @export_range(-40.0, 6.0) var master_db := 0.0
@@ -194,6 +215,10 @@ func _ready() -> void:
 	for i in UI_POOL_SIZE:
 		var player := AudioStreamPlayer.new()
 		player.bus = &"Master"
+		# Feedback is not somewhere, so on a rig with more than two speakers it
+		# goes to all of them rather than sitting across the front pair with the
+		# world. On stereo this is what it always was.
+		player.mix_target = AudioStreamPlayer.MIX_TARGET_SURROUND
 		add_child(player)
 		_ui_players.append(player)
 
@@ -233,6 +258,29 @@ func _ready() -> void:
 	# not have a note in them, least of all ones that fire on a timer.
 	_reload_end = SoundBank.snap(0.5, 0.08)
 	_dry = SoundBank.snap(0.15, 0.045)
+
+	print("Audio: %s, %s out, %d Hz" % [
+		AudioServer.get_driver_name(), speaker_layout(), AudioServer.get_mix_rate()])
+
+
+## What the output device says it has, in words. Godot takes this from the device
+## rather than from a setting, so it is the answer for the machine the game is
+## running on and changes if the device does.
+##
+## Worth knowing what it does and does not buy you here. Panning, distance and
+## the listener are all honest on any layout. But an AudioStreamPlayer2D fills
+## the front pair and nothing else - the centre, the sub and the rears are the
+## 3D node's job, and this is a 2D game - so a 5.1 rig gets the same stage a
+## pair of speakers does, with feedback (above) spread across the rest of it.
+func speaker_layout() -> String:
+	match AudioServer.get_speaker_mode():
+		AudioServer.SPEAKER_SURROUND_31:
+			return "3.1"
+		AudioServer.SPEAKER_SURROUND_51:
+			return "5.1"
+		AudioServer.SPEAKER_SURROUND_71:
+			return "7.1"
+	return "stereo"
 
 
 # --- what the game asks for ---------------------------------------------------
@@ -300,30 +348,56 @@ func footstep(at: Vector2, heavy := true, loudness := 1.0) -> void:
 func guard_footstep(at: Vector2, loudness := 1.0) -> void:
 	var quieting := linear_to_db(clampf(loudness, 0.01, 1.0))
 	if _clips.has("footstep"):
-		_play(_clips.footstep, at, 2.0 + quieting + RECORDING_TRIM.footstep + GUARD_TRIM,
-			randf_range(0.94, 1.08) * GUARD_PITCH, HEARING.footstep,
+		_play(_clips.footstep, at, -5.0 + quieting + RECORDING_TRIM.footstep + GUARD_TRIM,
+			randf_range(0.94, 1.08) * GUARD_PITCH, HEARING.guard_footstep,
 			FOOTSTEP_ATTENUATION)
-		_play(_gear, at, -7.0 + quieting, randf_range(0.9, 1.15) * GUARD_PITCH,
-			HEARING.footstep, FOOTSTEP_ATTENUATION)
+		_play(_gear, at, -13.0 + quieting, randf_range(0.9, 1.15) * GUARD_PITCH,
+			HEARING.guard_footstep, FOOTSTEP_ATTENUATION)
 		return
-	_play(_boot, at, -7.0 + quieting, randf_range(0.82, 1.18) * GUARD_PITCH,
-		HEARING.footstep, FOOTSTEP_ATTENUATION)
+	_play(_boot, at, -13.0 + quieting, randf_range(0.82, 1.18) * GUARD_PITCH,
+		HEARING.guard_footstep, FOOTSTEP_ATTENUATION)
 
 
-## Another player's boots.
+## Another player's boots. The most important sound in the game.
 ##
-## Used to be guard_footstep, which meant the most important sound in the game -
-## somebody who can shoot back is in the room - was indistinguishable from the
-## eleven patrolling men who cannot surprise you. Same recording, at its own
-## pitch, louder, and without the webbing jingle a guard carries.
+## Used to be guard_footstep, which meant somebody who can shoot back was
+## indistinguishable from the eleven patrolling men who cannot surprise you.
+## Same recording, at its own pitch, louder, and without the webbing jingle a
+## guard carries.
+##
+## Two things separate it from a guard now rather than one. It carries as far
+## as a rifle does instead of two thirds as far as a guard used to, and it uses
+## the shared falloff rather than the steep one boots normally get - which is
+## the half that actually matters. At 1.6, half of any range is 19 dB down, so
+## stretching the range on that curve would only have bought longer silence.
 func player_footstep(at: Vector2, loudness := 1.0) -> void:
 	var quieting := linear_to_db(clampf(loudness, 0.01, 1.0))
 	if _clips.has("footstep"):
-		_play(_clips.footstep, at, 2.0 + quieting + RECORDING_TRIM.footstep + PLAYER_TRIM,
-			randf_range(0.98, 1.12), HEARING.footstep, FOOTSTEP_ATTENUATION)
+		_play(_clips.footstep, at, 7.0 + quieting + RECORDING_TRIM.footstep + PLAYER_TRIM,
+			randf_range(0.98, 1.12), HEARING.player_footstep, ATTENUATION)
 		return
-	_play(_footstep, at, -4.0 + quieting, randf_range(0.98, 1.12),
-		HEARING.footstep, FOOTSTEP_ATTENUATION)
+	_play(_footstep, at, 1.0 + quieting, randf_range(0.98, 1.12),
+		HEARING.player_footstep, ATTENUATION)
+
+
+## Boots hitting the ground from a height.
+##
+## Not a footstep with the volume turned up. A footstep carries 900 px because
+## what it tells you is "someone is close"; this has to carry as far as it
+## gives the person away, which is the entire point of it - so a bad landing
+## reaches most of the way a gunshot does. `weight` is 0 for the shortest drop
+## that counts and 1 for anything well past it.
+func hard_landing(at: Vector2, weight := 1.0) -> void:
+	var heft := clampf(weight, 0.0, 1.0)
+	var carries := lerpf(HEARING.footstep * 1.4, HEARING.gunshot, heft)
+	var boots: AudioStream = _clips.footstep if _clips.has("footstep") else _footstep
+	var trim: float = RECORDING_TRIM.footstep if _clips.has("footstep") else 0.0
+	_play(boots, at, lerpf(-1.0, 6.0, heft) + trim, lerpf(0.88, 0.72, heft),
+		carries, ATTENUATION)
+	# The thud under it, pitched well down. A landing that only clicks reads as a
+	# step however loud it is; the body underneath is what makes it a fall.
+	_play(_boot, at, lerpf(-7.0, 1.0, heft), lerpf(0.58, 0.4, heft),
+		carries, ATTENUATION)
 
 
 ## A grenade going off: the loudest thing in the game, and the furthest carrying.
