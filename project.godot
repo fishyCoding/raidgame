@@ -31,7 +31,7 @@ window/handheld/orientation="landscape"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/zipline_tools/plugin.cfg", "res://addons/xogot_connect/plugin.cfg")
+enabled=PackedStringArray("res://addons/endpoint_tools/plugin.cfg", "res://addons/xogot_connect/plugin.cfg")
 
 [input]
 

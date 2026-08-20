@@ -12,7 +12,7 @@ extends Node2D
 ##
 ## Runs as @tool so the cable, its ends and its reach are visible while you are
 ## placing it. The endpoints can be dragged in the 2D viewport - see
-## addons/zipline_tools.
+## addons/endpoint_tools, which does the same for a Platform.
 
 ## Amber marks the top end, blue the bottom, in the editor and on the drag
 ## handles, so which end is which is never a guess.
