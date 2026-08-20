@@ -48,8 +48,10 @@ func _run() -> void:
 			audio.HEARING.gunshot])
 	_check("a guard carries less far than boots used to",
 			audio.HEARING.guard_footstep < audio.HEARING.footstep)
-	_check("a player carries substantially further",
-			audio.HEARING.player_footstep > audio.HEARING.guard_footstep * 2.0)
+	# How much further is asserted on audible reach below, not on the ceiling -
+	# max_distance says nothing on its own when the two use different curves.
+	_check("a player carries further than boots used to",
+			audio.HEARING.player_footstep > audio.HEARING.footstep)
 	_check("as far as a rifle, in fact",
 			audio.HEARING.player_footstep >= audio.HEARING.gunshot)
 
@@ -68,7 +70,10 @@ func _run() -> void:
 	var player_reach := _reach(player)
 	print("\n  a player is audible %.1fx as far as a guard" % (player_reach / maxf(guard_reach, 1.0)))
 	_check("a player is heard from much further off", player_reach > guard_reach * 2.0)
-	_check("and a guard is not heard across the yard", guard_reach < 600.0)
+	# Close enough to place the man on the next walkway, short enough that the
+	# far side of the level is not a wall of shuffling.
+	_check("a guard is still heard from a walkway away", guard_reach > 600.0)
+	_check("but not from across the level", guard_reach < 800.0)
 
 	print("\n-- out of range is not mixed at all --")
 	# _play drops anything past its own reach before it takes a pool slot, so a

@@ -59,13 +59,19 @@ const KILL_TICK_GAP := 0.085
 ## is the most useful sound in the game, because there is one of them and he can
 ## shoot back. They used to share a range, so the eleven drowned the one.
 ##
+## The guard is pulled in rather than turned down. Trimming his level as well
+## went too far and lost him in his own yard - placing the man pacing the next
+## walkway is half of what the sound is for, and only the ones across the level
+## were ever the problem. The separation is carried by range and by the falloff
+## curve below, which is where it belongs.
+##
 ## The player now carries as far as a rifle does. That is deliberate and it is
 ## the whole change: somebody moving is worth knowing about at the same distance
 ## somebody shooting is, and it is the only sound in the game that means a
 ## fight is coming rather than that one has already started.
 const HEARING := {
 	"footstep": 900.0,
-	"guard_footstep": 620.0,
+	"guard_footstep": 760.0,
 	"player_footstep": 1500.0,
 	"reload": 760.0,
 	"gunshot": 1500.0,
@@ -348,13 +354,13 @@ func footstep(at: Vector2, heavy := true, loudness := 1.0) -> void:
 func guard_footstep(at: Vector2, loudness := 1.0) -> void:
 	var quieting := linear_to_db(clampf(loudness, 0.01, 1.0))
 	if _clips.has("footstep"):
-		_play(_clips.footstep, at, -5.0 + quieting + RECORDING_TRIM.footstep + GUARD_TRIM,
+		_play(_clips.footstep, at, 0.0 + quieting + RECORDING_TRIM.footstep + GUARD_TRIM,
 			randf_range(0.94, 1.08) * GUARD_PITCH, HEARING.guard_footstep,
 			FOOTSTEP_ATTENUATION)
-		_play(_gear, at, -13.0 + quieting, randf_range(0.9, 1.15) * GUARD_PITCH,
+		_play(_gear, at, -9.0 + quieting, randf_range(0.9, 1.15) * GUARD_PITCH,
 			HEARING.guard_footstep, FOOTSTEP_ATTENUATION)
 		return
-	_play(_boot, at, -13.0 + quieting, randf_range(0.82, 1.18) * GUARD_PITCH,
+	_play(_boot, at, -9.0 + quieting, randf_range(0.82, 1.18) * GUARD_PITCH,
 		HEARING.guard_footstep, FOOTSTEP_ATTENUATION)
 
 
