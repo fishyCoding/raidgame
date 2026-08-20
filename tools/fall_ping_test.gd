@@ -38,8 +38,12 @@ func _run() -> void:
 	var player: Node2D = net.local_player
 	player.landed_hard.connect(func(drop: float) -> void: _drops.append(drop))
 	print("-- the dials --")
-	print("  past %.0f px it carries, %.0f px around it, lit for %.1fs" % [
-			player.fall_ping_height, player.fall_ping_radius, player.fall_ping_time])
+	# Said in men as well as pixels: the threshold is easier to argue about as
+	# "how far up is that" than as a number.
+	var guard_tall: float = (main.get_node("Enemies").get_child(0) as Node2D).size.y
+	print("  past %.0f px it carries (%.1f guards tall), %.0f px around it, lit for %.1fs" % [
+			player.fall_ping_height, player.fall_ping_height / guard_tall,
+			player.fall_ping_radius, player.fall_ping_time])
 
 	# The yard floor: 5200x80 centred on y=460, so its top is at 420.
 	var floor_y := 420.0

@@ -140,10 +140,13 @@ extends CharacterBody2D
 ## shot for the exact frame your boots touched, which is a worse game than
 ## either staying on the ground or accepting the penalty.
 @export_range(0.0, 2.0) var air_settle_time := 0.4
-## The shortest drop that gives you away, in pixels. A character is 48 px
-## tall, so this is a couple of storeys - well past a jump, well past stepping
-## off a crate, and about what it costs to skip a ladder you should have used.
-@export var fall_ping_height := 340.0
+## The shortest drop that gives you away, in pixels.
+##
+## A guard is 52 px tall and you are 48, so this is a shade under ten of him
+## stacked up - well past a jump, well past stepping off a crate, and about
+## what it costs to skip a ladder you should have used. Divide by 52 if you
+## want to think about it in men rather than pixels.
+@export var fall_ping_height := 510.0
 ## How far the landing carries. Between a footstep (900) and a gunshot (1500):
 ## far enough that dropping into a room is a decision, near enough that it does
 ## not hand the whole level your position.
