@@ -67,6 +67,9 @@ const CURVE_SIZE := Vector2(212.0, 40.0)
 ## Pixels per wheel notch. A little over half a gun card, so one notch always
 ## brings something new into view without losing what you were reading.
 const SCROLL_STEP := 76.0
+## How far a thumb may travel and still count as a press rather than a scroll.
+## Generous, because a thumb on a phone is never as still as a mouse is.
+const TAP_SLOP := 14.0
 ## World scale for the range readout on a damage curve. The character is 48 px
 ## tall, so this puts them a bit under two metres.
 const PX_PER_M := 28.0
@@ -173,6 +176,33 @@ var _message := ""
 ## missing from the top.
 var _scroll := 0.0
 var _scroll_max := 0.0
+## The band the cards scroll in, in this control's own space. Rebuilt beside the
+## regions every frame, so a thumb is tested against what is actually on screen.
+var _shelf := Rect2()
+
+## Godot emulates a mouse from the first touch, and that echo is what lets a
+## thumb press anything on this screen at all - it is why emulation cannot just
+## be switched off (see PlayerInput.MOUSE_ACTIONS). But the echo arrives on
+## *press*, before a drag has had the chance to happen, so there was no moment
+## at which the shelf could be moved: a thumb going down on a gun card bought
+## the gun, and dragging did nothing at all.
+##
+## On hardware that sends real touches the echo is ignored and this screen is
+## driven from the touch events instead, which are the only ones that can tell a
+## press from the beginning of a scroll. Same guard as touch_controls.gd, and
+## held as a field for the same reason: a headless test can set it and pretend
+## to be a phone.
+var _mouse_is_an_echo := false
+## Belt and braces for hardware that reports no touchscreen and sends touches
+## anyway - a Windows laptop with a screen you can prod. Neither test is enough
+## alone: the echo can beat the touch it came from, and a phone can be prodded
+## before it is ever touched.
+var _saw_touch := false
+var _touching := false
+var _touch_from := Vector2.ZERO
+## Furthest the finger has been from where it went down, in pixels.
+var _touch_travel := 0.0
+var _touch_scrolls := false
 ## What each bought item cost, so putting something back refunds the right
 ## amount. Keyed by the Item itself.
 var _paid := {}
@@ -180,6 +210,7 @@ var _paid := {}
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	_mouse_is_an_echo = PlayerInput.has_touchscreen()
 	visible = false
 
 
@@ -260,8 +291,28 @@ func _set_slot_item(id: String, item: Item) -> bool:
 func _gui_input(event: InputEvent) -> void:
 	if not visible:
 		return
+
+	# Fingers first. The GUI routes touch and drag to whichever control is under
+	# them, the same way it routes a mouse, so this screen keeps stopping input
+	# over its whole rect - which is what the buttons the lobby stacks on top of
+	# it rely on.
+	var touch := event as InputEventScreenTouch
+	if touch != null:
+		_saw_touch = true
+		if touch.index == 0:
+			_finger(touch.position, touch.pressed)
+		accept_event()
+		return
+
+	var drag := event as InputEventScreenDrag
+	if drag != null:
+		if drag.index == 0:
+			_finger_moved(drag.position, drag.relative)
+		accept_event()
+		return
+
 	var click := event as InputEventMouseButton
-	if click == null or not click.pressed:
+	if click == null or not click.pressed or _saw_touch or _mouse_is_an_echo:
 		return
 
 	# The wheel moves the shelf, wherever the pointer is. Requiring it to be over
@@ -276,18 +327,54 @@ func _gui_input(event: InputEvent) -> void:
 	if click.button_index != MOUSE_BUTTON_LEFT:
 		return
 	accept_event()
+	_press(click.position)
 
-	if _deploy_button.has_point(click.position):
+
+## A finger going down, or coming back up.
+func _finger(at: Vector2, down: bool) -> void:
+	if down:
+		_touching = true
+		_touch_from = at
+		_touch_travel = 0.0
+		# Only a drag that began on the shelf moves it. A drag across the body
+		# on the left scrolling a list on the right is the sort of thing that
+		# reads as the screen having a mind of its own.
+		_touch_scrolls = _shelf.has_point(at)
+		return
+	if not _touching:
+		return
+	_touching = false
+	# A thumb that stayed put was pressing something. One that travelled was
+	# scrolling, and must not also buy whatever it set off from.
+	if _touch_travel <= TAP_SLOP:
+		_press(at)
+
+
+func _finger_moved(at: Vector2, by: Vector2) -> void:
+	if not _touching:
+		return
+	# Measured from where the finger went down rather than summed along the way,
+	# so a slow press with a shake in it is still a press - and a scroll that
+	# comes back to where it started is still a scroll.
+	_touch_travel = maxf(_touch_travel, _touch_from.distance_to(at))
+	if _touch_scrolls:
+		# The shelf follows the finger.
+		_scroll = clampf(_scroll - by.y, 0.0, _scroll_max)
+
+
+## Whatever is under the pointer, pressed. The one path a click and a tap share.
+func _press(at: Vector2) -> void:
+	if _deploy_button.has_point(at):
 		visible = false
 		deployed.emit()
 		return
 
 	for region in _regions:
-		if not (region.rect as Rect2).has_point(click.position):
+		if not (region.rect as Rect2).has_point(at):
 			continue
 		match region.kind:
 			"slot", "pocket", "pack":
-				# Clicking the open slot again closes it, so the picker is never
+				# Pressing the open slot again closes it, so the picker is never
 				# stuck open over something you are trying to read.
 				_open = {} if _open.get("id", "") == region.id else region.duplicate()
 				_message = ""
@@ -516,6 +603,7 @@ func _draw() -> void:
 		return
 	var font := ThemeDB.fallback_font
 	_regions.clear()
+	_shelf = Rect2()
 	draw_rect(Rect2(Vector2.ZERO, size), BG)
 
 	draw_string(font, Vector2(MARGIN, 54.0), "KIT UP",
@@ -778,6 +866,7 @@ func _draw_picker(at: Vector2) -> void:
 	# back to it afterwards - _draw has no scissor, so the panel colour is painted
 	# over the overspill instead.
 	var view := Rect2(Vector2(at.x, head), Vector2(PICK_W, panel.end.y - head - 26.0))
+	_shelf = view
 	var y := view.position.y - _scroll
 	var content := 0.0
 
