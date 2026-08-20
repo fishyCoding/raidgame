@@ -105,6 +105,21 @@ extends Resource
 ## ads_lead_fraction. This is what buys back the ground a scope takes away:
 ## magnify 2x and you see half as far ahead unless the camera stands off.
 @export_range(0.0, 3.0) var ads_lead_scale := 1.0
+## How far the sight wanders while you are scoped, in degrees either side of
+## where you are pointing.
+##
+## The other three ADS dials all make a scope better; this is the one that costs
+## something. A braced rifle does not sit perfectly still, and at the range this
+## gun reaches, a fraction of a degree is metres - so the wander is the thing you
+## are timing the shot against rather than a nuisance laid over it. It moves the
+## aim itself, not the reticle, so the round goes where the sight was.
+##
+## Zero for everything else on purpose. Irons at the range they are used at would
+## only feel broken.
+@export_range(0.0, 8.0) var ads_sway := 0.0
+## How quickly that wander goes round, in cycles per second. Slow enough to ride
+## down onto a target; fast enough that waiting out a bad one costs you the shot.
+@export_range(0.05, 4.0) var ads_sway_speed := 0.5
 
 @export_group("Sound")
 ## Which recorded report this weapon fires with, named by its key in

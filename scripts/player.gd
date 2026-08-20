@@ -373,6 +373,9 @@ var overload_left := 0.0
 
 ## Where the player is pointing before recoil is added.
 var _aim_base := 0.0
+## Where the scope's wander has got to. Only advanced while aimed, so lowering
+## the gun and bringing it back up does not resume mid-swing.
+var _sway_phase := 0.0
 var _jump_velocity: float
 var _jump_gravity: float
 var _fall_gravity: float
@@ -1228,7 +1231,7 @@ func get_camera_zoom() -> float:
 ## converge on, so there is no momentum at any weight, and nothing depends on
 ## where the character sits on screen. A heavy weapon now costs mouse travel
 ## instead of costing response - see WeaponData.aim_speed_scale.
-func _update_aim(_delta: float) -> void:
+func _update_aim(delta: float) -> void:
 	if not inventory_open:
 		var motion := PlayerInput.consume_aim_motion()
 		if not motion.is_zero_approx():
@@ -1259,13 +1262,36 @@ func _update_aim(_delta: float) -> void:
 	# of the angle: an |angle| > PI/2 test reports the wrong side once the angle
 	# has wrapped. Used for mirroring the body, nothing else.
 	facing = 1 if cos(_aim_base) >= 0.0 else -1
-	aim_angle = _apply_kick(_aim_base, weapon.kick)
+	# Sway rides on top of the angle you are steering rather than being part of
+	# it: you hold the gun where you want it and the gun wanders, which is what
+	# makes riding the wander down onto a target a thing you can do. Applied
+	# after facing, so a wobble across the vertical cannot turn the body round.
+	aim_angle = _apply_kick(_aim_base + _scope_sway(delta), weapon.kick)
 	aim_direction = Vector2.RIGHT.rotated(aim_angle)
 
 	_aim_pivot.rotation = aim_angle
 	# Mirror instead of letting the arm hang upside down when aiming left.
 	_aim_pivot.scale.y = facing
 	_body.scale.x = facing
+
+
+## How far off the wander has taken the sight this frame, in radians.
+##
+## Two turns at an irrational ratio rather than one, so the drift never comes
+## back round on a beat you can count - it wanders instead of ticking. Scaled by
+## focus so it eases in with the sight instead of punching in the moment the
+## button goes down, and so a gun that is not scoped never sways at all.
+func _scope_sway(delta: float) -> float:
+	var data := weapon.data
+	if data == null or data.ads_sway <= 0.0 or focus <= 0.0:
+		return 0.0
+	# Deliberately not wrapped. The two turns are at an irrational ratio, so no
+	# wrap point exists that leaves both of them continuous, and one that leaves
+	# only the first continuous puts a visible flick in the sight every time it
+	# comes round. A GDScript float is a double; it can count radians all day.
+	_sway_phase += delta * data.ads_sway_speed * TAU
+	var wander := sin(_sway_phase) * 0.62 + sin(_sway_phase * 1.618 + 1.1) * 0.38
+	return deg_to_rad(data.ads_sway) * wander * focus
 
 
 ## Applies the weapon's climb to an aim angle by LIFTING THE AIM POINT rather
