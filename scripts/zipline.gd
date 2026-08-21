@@ -26,11 +26,15 @@ const OCCUPIED_WIDTH := 3.5
 
 ## How close to an end you have to be standing for the cable to warn you.
 ##
-## Roughly the distance a rider covers in the second before they arrive on a
-## default cable, which is the point: far enough out that the warning is worth
-## something, close enough that it only fires for the person actually about to
-## be landed on.
-const WARN_RANGE := 340.0
+## Two seconds of travel on a default cable, not one. 340 px was the distance a
+## rider covers in the second before they land, which turned out to be the wrong
+## thing to measure: a warning that arrives a second out is a warning you react
+## to after the fact. This is long enough to look up and decide.
+##
+## It is longer than plenty of cables in the level are, which is fine and not an
+## accident - on a short hop the whole rope is inside the warning and anyone near
+## either end sees it, which is exactly who is at risk on a rope that short.
+const WARN_RANGE := 680.0
 
 ## How often the cable checks whether anyone is on it. Cheap either way - a
 ## handful of players against one segment - but this runs on every cable in the
