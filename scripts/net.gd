@@ -877,6 +877,11 @@ func fall_heard(at: Vector2, drop: float) -> void:
 		for peer in multiplayer.get_peers():
 			_fall_news.rpc_id(peer, peer_id(), at, drop)
 	else:
+		# Here first, then ask the host to tell everybody else. The relay
+		# deliberately skips whoever reported the landing, so if this machine did
+		# not play its own it would be the one player in the session who never
+		# heard it - the fall would be silent for the person who took it.
+		_fall_landed(peer_id(), at, drop)
 		_ask_fall_news.rpc_id(1, at, drop)
 
 

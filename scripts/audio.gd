@@ -393,16 +393,27 @@ func player_footstep(at: Vector2, loudness := 1.0) -> void:
 ## gives the person away, which is the entire point of it - so a bad landing
 ## reaches most of the way a gunshot does. `weight` is 0 for the shortest drop
 ## that counts and 1 for anything well past it.
+##
+## It is also the loudest thing a person can do short of setting off a grenade,
+## and it used to be quieter than their own footsteps: the boots sat at -1 dB
+## against a footstep's +9, so the sound that is meant to give you away was the
+## faintest noise you made. The levels below put it clearly at the top of the
+## body sounds - above a rifle report, below an explosion - because a reveal
+## nobody notices is not a reveal.
+##
+## Positional on every machine that plays it, so it pans and falls off from
+## where the body actually hit. That is the whole information content of it:
+## not "somebody dropped" but "somebody dropped over *there*".
 func hard_landing(at: Vector2, weight := 1.0) -> void:
 	var heft := clampf(weight, 0.0, 1.0)
 	var carries := lerpf(HEARING.footstep * 1.4, HEARING.gunshot, heft)
 	var boots: AudioStream = _clips.footstep if _clips.has("footstep") else _footstep
 	var trim: float = RECORDING_TRIM.footstep if _clips.has("footstep") else 0.0
-	_play(boots, at, lerpf(-1.0, 6.0, heft) + trim, lerpf(0.88, 0.72, heft),
+	_play(boots, at, lerpf(11.0, 17.0, heft) + trim, lerpf(0.88, 0.72, heft),
 		carries, ATTENUATION)
 	# The thud under it, pitched well down. A landing that only clicks reads as a
 	# step however loud it is; the body underneath is what makes it a fall.
-	_play(_boot, at, lerpf(-7.0, 1.0, heft), lerpf(0.58, 0.4, heft),
+	_play(_boot, at, lerpf(7.0, 13.0, heft), lerpf(0.58, 0.4, heft),
 		carries, ATTENUATION)
 
 
