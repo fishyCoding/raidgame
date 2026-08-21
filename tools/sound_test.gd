@@ -116,10 +116,52 @@ func _run() -> void:
 	# geometry, at the same distance.
 	var through_floor := _played(func() -> void:
 		_audio.gunshot(rifle, player.global_position + Vector2(0.0, 120.0), false))
-	_say("open %.1f dB, through the floor %.1f dB" % [
-		open_air.volume_db, through_floor.volume_db])
-	_check("a wall does not change the level",
-		is_equal_approx(open_air.volume_db, through_floor.volume_db))
+	# Both read with the elevation cue taken back out. A shot under your feet is
+	# deliberately quieter than one across from you - that is the cue doing its
+	# job, and it is a fact about *where* the shot was, not about the floor in
+	# between. Comparing the raw levels would blame the elevation on the wall.
+	var open_flat := _level_ignoring_elevation(open_air)
+	var floor_flat := _level_ignoring_elevation(through_floor)
+	_say("open %.1f dB, through the floor %.1f dB (level for level, %.1f / %.1f)" % [
+		open_air.volume_db, through_floor.volume_db, open_flat, floor_flat])
+	_check("a wall does not change the level", is_equal_approx(open_flat, floor_flat))
+
+	# --- but which floor you are on does ------------------------------------
+	#
+	# Godot's 2D panning is horizontal only, so without this a guard overhead and
+	# a guard underfoot are the same sound. Both go to a shaped bus instead, and
+	# anything roughly level with you is left alone.
+	var overhead := _played(func() -> void:
+		_audio.gunshot(rifle, player.global_position + Vector2(0.0, -400.0), false))
+	var underfoot := _played(func() -> void:
+		_audio.gunshot(rifle, player.global_position + Vector2(0.0, 400.0), false))
+	var across := _played(func() -> void:
+		_audio.gunshot(rifle, player.global_position + Vector2(400.0, 0.0), false))
+	_say("overhead on %s, underfoot on %s, across on %s" % [
+		overhead.bus, underfoot.bus, across.bus])
+	_check("a shot overhead is shaped as above", overhead.bus == _audio.ABOVE_BUS)
+	_check("one underfoot is shaped as below", underfoot.bus == _audio.BELOW_BUS)
+	_check("and one across from you is left alone", across.bus == &"Master")
+	_check("both shaped buses exist to route to",
+		AudioServer.get_bus_index(_audio.ABOVE_BUS) != -1
+		and AudioServer.get_bus_index(_audio.BELOW_BUS) != -1)
+	# Routing to a bus that turned out to be flat would pass every check above
+	# and be completely inaudible, so the filter itself is read back. The top
+	# band is the one carrying the cue: above keeps its high end, below loses it.
+	var above_top := _band_gain(_audio.ABOVE_BUS, 5)
+	var below_top := _band_gain(_audio.BELOW_BUS, 5)
+	_say("10 kHz: above %+.1f dB, below %+.1f dB" % [above_top, below_top])
+	_check("above is actually brightened", above_top > 1.0)
+	_check("below actually loses its top end", below_top < -1.0)
+	# The shaping is what carries the cue, but the levels must not collide either,
+	# or a sound crossing your own floor would step sideways for no audible reason.
+	_check("above and below are not the same level",
+		not is_equal_approx(overhead.volume_db, underfoot.volume_db))
+	# A shot far out to the side is across from you however high it is: 400 px up
+	# from 2000 px away is not another floor, it is the same one.
+	var far_and_high := _played(func() -> void:
+		_audio.gunshot(rifle, player.global_position + Vector2(1400.0, -400.0), false))
+	_check("and height only counts when it is steep", far_and_high.bus == &"Master")
 
 	# --- and the curve is not too steep --------------------------------------
 	#
@@ -155,6 +197,24 @@ func _check(what: String, ok: bool) -> void:
 	if not ok:
 		_ok = false
 	_say("%s %s" % ["ok  " if ok else "FAIL", what])
+
+
+## What a shaped bus does to one EQ band, straight off the live effect.
+func _band_gain(bus: StringName, band: int) -> float:
+	var index := AudioServer.get_bus_index(bus)
+	if index == -1:
+		return 0.0
+	for slot in AudioServer.get_bus_effect_count(index):
+		var eq := AudioServer.get_bus_effect(index, slot) as AudioEffectEQ
+		if eq:
+			return eq.get_band_gain_db(band)
+	return 0.0
+
+
+## A player's level with the elevation cue removed, for anything comparing two
+## sounds that are not at the same height.
+func _level_ignoring_elevation(player: AudioStreamPlayer2D) -> float:
+	return player.volume_db - _audio.elevation_trim(player.bus)
 
 
 func _say(text: String) -> void:

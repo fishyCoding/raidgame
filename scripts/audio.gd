@@ -154,6 +154,53 @@ const ATTENUATION := 0.9
 ## Pick another row and put the number here if it still is not sitting right.
 const FOOTSTEP_ATTENUATION := 1.6
 
+# --- elevation ----------------------------------------------------------------
+#
+# Godot's 2D panning is horizontal and nothing else: it takes the x difference
+# between listener and source and never looks at the y. So a guard on the walkway
+# over your head and a guard in the basement under your feet arrive identical -
+# same side, same level, same everything - in a game whose whole shape is
+# vertical. Ziplines exist to move people between floors; the sound had no way
+# to say which floor.
+#
+# Ears solve this with the shape of the ear itself, which filters by where the
+# sound came from: something above you keeps its top end, something below you
+# loses it. That is the cue reproduced here, and it is the right one to copy
+# because it survives any speaker layout, works in mono, and does not need the
+# source to be on screen. Level and pitch were the other candidates and both are
+# already spoken for - distance owns level, and pitch is how you tell a guard
+# from a player.
+
+## The two shaped buses, made at startup and sent on to Master.
+const ABOVE_BUS := &"Above"
+const BELOW_BUS := &"Below"
+
+## How steep a sound has to be before it counts as overhead or underfoot rather
+## than simply across from you, as a fraction of its own distance - so 300 px up
+## and 40 px along is above you, and the same 300 px up from 2000 px away is
+## not. Below this the sound stays unshaped on Master: most of a firefight
+## happens roughly at your level, and colouring all of it would be a filter over
+## the whole mix rather than a cue about anything.
+const ELEVATION_DEAD := 0.42
+
+## Band gains for the shaping, in dB, against AudioEffectEQ6's six bands:
+## 32, 100, 320, 1000, 3200 and 10000 Hz.
+##
+## Above is thinned and brightened, below is dulled and thickened, and below is
+## much the stronger of the two on purpose. Losing the top of a sound is the
+## unmistakable half of the cue - it is what a floor between you does - while
+## brightness on its own is subtle enough to be mistaken for "close".
+const ABOVE_EQ := [-3.0, -2.0, 0.0, 1.0, 3.0, 5.0]
+const BELOW_EQ := [2.0, 3.0, 1.0, 0.0, -4.0, -8.0]
+
+## Level to go with the shaping. Small: this is a tilt, not a second distance
+## model, and the EQ is doing the work. Below loses a little because cutting its
+## top end alone leaves it sounding near.
+const ELEVATION_TRIM := {
+	ABOVE_BUS: 1.0,
+	BELOW_BUS: -1.5,
+}
+
 ## How hard sound pans left and right with its position on screen.
 ##
 ## Multiplied by the project's audio/general/2d_panning_strength, which ships at
@@ -207,6 +254,8 @@ var _zip_frame := -1000
 
 
 func _ready() -> void:
+	_build_elevation_buses()
+
 	for i in POOL_SIZE:
 		var player := AudioStreamPlayer2D.new()
 		player.max_distance = MAX_DISTANCE
@@ -267,6 +316,55 @@ func _ready() -> void:
 
 	print("Audio: %s, %s out, %d Hz" % [
 		AudioServer.get_driver_name(), speaker_layout(), AudioServer.get_mix_rate()])
+
+
+## The Above and Below buses. Made in code rather than shipped as a bus layout
+## so the shaping lives next to the constants that describe it, and so a project
+## with no default_bus_layout.tres still gets them.
+func _build_elevation_buses() -> void:
+	_shape_bus(ABOVE_BUS, ABOVE_EQ)
+	_shape_bus(BELOW_BUS, BELOW_EQ)
+
+
+func _shape_bus(bus: StringName, gains: Array) -> void:
+	if AudioServer.get_bus_index(bus) != -1:
+		return
+	var index := AudioServer.bus_count
+	AudioServer.add_bus(index)
+	AudioServer.set_bus_name(index, bus)
+	AudioServer.set_bus_send(index, &"Master")
+	var eq := AudioEffectEQ6.new()
+	for band in mini(gains.size(), eq.get_band_count()):
+		eq.set_band_gain_db(band, gains[band])
+	AudioServer.add_bus_effect(index, eq)
+
+
+## Which bus a sound at this point belongs on: Above, Below, or Master for
+## anything level enough with the listener that shaping it would say nothing.
+##
+## Decided once, when the sound starts, which is all a gunshot or a footstep
+## needs - they are events, and an event does not move. The one sound that does
+## move is the zipline, and it re-asks every frame.
+func elevation_bus(at: Vector2) -> StringName:
+	var listener := Net.local_player
+	if listener == null:
+		return &"Master"
+	var offset := at - listener.global_position
+	var reach := offset.length()
+	# On top of the listener, where there is no direction of any kind to report.
+	if reach < 1.0:
+		return &"Master"
+	var steep := offset.y / reach
+	if absf(steep) < ELEVATION_DEAD:
+		return &"Master"
+	# Screen space, so up is negative y.
+	return BELOW_BUS if steep > 0.0 else ABOVE_BUS
+
+
+## What a sound on that bus is trimmed by. Master is untouched, which keeps
+## everything level with you sounding exactly as it did.
+func elevation_trim(bus: StringName) -> float:
+	return ELEVATION_TRIM.get(bus, 0.0)
 
 
 ## What the output device says it has, in words. Godot takes this from the device
@@ -459,7 +557,13 @@ func zipline(at: Vector2, moving: bool, source := 0) -> void:
 	if _zip == null or not _claim_zip(source, at):
 		return
 	_zip.global_position = at
-	_zip.volume_db = RECORDING_TRIM.zipline + master_db + CLEAR_LINE_TRIM
+	# Re-asked every frame, unlike every other sound: a rider is the one source
+	# in the game that travels between floors while you listen to it, and hearing
+	# it climb past you is most of what the cue is for.
+	var bus := elevation_bus(at)
+	_zip.bus = bus
+	_zip.volume_db = (RECORDING_TRIM.zipline + master_db + CLEAR_LINE_TRIM
+		+ elevation_trim(bus))
 	# Stopped and restarted rather than paused: stream_paused does not reliably
 	# take, and a zip picking up from the top when you start moving again sounds
 	# more like a rope than one resuming from the middle of a sample would.
@@ -585,7 +689,13 @@ func _play(stream: AudioStream, at: Vector2, volume_db: float, pitch: float,
 	# Set per call, not once on the player: the pool is shared, so the last sound
 	# to use a slot would otherwise dictate the curve of the next one.
 	player.attenuation = falloff
-	player.volume_db = volume_db + master_db + CLEAR_LINE_TRIM
+	# Panning has put the sound left or right of you; this is the half of the
+	# direction Godot's 2D audio does not carry. Set per call for the same reason
+	# the curve is: the pool is shared, and a slot that played something overhead
+	# must not colour whatever lands in it next.
+	var bus := elevation_bus(at)
+	player.bus = bus
+	player.volume_db = volume_db + master_db + CLEAR_LINE_TRIM + elevation_trim(bus)
 	player.pitch_scale = pitch
 	player.play()
 
