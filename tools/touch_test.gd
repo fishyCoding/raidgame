@@ -216,6 +216,44 @@ func _run() -> void:
 	_check("and the sights drop with it", not Input.is_action_pressed(&"aim"))
 	_check("move centred", is_zero_approx(_input.touch_move_axis))
 
+	# --- a tapped jump is a whole jump ---------------------------------------
+	#
+	# Player._update_jump cuts the rise short the moment `jump` stops being held,
+	# which is how a keyboard gets a short hop out of a quick press. A thumb has
+	# no slow press: the touch goes down and up inside a frame, so every jump on
+	# a phone was the shortest one available and the top of the level could not
+	# be reached at all. The button holds the action down on its own instead.
+	#
+	# Measured in height rather than in flags, because the flag was never the
+	# complaint - "I cannot get up there" was.
+	while not player.is_on_floor():
+		await physics_frame
+	var floor_y: float = player.global_position.y
+	var leap := _button_at(&"jump")
+	_touch(4, leap, true)
+	_touch(4, leap, false)
+	await physics_frame
+	_check("the jump survives the thumb leaving", Input.is_action_pressed(&"jump"))
+	var peak := floor_y
+	var airborne := 0
+	while airborne < 240:
+		peak = minf(peak, player.global_position.y)
+		if airborne > 6 and player.is_on_floor():
+			break
+		airborne += 1
+		await physics_frame
+	var rise: float = floor_y - peak
+	_say("tapped jump rose %.0f px of a %.0f px jump" % [rise, player.jump_height])
+	# Most of the way up, not the 45% a cut jump gets (Player.jump_cut). Not the
+	# full number either - the character is measured at its own origin and the
+	# peak is sampled per frame - so this is the gap between a real jump and a
+	# clipped one, which is all that was wrong.
+	_check("a tap gets the full jump, not a hop",
+		rise > player.jump_height * player.jump_cut + 8.0)
+	_check("and it lets go by itself afterwards", not Input.is_action_pressed(&"jump"))
+	while not player.is_on_floor():
+		await physics_frame
+
 	# --- crouch latches, it is not held --------------------------------------
 	#
 	# A posture you have to keep a thumb on is a posture you cannot hold while

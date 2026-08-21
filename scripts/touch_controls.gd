@@ -41,9 +41,27 @@ const STICK_GRAB := 1.55
 ## Kept clear of every edge. A phone has a notch on one side and a home indicator
 ## across the bottom, and a control under either is a control you cannot press.
 const SAFE := 54.0
-## Screen pixels of drag per pixel of aim. One to one: the aiming code has a
-## sensitivity of its own already, and two multipliers to tune is one too many.
-const AIM_DRAG := 1.0
+## Screen pixels of drag per pixel of aim.
+##
+## Was one to one, on the reasoning that Player.mouse_sensitivity already exists
+## and two multipliers is one too many. True, and it still made aiming on a phone
+## unusable - because a mouse has as much desk as it wants and a thumb has about
+## an inch of glass before it runs into the edge of the screen or its own palm.
+## Sharing a number with the mouse meant sharing an assumption that only the
+## mouse gets to make.
+##
+## This is the thumb's own multiplier, and it is the only thing that should ever
+## be tuned for touch: leave mouse_sensitivity to the desk.
+const AIM_DRAG := 2.4
+
+## How long a tapped button is held down for, in seconds.
+##
+## A tap is a press and a release inside one frame, and some actions read as
+## nothing at all when they arrive that way - see the jump button, which was
+## losing more than half its height to a thumb that was simply faster than a
+## held key. Long enough to cover a full rise (Player.jump_time_to_peak is
+## 0.38s), short enough that it is over before you could want to jump again.
+const TAP_HOLD := 0.45
 
 const PANEL := Color(0.08, 0.09, 0.12, 0.5)
 const RING := Color(0.62, 0.68, 0.78, 0.35)
@@ -54,6 +72,10 @@ const HELD_TINT := Color(0.98, 0.78, 0.35, 0.4)
 
 ## How a button behaves:
 ##   press   - down while the thumb is down, the ordinary case
+##   tap     - down for TAP_HOLD however briefly it was touched, and the thumb
+##             coming off does not end it. For actions that read how long you
+##             held them: a tap has no duration, so without this it reads as the
+##             shortest possible hold rather than as a press
 ##   toggle  - latches on, latches off, survives the thumb leaving
 ##   fire    - press, and an aim surface as well: drag from it to keep tracking
 ##   swap    - presses whichever hand you are *not* holding, worked out on the
@@ -64,8 +86,13 @@ const BUTTONS := [
 		"mode": "fire"},
 	{"action": &"aim", "label": "ADS", "at": Vector2(-350.0, -180.0), "r": 74.0,
 		"mode": "toggle"},
+	# Tapped, not pressed. The player cuts a jump short when you let go of it
+	# (Player.jump_cut), which is right for a key and wrong for glass: a thumb is
+	# off the button before the character has left the floor, so every jump on a
+	# phone was a 45% hop and the height was unreachable. Tap it and you get all
+	# of it, which is the only jump a phone can usefully offer.
 	{"action": &"jump", "label": "JUMP", "at": Vector2(-330.0, -420.0), "r": 62.0,
-		"mode": "press"},
+		"mode": "tap"},
 	# Left, under the steering thumb.
 	{"action": &"interact", "label": "USE", "at": Vector2(390.0, -150.0), "r": 62.0,
 		"mode": "press", "left": true},
@@ -137,6 +164,9 @@ var _pressed := {}
 ## action -> latched on. Toggles live here rather than in _pressed: the thumb
 ## leaves and the state stays.
 var _latched := {}
+## action -> seconds of hold left on a tap. Like _latched in that the thumb is
+## already gone, unlike it in that this runs out on its own.
+var _tapped := {}
 ## Set by the first real touch, after which the mouse is an echo.
 var _saw_touch := false
 ## True on hardware that sends real touches, where every mouse event is an echo
@@ -170,7 +200,8 @@ func _on_controls_changed(_touch: bool) -> void:
 	_set_action(&"aim", false)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	_age_taps(delta)
 	var touch := PlayerInput.is_touch()
 	# "A / D move ... SPACE jump" is a lie on a phone, and it sits exactly where
 	# the pills go.
@@ -219,6 +250,27 @@ func _process(_delta: float) -> void:
 	_set_action(&"crouch", _latched.get(&"crouch", false))
 	_set_action(&"aim", _latched.get(&"aim", false) or _holding(&"fire"))
 	queue_redraw()
+
+
+## Runs the clock down on anything tapped, and lets go when it reaches zero.
+##
+## Deliberately the first thing _process does, before any of the returns that
+## follow: a tap has nobody holding it, so if this were skipped for a frame -
+## the pad hidden, a screen opened - the action would stay pressed with nothing
+## left to release it.
+func _age_taps(delta: float) -> void:
+	if _tapped.is_empty():
+		return
+	for action in _tapped.keys():
+		var left: float = _tapped[action] - delta
+		if left > 0.0:
+			_tapped[action] = left
+			continue
+		_tapped.erase(action)
+		# Not if a thumb is genuinely holding it as well - the hold outlives the
+		# tap that started it.
+		if not _holding(action):
+			_set_action(action, false)
 
 
 func _exit_tree() -> void:
@@ -330,6 +382,11 @@ func _pointer(id: int, at: Vector2, down: bool) -> bool:
 			"toggle":
 				# No entry in _pressed: a latch has nothing to release.
 				_latched[button.action] = not _latched.get(button.action, false)
+			"tap":
+				# No entry in _pressed either, for the same reason - the thumb
+				# lifting must not end this one. _age_taps does that.
+				_tapped[button.action] = TAP_HOLD
+				_set_action(button.action, true)
 			"swap":
 				_hold(id, _other_hand())
 			"fire":
@@ -422,6 +479,9 @@ func _release_everything() -> void:
 	for id in _pressed:
 		_set_action(_pressed[id], false)
 	_pressed.clear()
+	for action in _tapped:
+		_set_action(action, false)
+	_tapped.clear()
 	_set_action(&"move_down", false)
 	_move_id = -2
 	_aim_id = -2
