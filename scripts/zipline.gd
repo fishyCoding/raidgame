@@ -19,6 +19,24 @@ extends Node2D
 const TOP_COLOUR := Color(1.0, 0.72, 0.28)
 const BOTTOM_COLOUR := Color(0.36, 0.72, 1.0)
 
+## What the cable turns while somebody is riding it - but only for a player
+## standing at one of its ends. See _warning_lit.
+const OCCUPIED_COLOUR := Color(1.0, 0.78, 0.2, 0.95)
+const OCCUPIED_WIDTH := 3.5
+
+## How close to an end you have to be standing for the cable to warn you.
+##
+## Roughly the distance a rider covers in the second before they arrive on a
+## default cable, which is the point: far enough out that the warning is worth
+## something, close enough that it only fires for the person actually about to
+## be landed on.
+const WARN_RANGE := 340.0
+
+## How often the cable checks whether anyone is on it. Cheap either way - a
+## handful of players against one segment - but this runs on every cable in the
+## level and there is nothing to be gained from doing it at the frame rate.
+const WATCH_INTERVAL := 0.1
+
 ## Ends of the cable, relative to this node.
 @export var top := Vector2(0, -300):
 	set(value):
@@ -57,15 +75,83 @@ const BOTTOM_COLOUR := Color(0.36, 0.72, 1.0)
 		_refresh()
 
 
+## True while somebody is riding this cable and the local player is standing at
+## one end of it. Drives the colour and nothing else.
+var _warning_lit := false
+var _watch_timer := 0.0
+
+
 func _ready() -> void:
 	add_to_group(&"zipline")
+	# The editor draws a cable nobody is riding, so it has no reason to look.
+	set_process(not Engine.is_editor_hint())
+
+
+## Watching for riders.
+##
+## Nothing is sent for this. A rider's `riding` flag is already replicated and so
+## is their position, so every machine can work out for itself that somebody is
+## on this particular cable - which is the whole trick, because the cable they
+## are on is not replicated and does not need to be.
+func _process(delta: float) -> void:
+	_watch_timer -= delta
+	if _watch_timer > 0.0:
+		return
+	_watch_timer = WATCH_INTERVAL
+	var lit := _someone_is_riding() and _at_an_end(Net.local_player)
+	if lit != _warning_lit:
+		_warning_lit = lit
+		queue_redraw()
+
+
+## Whether somebody *other than you* is hanging off this cable.
+##
+## Matched on position rather than on the cable itself: `riding` travels between
+## machines and the Zipline reference cannot, so a rider is somebody in the air
+## on this segment. Two cables would have to overlap for that to be wrong, and
+## then both lighting up is the right answer anyway.
+##
+## You do not count as a rider on your own screen. A ride starts at an end of
+## the cable, so counting yourself would flash the warning in your face every
+## time you grabbed one - telling you a thing you had just done.
+func _someone_is_riding() -> bool:
+	var me := Net.local_player
+	for body in Net.players():
+		if body == me:
+			continue
+		var rides: Variant = body.get(&"riding")
+		if typeof(rides) != TYPE_BOOL or not rides:
+			continue
+		if in_reach(body.global_position):
+			return true
+	return false
+
+
+## Whether a body is stood at either end of the cable, which is where a rider
+## arriving would be on top of them.
+##
+## Both ends, not just the far one: the danger is somebody appearing next to you,
+## and that happens at whichever end you are standing at.
+func _at_an_end(body: Node2D) -> bool:
+	if body == null or not is_instance_valid(body):
+		return false
+	var at := body.global_position
+	var to_top := at.distance_to(world_top())
+	var to_bottom := at.distance_to(world_bottom())
+	return minf(to_top, to_bottom) <= WARN_RANGE
 
 
 func _draw() -> void:
-	draw_line(bottom, top, colour, 2.0, true)
+	# A rope with somebody on it, seen from the end they are heading for. The
+	# cable is scenery for the whole raid until this moment, which is exactly why
+	# a colour is enough - nothing else about it ever changes.
+	var line := OCCUPIED_COLOUR if _warning_lit else colour
+	var width := OCCUPIED_WIDTH if _warning_lit else 2.0
+	draw_line(bottom, top, line, width, true)
 	# Anchors at both ends, so it reads as fixed to the structure.
 	for point in [top, bottom]:
-		draw_circle(point, 5.0, Color(colour.r, colour.g, colour.b, 0.9))
+		draw_circle(point, 6.0 if _warning_lit else 5.0,
+			Color(line.r, line.g, line.b, 0.9))
 	if Engine.is_editor_hint() and show_guides:
 		_draw_guides()
 
