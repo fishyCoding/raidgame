@@ -100,6 +100,16 @@ const BUTTONS := [
 		"mode": "toggle", "left": true},
 	{"action": &"grapple", "label": "HOOK", "at": Vector2(200.0, -390.0), "r": 62.0,
 		"mode": "press", "left": true},
+	# Pressed, not latched, even though the shield *is* a latch in the game.
+	# The latching lives in Player._update_shield, which flips on the press edge -
+	# so a pad button that held the action down would flip it once and then never
+	# again. One tap, one edge, one toggle.
+	#
+	# Left hand, with the movement controls rather than the shooting ones: the
+	# plates cost you speed, so putting them up is a decision about how you are
+	# moving and it belongs under the thumb that moves you.
+	{"action": &"shield", "label": "PLATES", "at": Vector2(530.0, -300.0), "r": 62.0,
+		"mode": "press", "left": true},
 ]
 
 ## Shown only when there is something under your feet worth opening. A body is

@@ -318,8 +318,46 @@ func _run() -> void:
 	# check is made from both sides: the shooter watching their health fall, and
 	# the target watching its own. Neither machine worked the hit out - the
 	# server did - so agreement between them is the whole point.
+	await _shield_travels(mine, theirs)
 	await _pvp(mine, theirs)
 	_finish()
+
+
+## The plates, seen from the other end of the map.
+##
+## `armored` is the only part of the shield that is sent - the 0.3s ramp is
+## re-derived on each machine - so what has to be true is that one player putting
+## them up is a thing the other player can see. It is the difference between a
+## body you can kill in one round and one you cannot, and worth nothing at all if
+## it stops at the machine it happened on.
+##
+## Client 1 raises and **never drops**, and client 2 polls until it sees it. That
+## asymmetry is not laziness: the two clients do not arrive here in step - they
+## shot different guards, and one of them started ten seconds later - so a raise
+## that was later undone gets read by the other side at whatever point in the
+## sequence it happens to have reached. The first draft did exactly that and
+## caught the replica mid-drop: `armored` already false, ramp still falling
+## through 0.83. A state that only ever goes one way can be sampled at any time.
+##
+## Which is why dropping is checked in tools/shield_test.gd instead, where there
+## is one machine and no clock to race.
+func _shield_travels(mine: Node2D, theirs: Node2D) -> void:
+	if _first:
+		mine.armored = true
+		await _wait(60)
+		_check("my own plates came up", mine.is_shielded())
+		return
+
+	var waited := 0
+	while not theirs.armored and waited < 900:
+		waited += 1
+		await physics_frame
+	_say("their plates arrived after %.1fs, ramp %.2f" % [waited / 60.0, theirs.shield])
+	_check("I can see their plates go up", theirs.armored)
+	# The ramp is local, so a replica has to run it out to full on its own off
+	# the bool rather than being told each step of it.
+	await _wait(60)
+	_check("and the ramp ran out on this machine too", theirs.is_shielded())
 
 
 ## Client 1 shoots client 2. Both run this; which side you are decides whether

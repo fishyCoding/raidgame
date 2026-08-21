@@ -359,6 +359,16 @@ func is_aim_held() -> bool:
 	return touch_aim_held or Input.is_action_pressed(&"aim")
 
 
+## True on the frame the shield is toggled (V, or the left shoulder on a pad).
+##
+## An edge, not a level, because the shield is a toggle in the game rather than
+## a thing you hold: one press flips it. The touch pad presses the real action,
+## so a thumb arrives here through exactly the same door a key does and there is
+## no touch field to check.
+func is_shield_just_pressed() -> bool:
+	return Input.is_action_just_pressed(&"shield")
+
+
 ## True while crouching (left control or C, for now).
 func is_crouch_held() -> bool:
 	return touch_crouch_held or Input.is_action_pressed(&"crouch")

@@ -12,6 +12,22 @@ extends CharacterBody2D
 @export var air_accel := 1500.0
 @export var air_friction := 450.0
 
+@export_group("Shield")
+## Seconds to bring the plates up, and the same to drop them.
+##
+## The whole mechanic is in this number. Long enough that flicking it on as a
+## round arrives does not save you - you are only protected once it is fully up -
+## and short enough that switching stance mid-fight is a thing you do rather than
+## a thing you commit to at the start of one.
+@export var shield_raise_time := 0.3
+## Top speed with the plates up, as a fraction of normal. Deliberately harsh:
+## the shield is the only thing standing between you and a one-shot death, so
+## the price of wearing it has to be one you feel every step.
+@export_range(0.1, 1.0) var shield_speed_scale := 0.45
+## And acceleration with it, so you lumber into motion rather than snapping to a
+## slower top speed.
+@export_range(0.1, 1.0) var shield_accel_scale := 0.55
+
 @export_group("Jump")
 ## Peak height of a full-held jump, in pixels.
 @export var jump_height := 100.0
@@ -324,6 +340,18 @@ var facing := 1
 var focus := 0.0
 ## 0 standing, 1 fully crouched.
 var crouch := 0.0
+## Whether the plates are *wanted* up. This is the toggle, and it is the only
+## part of the shield that travels.
+##
+## Replicated rather than the animation below it, unlike `crouch` which sends
+## the animated value. Two reasons: it is one bit against a float stream, and a
+## dropped packet mid-transition would leave somebody else's outline stuck
+## halfway up, where a dropped bool simply arrives a moment later and the ramp
+## catches up on its own.
+var armored := false
+## 0 plates down, 1 plates up. Derived on every machine from `armored`, never
+## sent - see _update_shield.
+var shield := 0.0
 ## Which insertion point the host put this body at, or -1 to work it out here.
 ## Set by Net before the character enters the tree.
 var insertion_index := -1
@@ -733,6 +761,7 @@ func _physics_process(delta: float) -> void:
 		# straight onto the cable, and sliding would fight it: floor snapping
 		# pulls you back down onto whatever you launched from, and the cables run
 		# past floors that would otherwise stop you halfway up.
+		_update_shield(delta)
 		_update_aim(delta)
 		_update_stow(delta)
 		_update_weapon()
@@ -741,6 +770,7 @@ func _physics_process(delta: float) -> void:
 		return
 	_update_grapple(delta)
 	_update_extraction(delta)
+	_update_shield(delta)
 	_update_crouch(delta)
 	_update_loot(delta)
 	_update_inventory_keys()
@@ -785,6 +815,8 @@ func _update_replica(delta: float) -> void:
 	# Their gun goes away too. `stowed` came over the wire; the ramp off it is
 	# run here rather than sent.
 	_update_stow(delta)
+	# Their plates, the same way: `armored` came over the wire, the ramp is local.
+	_ramp_shield(delta)
 	# Their rope. Riding pins velocity to zero and moves the body by position, so
 	# "are they actually travelling" has to come from the position itself.
 	if riding:
@@ -847,6 +879,36 @@ func _update_timers(delta: float) -> void:
 
 ## Crouching: slower, quieter, and a physically smaller target. The collision
 ## box shrinks from the top so your feet stay where they were.
+## The toggle, and the ramp it drives.
+##
+## Split the way the crouch is: this half reads the button and only ever runs on
+## the machine holding it, `_ramp_shield` runs everywhere and turns whatever
+## `armored` currently says into the animation. A replica gets the second half
+## and never pretends to read a key.
+func _update_shield(delta: float) -> void:
+	if PlayerInput.is_shield_just_pressed() and not is_downed:
+		armored = not armored
+	# Nothing to put the plates up for, and nothing holding them there.
+	if is_downed or not is_alive:
+		armored = false
+	_ramp_shield(delta)
+
+
+func _ramp_shield(delta: float) -> void:
+	var wanted := 1.0 if armored else 0.0
+	shield = move_toward(shield, wanted, delta / maxf(shield_raise_time, 0.001))
+
+
+## True only with the plates all the way up.
+##
+## The transition protects you from nothing, in either direction, and that is
+## deliberate: it is the entire cost of the toggle. Being able to tap the button
+## as a round arrives would make the shield free, and being covered on the way
+## back down would make dropping it free.
+func is_shielded() -> bool:
+	return shield >= 1.0
+
+
 func _update_crouch(delta: float) -> void:
 	# Down is not a posture you can stand up out of, so the input is ignored and
 	# the crouch is pinned at full.
@@ -1452,6 +1514,11 @@ func _update_run(delta: float) -> void:
 	# Aiming walks you down to a shooting pace; crouching slows you further.
 	speed_cap *= lerpf(1.0, ads_move_scale, focus)
 	speed_cap *= lerpf(1.0, crouch_speed_scale, crouch)
+	# And the plates, which cost more than either. Scaled by the ramp rather than
+	# by the toggle, so the weight arrives as they come up instead of landing on
+	# you in one frame.
+	speed_cap *= lerpf(1.0, shield_speed_scale, shield)
+	accel_scale *= lerpf(1.0, shield_accel_scale, shield)
 	# A crawl replaces the crouch scale rather than stacking on it, so the speed
 	# is a number you can reason about instead of two fractions multiplied.
 	if is_downed:
@@ -2086,10 +2153,6 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 	if not is_alive or _invulnerable > 0.0:
 		return
 
-	var height: float = (_shape.shape as RectangleShape2D).size.y
-	var hit := Damage.resolve(amount, at, global_position + _shape.position, height, inventory)
-	last_hit_headshot = hit.headshot
-
 	# Already on the ground: this is someone finishing the job. Armour is not
 	# consulted - it did not save you the first time and it is not going to now.
 	#
@@ -2109,6 +2172,40 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 		# Flat, like the damage: prone there is no head to report.
 		Damage.report_hit(get_tree(), false, not is_alive)
 		return
+
+	# Caught without the plates up, anything that reaches you ends the fight.
+	#
+	# Below the prone case and above Damage.resolve, and both halves of that
+	# matter.
+	#
+	# Below, because somebody already on the floor is being finished off and the
+	# shield has nothing to say about it: sending that through here would call
+	# _go_down on a body that is already down, which does nothing at all, and
+	# leave them unkillable.
+	#
+	# Above, because no vest or helmet is consulted - and so none should be spent
+	# either. resolve() burns durability on whatever it absorbs, and armour has
+	# no business wearing out stopping a round that was never going to be
+	# stopped. The shield was what was supposed to be between you and this.
+	#
+	# Nor does it matter where the round landed, so no head is reported - the
+	# same reasoning the prone case above uses. It is not a damage number at all:
+	# not a bonus you accumulate but a state you are in or out of, and being
+	# caught out of it is fatal rather than expensive.
+	#
+	# Routed through _go_down rather than _die for the reason an unprotected
+	# headshot already is - "lethal" here means you are on the floor with a
+	# bleed-out clock and somebody can still come and get you. See _go_down.
+	if not is_shielded():
+		last_hit_headshot = false
+		_go_down(true)
+		Damage.report_hit(get_tree(), false, true)
+		return
+
+	var height: float = (_shape.shape as RectangleShape2D).size.y
+	var hit := Damage.resolve(amount, at, global_position + _shape.position, height, inventory)
+	last_hit_headshot = hit.headshot
+
 
 	if hit.knockout:
 		# A round through an unprotected head puts you down rather than out. It
@@ -2248,6 +2345,8 @@ func _leave_the_kit_behind() -> void:
 func respawn() -> void:
 	global_position = _spawn
 	velocity = Vector2.ZERO
+	armored = false
+	shield = 0.0
 	health = max_health
 	_invulnerable = invulnerable_time
 	focus = 0.0

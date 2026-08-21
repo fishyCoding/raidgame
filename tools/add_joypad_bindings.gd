@@ -24,6 +24,12 @@ const BUTTONS := {
 	"interact": JOY_BUTTON_B,
 	"fire": JOY_BUTTON_X,
 	"grapple": JOY_BUTTON_Y,
+	# The shield is the exception to "four buttons will not cover sixteen
+	# actions": it is the one action you reach for *while* being shot at, and a
+	# shoulder is reachable without taking a thumb off a stick. A face button
+	# would cost you either aiming or moving at the moment you can afford
+	# neither.
+	"shield": JOY_BUTTON_LEFT_SHOULDER,
 }
 
 ## action -> [axis, direction]. The left stick walks; down on it is the

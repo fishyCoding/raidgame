@@ -1,9 +1,10 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
 [ext_resource type="Script" path="res://scripts/weapon.gd" id="2_weapon"]
 [ext_resource type="Script" path="res://scripts/reticle.gd" id="3_reticle"]
 [ext_resource type="Script" path="res://scripts/aim_line.gd" id="4_aimline"]
+[ext_resource type="Script" path="res://scripts/shield_outline.gd" id="5_shield"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_player"]
 size = Vector2(28, 48)
@@ -54,6 +55,9 @@ properties/9/replication_mode = 2
 properties/10/path = NodePath(".:stowed")
 properties/10/spawn = true
 properties/10/replication_mode = 2
+properties/11/path = NodePath(".:armored")
+properties/11/spawn = true
+properties/11/replication_mode = 2
 
 [node name="Player" type="CharacterBody2D" groups=["player"]]
 collision_layer = 4
@@ -78,6 +82,9 @@ polygon = PackedVector2Array(-9, -24, 9, -24, 9, -11, -9, -11)
 [node name="Face" type="Polygon2D" parent="Body"]
 color = Color(0.184314, 0.211765, 0.254902, 1)
 polygon = PackedVector2Array(3, -19, 12, -19, 12, -11, 3, -11)
+
+[node name="ShieldOutline" type="Node2D" parent="Body"]
+script = ExtResource("5_shield")
 
 [node name="AimPivot" type="Node2D" parent="."]
 position = Vector2(0, -6)

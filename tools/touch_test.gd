@@ -74,7 +74,7 @@ func _run() -> void:
 		reachable[entry.action] = true
 	for entry in _pad.all_pills():
 		reachable[entry.action] = true
-	for action in ["fire", "jump", "grapple", "interact", "aim", "crouch",
+	for action in ["fire", "jump", "grapple", "interact", "aim", "crouch", "shield",
 			"reload", "heal", "ultimate", "throw_1", "throw_2", "inventory", "map"]:
 		_check("%s has a button" % action, reachable.has(StringName(action)))
 	# move_left/right/down come off the stick rather than a button.
