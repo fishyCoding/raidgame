@@ -2,5 +2,8 @@
 .godot/
 /android/
 
-# Exported builds
-build/
+# Exported builds, except the Windows build we ship
+build/*
+!build/windows/
+build/windows/*
+!build/windows/Raid.exe
