@@ -2,8 +2,6 @@
 .godot/
 /android/
 
-# Exported builds, except the Windows build we ship
-build/*
-!build/windows/
-build/windows/*
-!build/windows/Raid.exe
+# Exported builds. The Windows build ships as a GitHub release asset - it is
+# 105 MB, over GitHub's 100 MB per-file push limit, so it cannot live here.
+build/
