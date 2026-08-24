@@ -4,17 +4,33 @@ extends RefCounted
 ## Where a round landed and what the armour did about it.
 ##
 ## Shared by the player and the guards so a headshot means the same thing to
-## both: a hit above the shoulders is lethal unless there is a sound helmet in
-## the way, and armour is spent stopping what it stops.
+## both: a hit above the shoulders counts double, armour subtracts from whatever
+## reaches it, and armour is spent stopping what it stops.
 
 ## Fraction of a body's height counted as head, measured from the top.
 const HEAD_FRACTION := 0.26
 
+## What a hit above the shoulders is worth, before any helmet gets a say.
+##
+## This used to be a flag rather than a number: an unhelmeted head ended the
+## fight whatever the health bar said, and a sound helmet made it survivable.
+## That is a rule you cannot tune - it has no answer to "how much better is a
+## heavy helmet than a light one" beyond yes and no.
+##
+## Doubling instead says the same thing in the model's own terms and keeps
+## saying it as the guns change. A rifle doing 51 to the body does 102 to an
+## unprotected head, which is still over a full health bar and still ends the
+## fight in one round - the old rule, arrived at rather than asserted. Put a
+## medium helmet in the way and the same round does 51, so it takes two. What a
+## helmet buys is no longer a binary; it is how many head hits you can eat.
+const HEADSHOT_MULTIPLIER := 2.0
+
+## Head hits chew through a helmet faster than body hits do a plate.
+const HELMET_WEAR := 1.6
+
 class Result extends RefCounted:
 	var amount := 0.0
 	var headshot := false
-	## True when the hit puts the target down regardless of health left.
-	var knockout := false
 	var armor_hit: Item = null
 
 
@@ -41,28 +57,24 @@ static func report_hit(_tree: SceneTree, headshot: bool, killed: bool) -> void:
 static func resolve(amount: float, at: Vector2, centre: Vector2, height: float,
 		kit: Inventory) -> Result:
 	var result := Result.new()
-	result.amount = amount
 	result.headshot = at.y <= centre.y - height * 0.5 + height * HEAD_FRACTION
+
+	# The multiplier lands before the armour does, so a helmet is subtracting
+	# from the doubled number rather than the raw one. That ordering is the
+	# whole reason a headshot still hurts through a good helmet: halve 102 and
+	# you have 51, which is twice what the same helmet leaves of a body shot.
+	if result.headshot:
+		amount *= HEADSHOT_MULTIPLIER
+	result.amount = amount
 
 	var worn: Item = null
 	if kit:
 		worn = kit.get_worn(Inventory.Wear.HELMET if result.headshot else Inventory.Wear.VEST)
-
-	if result.headshot:
-		# A helmet with anything left in it turns a killing shot into a bad one.
-		# Without one - or with a cracked one - there is no saving it.
-		if worn == null or not worn.armor.stops_headshots(worn.durability):
-			result.knockout = true
-			result.armor_hit = worn
-			return result
-		result.armor_hit = worn
-		result.amount = amount - worn.armor.absorbed(amount, worn.durability)
-		# Head hits chew through a helmet far faster than body hits do a plate.
-		worn.durability = maxf(worn.durability - amount * 1.6, 0.0)
+	if worn == null:
 		return result
 
-	if worn:
-		result.armor_hit = worn
-		result.amount = amount - worn.armor.absorbed(amount, worn.durability)
-		worn.durability = maxf(worn.durability - amount, 0.0)
+	result.armor_hit = worn
+	result.amount = amount - worn.armor.absorbed(amount, worn.durability)
+	worn.durability = maxf(
+		worn.durability - amount * (HELMET_WEAR if result.headshot else 1.0), 0.0)
 	return result

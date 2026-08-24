@@ -20,13 +20,41 @@ extends CharacterBody2D
 ## and short enough that switching stance mid-fight is a thing you do rather than
 ## a thing you commit to at the start of one.
 @export var shield_raise_time := 0.3
-## Top speed with the plates up, as a fraction of normal. Deliberately harsh:
-## the shield is the only thing standing between you and a one-shot death, so
-## the price of wearing it has to be one you feel every step.
-@export_range(0.1, 1.0) var shield_speed_scale := 0.45
+## Top speed with the plates up, as a fraction of normal.
+##
+## This used to be 0.45, which was priced against a shield that was the only
+## thing between you and dying to a single round. It is not that any more - the
+## vest reduces damage now rather than deciding whether you live - so a penalty
+## that made you a slow-moving target for the whole fight was paying a one-shot
+## price for a percentage benefit. Most of the cost has come off: enough that
+## you feel it and can be caught out by it, not so much that plating up means
+## giving up on getting anywhere.
+@export_range(0.1, 1.0) var shield_speed_scale := 0.82
 ## And acceleration with it, so you lumber into motion rather than snapping to a
 ## slower top speed.
-@export_range(0.1, 1.0) var shield_accel_scale := 0.55
+@export_range(0.1, 1.0) var shield_accel_scale := 0.88
+
+@export_group("Injuries")
+## A single hit costing at least this much health leaves a wound behind.
+##
+## Sits just under what a rifle round does through a vest (26), so the fight you
+## walked away from is the fight you are still carrying. A grazing hit is not
+## an injury; being properly shot is.
+@export var injury_threshold := 22.0
+## The most you can be carrying at once. Past this you are not more injured,
+## you are just as injured - a cap keeps the slow from compounding into being
+## unable to move at all.
+@export var injuries_max := 3
+## Top speed multiplier per injury, compounding. Three wounds and you are at
+## roughly three quarters pace.
+@export_range(0.5, 1.0) var injury_speed_scale := 0.92
+## Health lost per second, per injury. Slow on purpose: this is a clock that
+## makes you go and find a surgical kit, not a second way of being shot.
+@export var injury_bleed_per_second := 0.8
+## The bleed stops here rather than at zero. Untreated wounds leave you a wreck
+## that anything can finish, which is a fate you can still play out of; bleeding
+## you to death while you are looking for a kit is a fate you cannot.
+@export var injury_floor_health := 15.0
 
 @export_group("Jump")
 ## Peak height of a full-held jump, in pixels.
@@ -352,6 +380,12 @@ var armored := false
 ## 0 plates down, 1 plates up. Derived on every machine from `armored`, never
 ## sent - see _update_shield.
 var shield := 0.0
+## Wounds you are carrying out of fights you survived.
+##
+## Replicated because it is worth seeing on somebody else: a man limping is a
+## man who has been in something recently, and that is information worth having
+## before you decide whether to take him on.
+var injuries := 0
 ## Which insertion point the host put this body at, or -1 to work it out here.
 ## Set by Net before the character enters the tree.
 var insertion_index := -1
@@ -782,6 +816,8 @@ func _physics_process(delta: float) -> void:
 	# you can still move - it just goes through the rope.
 	if not is_grappling():
 		_update_run(delta)
+
+	_bleed_injuries(delta)
 
 	if is_downed:
 		_bleed_out(delta)
@@ -1519,6 +1555,10 @@ func _update_run(delta: float) -> void:
 	# you in one frame.
 	speed_cap *= lerpf(1.0, shield_speed_scale, shield)
 	accel_scale *= lerpf(1.0, shield_accel_scale, shield)
+	# And whatever you are still carrying from the last fight. Not scaled by
+	# anything and not ramped: a wound is not a stance you are holding, it is
+	# just true until somebody patches it.
+	speed_cap *= injury_speed_multiplier()
 	# A crawl replaces the crouch scale rather than stacking on it, so the speed
 	# is a number you can reason about instead of two fractions multiplied.
 	if is_downed:
@@ -1561,6 +1601,8 @@ func _update_jump(delta: float) -> void:
 func _update_weapon() -> void:
 	if PlayerInput.is_heal_just_pressed():
 		_use_medkit()
+	if PlayerInput.is_surgical_just_pressed():
+		_use_surgical()
 
 	# Debug: Y fills the meter, so an ultimate can be tried without playing a
 	# whole raid to charge it. If none is equipped it hands one over too -
@@ -1825,6 +1867,35 @@ func _use_medkit() -> void:
 				_audio.reload_finished(global_position)
 			return
 	_say_loot("no medkit")
+
+
+## Spends one use of a surgical kit: closes every wound and patches what the
+## closing is worth.
+##
+## Refuses when there is nothing to treat rather than quietly spending a use as
+## an expensive medkit. Kits are scarce and the mistake is unrecoverable, so the
+## refusal is the feature - if you wanted health back, the medkit is the item
+## for that and it is in the same bag.
+func _use_surgical() -> void:
+	if injuries <= 0:
+		_say_loot("nothing to stitch")
+		return
+	for grid in inventory.grids():
+		for item in grid.items:
+			if not item.is_surgical():
+				continue
+			var closed := injuries
+			injuries = 0
+			health = minf(health + item.heal, max_health)
+			item.count -= 1
+			if item.count <= 0:
+				grid.remove(item)
+			health_changed.emit(health, max_health)
+			_say_loot("stitched up (%d closed)" % closed)
+			if _audio:
+				_audio.reload_finished(global_position)
+			return
+	_say_loot("no surgical kit")
 
 
 ## Sticks a stim in yourself and gets up, at full health.
@@ -2173,49 +2244,27 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 		Damage.report_hit(get_tree(), false, not is_alive)
 		return
 
-	# Caught without the plates up, anything that reaches you ends the fight.
+	# The plates are what makes your armour armour.
 	#
-	# Below the prone case and above Damage.resolve, and both halves of that
-	# matter.
+	# This used to be a lethality gate: caught without them, anything that
+	# reached you ended the fight on the spot. That rule could not be tuned and
+	# could not be lost gracefully - one round, one death, no reading of the
+	# health bar that told you it was coming.
 	#
-	# Below, because somebody already on the floor is being finished off and the
-	# shield has nothing to say about it: sending that through here would call
-	# _go_down on a body that is already down, which does nothing at all, and
-	# leave them unkillable.
+	# It gates the vest instead now, which is the same decision priced in the
+	# model's own currency. Plated up, a rifle round costs 26 and it takes four;
+	# caught without them the same round costs the full 51 and it takes two. You
+	# are still deciding whether to be protected, you are still punished for
+	# guessing wrong, and now the punishment is a number you can watch arrive.
 	#
-	# Above, because no vest or helmet is consulted - and so none should be spent
-	# either. resolve() burns durability on whatever it absorbs, and armour has
-	# no business wearing out stopping a round that was never going to be
-	# stopped. The shield was what was supposed to be between you and this.
-	#
-	# Nor does it matter where the round landed, so no head is reported - the
-	# same reasoning the prone case above uses. It is not a damage number at all:
-	# not a bonus you accumulate but a state you are in or out of, and being
-	# caught out of it is fatal rather than expensive.
-	#
-	# Routed through _go_down rather than _die for the reason an unprotected
-	# headshot already is - "lethal" here means you are on the floor with a
-	# bleed-out clock and somebody can still come and get you. See _go_down.
-	if not is_shielded():
-		last_hit_headshot = false
-		_go_down(true)
-		Damage.report_hit(get_tree(), false, true)
-		return
-
+	# Passing null rather than the inventory is doing the work, and it is also
+	# what keeps durability honest: armour is only spent when it is actually
+	# stopping something, so plates you never raised cost you nothing but the
+	# cells they take up.
 	var height: float = (_shape.shape as RectangleShape2D).size.y
-	var hit := Damage.resolve(amount, at, global_position + _shape.position, height, inventory)
+	var kit: Inventory = inventory if is_shielded() else null
+	var hit := Damage.resolve(amount, at, global_position + _shape.position, height, kit)
 	last_hit_headshot = hit.headshot
-
-
-	if hit.knockout:
-		# A round through an unprotected head puts you down rather than out. It
-		# still ends the fight - you cannot shoot back from the floor - which is
-		# what a helmet is really buying you: the chance to stay standing.
-		_go_down(true)
-		# Reported as a kill: from the shooter's side putting someone on the
-		# floor is the shot landing, and they cannot see the bleed-out timer.
-		Damage.report_hit(get_tree(), true, true)
-		return
 
 	amount = hit.amount
 	health = maxf(health - amount, 0.0)
@@ -2233,11 +2282,55 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 
 	if health <= 0.0:
 		_go_down(false)
+	elif amount >= injury_threshold:
+		# Walked away from it, but not intact. Checked only on the surviving
+		# branch on purpose: a wound is something you carry, and the man who
+		# went down has a bleed-out clock to worry about instead.
+		_take_injury()
 
 	# Told from the body that was hit rather than from the round that hit it -
 	# same rule guards follow, and the only place that knows whether the shot
 	# finished anyone. Net routes the mark back to whoever pulled the trigger.
 	Damage.report_hit(get_tree(), hit.headshot, is_downed or not is_alive)
+
+
+## Picks up a wound, if there is room for another one.
+##
+## Deliberately not announced through a signal: the HUD reads `injuries` every
+## frame anyway, and a wound is a state you are in rather than an event that
+## happens once. What is worth saying out loud is the first one, because that is
+## the moment the rules changed for you.
+func _take_injury() -> void:
+	if injuries >= injuries_max:
+		return
+	injuries += 1
+	_say_loot("wounded (%d)" % injuries)
+
+
+## Wounds bleeding you, slowly, for as long as you leave them alone.
+##
+## Floors at injury_floor_health rather than at zero. The difference matters:
+## a floor makes untreated wounds a condition - you are a wreck, and anything
+## that finds you finishes you - where zero would make them a timer that kills
+## you while you are three rooms away from the kit that fixes them. One of those
+## is a reason to go looking; the other is a reason to have quit the raid.
+func _bleed_injuries(delta: float) -> void:
+	if injuries <= 0 or is_downed or not is_alive:
+		return
+	if health <= injury_floor_health:
+		return
+	var drained := injury_bleed_per_second * float(injuries) * delta
+	health = maxf(health - drained, injury_floor_health)
+	health_changed.emit(health, max_health)
+
+
+## Top speed multiplier from what you are carrying in you. Compounds per wound,
+## so the third one costs less than the first in absolute terms and the slow
+## never runs away with itself.
+func injury_speed_multiplier() -> float:
+	if injuries <= 0:
+		return 1.0
+	return pow(injury_speed_scale, float(injuries))
 
 
 ## The clock that runs while you are on the floor. Nobody has to shoot you again
@@ -2347,6 +2440,10 @@ func respawn() -> void:
 	velocity = Vector2.ZERO
 	armored = false
 	shield = 0.0
+	# A new body, so nothing carried out of the last one. Wounds persist through
+	# being picked up off the floor - that is the point of them - but not through
+	# going back to the start.
+	injuries = 0
 	health = max_health
 	_invulnerable = invulnerable_time
 	focus = 0.0

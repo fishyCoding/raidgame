@@ -18,7 +18,13 @@ extends Control
 
 signal deployed()
 
-const CREDITS := 4000
+## Doubled from 4000 while the new damage model is being played in.
+##
+## Kitting out now costs more than it did: there is a third armour tier to buy
+## into and a surgical kit is a thing you want in the bag before you need it,
+## and neither of those decisions is worth testing on a budget that only covers
+## one of them. A number to halve again once the loadouts have settled.
+const CREDITS := 8000
 ## Uses in one bought stack of stims. Buy several stacks if a cell each is worth
 ## it to you - the pocket and the pack both sell them.
 const REVIVES_PER_STACK := 5
@@ -102,10 +108,12 @@ const CATALOGUE := {
 	],
 	"helmet": [
 		{"kind": "armor", "path": "res://resources/armor/light_helmet.tres", "price": 400},
+		{"kind": "armor", "path": "res://resources/armor/medium_helmet.tres", "price": 750},
 		{"kind": "armor", "path": "res://resources/armor/heavy_helmet.tres", "price": 1100},
 	],
 	"vest": [
 		{"kind": "armor", "path": "res://resources/armor/light_vest.tres", "price": 500},
+		{"kind": "armor", "path": "res://resources/armor/medium_vest.tres", "price": 900},
 		{"kind": "armor", "path": "res://resources/armor/heavy_vest.tres", "price": 1400},
 	],
 	"backpack": [
@@ -144,6 +152,7 @@ const CATALOGUE := {
 		{"kind": "ammo", "ammo": &"12g", "rounds": 24, "price": 110},
 		{"kind": "ammo", "ammo": &".338", "rounds": 12, "price": 260},
 		{"kind": "medkit", "price": 350},
+		{"kind": "surgical", "price": 600},
 		{"kind": "revive", "price": 10},
 	],
 }
@@ -546,6 +555,8 @@ func _make(entry: Dictionary) -> Item:
 			return Item.from_ammo(entry.ammo, entry.rounds)
 		"medkit":
 			return Item.from_medkit(3)
+		"surgical":
+			return Item.from_surgical(2)
 		"revive":
 			return Item.from_revive(REVIVES_PER_STACK)
 	return null
@@ -813,7 +824,7 @@ func _draw_stack(item: Item, box: Rect2) -> void:
 	draw_rect(box, Color(colour.r * 0.3, colour.g * 0.3, colour.b * 0.34))
 	draw_rect(box, colour, false, 1.0)
 
-	var counted := item.is_ammo() or item.is_medkit()
+	var counted := item.is_ammo() or item.is_medkit() or item.is_surgical()
 	var tight := box.size.y < 34.0
 	var text_size := 9 if tight else 10
 	draw_string(font, box.position + Vector2(0.0, 11.0 if tight else 15.0), item.title(),

@@ -17,6 +17,33 @@ extends Resource
 ## of skill tells you where inside that cone a round will go. A gun that climbs
 ## hard but scatters little rewards control; one that barely climbs but sprays is
 ## a different problem entirely.
+##
+## --- the damage model -------------------------------------------------------
+##
+## Every gun is tuned against one benchmark, the assault rifle, and against one
+## body: 100 health, a medium vest, and a medium helmet. Three numbers describe
+## a gun in that world and all three are readable off the stats below:
+##
+##   rounds to kill  = ceil(100 / (damage * 0.51))   through a medium vest
+##   time to kill    = (rounds - 1) * get_shot_interval()
+##   range           = get_half_damage_range(), where damage has halved
+##
+## The AR sits at 620 rpm and 51 damage, which is 26 through a medium vest, four
+## rounds, and 290 ms - and two rounds flat against someone with no vest on,
+## because 51 twice is over a full bar. That last part is the floor the whole
+## model is built on: nobody dies to one body shot, and everybody dies to two if
+## they are caught with nothing on.
+##
+## Range is quoted as the distance at which damage has halved, not as the point
+## the falloff starts or stops. It is the only one of the three that describes
+## the gun rather than the curve, so it is the one worth comparing across guns,
+## and get_half_damage_range() reads it straight back out of the curve. To place
+## a new gun at a chosen half-damage range R, pick where full damage should stop
+## (S) and what the far floor is (m), then:
+##
+##   falloff_end = S + 2 * (1 - m) * (R - S)
+##
+## which is just the linear falloff solved for factor(R) = 0.5.
 
 @export var display_name := "Weapon"
 @export var short_name := "GUN"
@@ -157,6 +184,22 @@ func get_damage_factor(distance: float) -> float:
 		return min_damage_factor
 	var t := (distance - falloff_start) / maxf(falloff_end - falloff_start, 0.001)
 	return lerpf(1.0, min_damage_factor, t)
+
+
+## Where this gun's damage has halved, in pixels. The headline range number.
+##
+## Derived rather than stored, so it cannot drift away from the curve it is
+## describing - change any of the three falloff dials and this follows. Returns
+## INF for a gun whose floor never reaches half, which is a real answer: a
+## weapon that still does 60% of its damage at the edge of the map does not have
+## a half-damage range, it just has a range.
+func get_half_damage_range() -> float:
+	if min_damage_factor > 0.5:
+		return INF
+	if falloff_start >= falloff_end:
+		return falloff_start
+	var span := falloff_end - falloff_start
+	return falloff_start + span * (0.5 / maxf(1.0 - min_damage_factor, 0.001))
 
 
 ## What one trigger pull does at point blank, buckshot included.

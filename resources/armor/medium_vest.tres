@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="ArmorData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/armor_data.gd" id="1_armor"]
+
+[resource]
+script = ExtResource("1_armor")
+display_name = "Kevlar Vest"
+short_name = "KEVLAR"
+slot = 1
+protection = 0.49
+max_durability = 150
+failure_point = 0.22
+grid_size = Vector2i(3, 3)
+tint = Color(0.5, 0.53, 0.5, 1)

@@ -87,16 +87,60 @@ func _run() -> void:
 	_check("and you are uncovered before they are down", not _player.is_shielded())
 	_check("with the ramp still on its way", _player.shield > 0.0)
 
-	# --- and then a hit is fatal --------------------------------------------
+	# --- and then the same round costs twice as much -------------------------
+	#
+	# This used to assert that one round of any size ended the fight. It does not
+	# any more, and the replacement is the point of the rework: the plates gate
+	# whether the vest applies rather than whether you live, so being caught out
+	# is a doubled bill instead of a coin flip. Same decision, priced in health.
+	var vest: ArmorData = load("res://resources/armor/medium_vest.tres")
+	_player.inventory.set_worn(Inventory.Wear.VEST, Item.from_armor(vest))
+
+	_player.health = _player.max_health
+	_player.injuries = 0
+	_press(&"shield")
+	while not _player.is_shielded():
+		await physics_frame
 	_player._invulnerable = 0.0
-	_player.take_damage(1.0, _player.global_position, Vector2.RIGHT)
+	var plated_from: float = _player.health
+	_player.take_damage(51.0, _player.global_position, Vector2.RIGHT)
 	await _wait(2)
-	_check("caught without them, one round ends it", _player.is_downed)
-	# Down rather than gone: the bleed-out clock and the revive both still exist,
-	# which is what "lethal" has always meant in this game.
-	_check("which puts you on the floor, not out of the raid", _player.is_alive)
-	_say("1 dmg with the plates down: downed=%s alive=%s" % [
-		_player.is_downed, _player.is_alive])
+	var plated_cost: float = plated_from - _player.health
+
+	_player.health = _player.max_health
+	_player.injuries = 0
+	_press(&"shield")
+	while _player.is_shielded():
+		await physics_frame
+	_player._invulnerable = 0.0
+	var bare_from: float = _player.health
+	_player.take_damage(51.0, _player.global_position, Vector2.RIGHT)
+	await _wait(2)
+	var bare_cost: float = bare_from - _player.health
+
+	_say("a rifle round costs %.0f plated, %.0f caught out" % [plated_cost, bare_cost])
+	_check("plated, the vest takes its half", absf(plated_cost - 26.0) < 0.5)
+	_check("caught out, the round lands whole", absf(bare_cost - 51.0) < 0.5)
+	_check("neither of which is instantly fatal", not _player.is_downed)
+	_check("but two of the second one would be", bare_cost * 2.0 >= _player.max_health)
+
+	# --- two rounds, caught out, is the floor the model stands on ------------
+	#
+	# The section below needs a man on the floor, and this is now how one gets
+	# there: the old one-round rule used to put him there as a side effect, and
+	# with that gone the knockdown has to be earned. Which makes this the right
+	# place to pin the rule that replaced it.
+	_player.health = _player.max_health
+	_player.injuries = 0
+	_player._invulnerable = 0.0
+	_player.take_damage(51.0, _player.global_position, Vector2.RIGHT)
+	await _wait(2)
+	_check("one round to an unplated body is survivable", not _player.is_downed)
+	_player._invulnerable = 0.0
+	_player.take_damage(51.0, _player.global_position, Vector2.RIGHT)
+	await _wait(2)
+	_check("the second one puts you down", _player.is_downed)
+	_check("on the floor rather than out of the raid", _player.is_alive)
 
 	# --- being down takes them away -----------------------------------------
 	_press(&"shield")
@@ -141,8 +185,14 @@ func _run() -> void:
 	var plated := await _top_speed(60)
 	_say("top speed: %.0f px/s open, %.0f px/s plated (%.0f%%)" % [
 		open_ground, plated, 100.0 * plated / maxf(open_ground, 1.0)])
-	_check("the plates slow you down considerably", plated < open_ground * 0.7)
-	_check("but they do not stop you moving", plated > 10.0)
+	# Loosened deliberately from "considerably" (it was under 70% of open ground).
+	# The plates were priced against being the only thing between you and a
+	# one-shot death; now that they gate the vest instead, most of that cost has
+	# come off. Still a cost you can be caught out by - the window either side is
+	# what makes the toggle a decision - but no longer a commitment to walking.
+	_check("the plates still slow you", plated < open_ground * 0.95)
+	_check("but nothing like as much as they did", plated > open_ground * 0.7)
+	_check("and they do not stop you moving", plated > 10.0)
 
 	# --- it travels ----------------------------------------------------------
 	#

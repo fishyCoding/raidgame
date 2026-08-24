@@ -58,6 +58,9 @@ properties/10/replication_mode = 2
 properties/11/path = NodePath(".:armored")
 properties/11/spawn = true
 properties/11/replication_mode = 2
+properties/12/path = NodePath(".:injuries")
+properties/12/spawn = true
+properties/12/replication_mode = 2
 
 [node name="Player" type="CharacterBody2D" groups=["player"]]
 collision_layer = 4

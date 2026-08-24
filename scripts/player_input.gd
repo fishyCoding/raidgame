@@ -398,6 +398,20 @@ func is_heal_just_pressed() -> bool:
 	return Input.is_action_just_pressed(&"heal")
 
 
+## True on the frame the surgical kit button is pressed (G, for now).
+##
+## A key of its own rather than a second press of the heal key. The two items
+## answer different problems and the wrong one is worse than nothing - patching
+## up while you are bleeding from three wounds spends a medkit on health that
+## drains straight back out - so choosing between them should not be a matter of
+## how many times you tapped H.
+## No touch field beside it, unlike the heal button: the SURGERY pill presses
+## the action itself through Input.action_press, so the keyboard path is the
+## only one that needs reading here.
+func is_surgical_just_pressed() -> bool:
+	return Input.is_action_just_pressed(&"surgical")
+
+
 ## True on the frame the ultimate is fired (Q, for now).
 func is_ultimate_just_pressed() -> bool:
 	return Input.is_action_just_pressed(&"ultimate")

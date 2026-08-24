@@ -143,6 +143,11 @@ const PILLS_LEFT := [
 	{"action": &"inventory", "label": "BAG"},
 	{"action": &"map", "label": "MAP"},
 	{"action": &"heal", "label": "MEDKIT"},
+	# Next to the medkit, because the pair of them is the decision: one puts the
+	# bar back up and one stops it falling, and picking the wrong one wastes a
+	# scarce item. Two pills side by side make that a choice you can see rather
+	# than one you have to remember.
+	{"action": &"surgical", "label": "SURGERY"},
 ]
 const PILLS_RIGHT := [
 	{"action": &"swap", "label": "SWAP", "mode": "swap"},

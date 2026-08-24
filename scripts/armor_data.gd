@@ -21,8 +21,15 @@ enum Slot { HEAD, BODY }
 ## costs durability whether or not it saved you much.
 @export var max_durability := 100.0
 
-## Durability below this fraction and a helmet no longer stops a headshot: the
-## shell is cracked, and the next round through it ends you.
+## Durability below this fraction and the piece is scrap: it stops nothing at
+## all, and the cells it costs you are the only thing it is still doing.
+##
+## It used to mean something narrower - the point where a helmet stopped turning
+## headshots aside - which only ever applied to helmets, and only because
+## headshots were a yes-or-no rule. Now that both are damage, one failure point
+## covers both pieces: a plate that has taken a magazine is not thin armour, it
+## is a broken plate, and the last quarter of the bar should not be quietly
+## saving you.
 @export_range(0.0, 1.0) var failure_point := 0.25
 
 ## Footprint in inventory cells.
@@ -35,12 +42,12 @@ enum Slot { HEAD, BODY }
 ## out as it breaks rather than failing all at once, so the last few points are
 ## still worth something.
 func absorbed(amount: float, durability: float) -> float:
-	if durability <= 0.0:
+	if not is_sound(durability):
 		return 0.0
 	var condition := clampf(durability / maxf(max_durability, 1.0), 0.0, 1.0)
 	return amount * protection * lerpf(0.35, 1.0, condition)
 
 
-## True while this helmet is still sound enough to stop a round to the head.
-func stops_headshots(durability: float) -> bool:
+## True while there is enough of this piece left to be worth wearing.
+func is_sound(durability: float) -> bool:
 	return durability > max_durability * failure_point

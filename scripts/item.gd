@@ -12,7 +12,7 @@ extends RefCounted
 ## rounds is one cell whatever the calibre, because what limits ammunition is
 ## the stack size, not the footprint.
 
-enum Kind { WEAPON, AMMO, ARMOR, MEDKIT, THROWABLE, ULTIMATE, BACKPACK, REVIVE }
+enum Kind { WEAPON, AMMO, ARMOR, MEDKIT, THROWABLE, ULTIMATE, BACKPACK, REVIVE, SURGICAL }
 
 ## Rounds per stack, by calibre. Fat rifle rounds stack smaller than pistol
 ## ammunition, which is what makes carrying a sniper rifle expensive in space
@@ -93,6 +93,26 @@ static func from_medkit(uses := 3, heal_each := 45.0) -> Item:
 	return item
 
 
+## A surgical kit: the only thing that closes wounds.
+##
+## A medkit and this one are not interchangeable, and the split is the point. A
+## medkit puts the bar back up and does nothing about why it keeps falling - use
+## one while you are carrying wounds and you will watch the health you just paid
+## for drain straight back out. This is the one that fixes the cause, and it
+## costs more space and more time to say so.
+##
+## Clears every wound at once rather than one per use. Wounds are not a stack
+## you whittle down - being patched up is a state, and half-treating yourself is
+## not a decision anybody would make on purpose.
+static func from_surgical(uses := 2) -> Item:
+	var item := Item.new()
+	item.kind = Kind.SURGICAL
+	item.size = Vector2i(2, 2)
+	item.count = uses
+	item.heal = 25.0
+	return item
+
+
 ## A stim you can stick in yourself on the floor. One use puts you back on your
 ## feet at full health.
 ##
@@ -163,7 +183,7 @@ func to_wire() -> Dictionary:
 		out["durability"] = durability
 	elif is_ultimate():
 		out["charge"] = charge
-	elif is_medkit():
+	elif is_medkit() or is_surgical():
 		out["heal"] = heal
 	elif is_ammo():
 		out["ammo"] = String(ammo_type)
@@ -213,6 +233,9 @@ static func from_wire(wire: Dictionary) -> Item:
 			item = Item.from_medkit(count_in, wire.get("heal", 45.0))
 		Kind.REVIVE:
 			item = Item.from_revive(count_in)
+		Kind.SURGICAL:
+			item = Item.from_surgical(count_in)
+			item.heal = wire.get("heal", 25.0)
 
 	if item == null:
 		return null
@@ -239,6 +262,10 @@ func is_medkit() -> bool:
 
 func is_revive() -> bool:
 	return kind == Kind.REVIVE
+
+
+func is_surgical() -> bool:
+	return kind == Kind.SURGICAL
 
 
 func is_throwable() -> bool:
@@ -276,6 +303,8 @@ func title() -> String:
 		return armor.short_name
 	if is_medkit():
 		return "MEDKIT"
+	if is_surgical():
+		return "SURGICAL"
 	if is_revive():
 		return "STIM"
 	if is_backpack():
@@ -293,6 +322,8 @@ func label() -> String:
 		return "%s %d%%" % [armor.short_name, roundi(condition() * 100.0)]
 	if is_medkit():
 		return "MEDKIT x%d" % count
+	if is_surgical():
+		return "SURGICAL x%d" % count
 	if is_revive():
 		return "STIM x%d" % count
 	if is_backpack():
@@ -320,6 +351,10 @@ func tint() -> Color:
 		return armor.tint
 	if is_medkit():
 		return Color(0.55, 0.85, 0.62)
+	# Colder and bluer than a medkit, because reaching for the wrong one of the
+	# two in a hurry is exactly the mistake this system can produce.
+	if is_surgical():
+		return Color(0.48, 0.78, 0.88)
 	if is_backpack():
 		return backpack.tint
 	if gadget:

@@ -613,16 +613,12 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 	if not is_brain():
 		return
 
+	# Same rule as the player's, and it no longer needs a branch of its own: a
+	# head hit is worth double before any helmet subtracts from it, so an
+	# unhelmeted guard takes 102 from a rifle round and a guard has 90. He still
+	# drops to one round through the head, and now a helmet buys him a specific
+	# amount of not-dropping rather than a yes.
 	var hit := Damage.resolve(amount, at, global_position, size.y, weapon.inventory)
-	if hit.knockout:
-		# Same rule as the player's: an unhelmeted head ends it, whatever the
-		# health bar says. Worth aiming for, and worth looting a helmet to deny.
-		_health = 0.0
-		_spawn_damage_number(amount, at)
-		_health_fill.scale.x = 0.0
-		Damage.report_hit(get_tree(), true, true)
-		_die()
-		return
 	amount = hit.amount
 	_health = maxf(_health - amount, 0.0)
 	_health_fill.scale.x = _health / max_health

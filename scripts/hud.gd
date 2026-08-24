@@ -179,6 +179,8 @@ func _draw_health() -> void:
 	draw_string(_font, Vector2(bar.position.x, bar.position.y - 6.0),
 		"%d HP" % roundi(_player.health), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, DIM)
 
+	_draw_injuries(bar)
+
 	if not _player.is_alive:
 		draw_string(_font, Vector2(bar.position.x, bar.position.y - 6.0), "DOWN",
 			HORIZONTAL_ALIGNMENT_RIGHT, bar.size.x, 12, LOW_AMMO)
@@ -194,6 +196,36 @@ func _draw_health() -> void:
 	_draw_recon_pings()
 	if _player.extracting:
 		_draw_extraction(_player.extracting)
+
+
+## Wounds, as notches under the left end of the health bar.
+##
+## Drawn against the bar rather than off in a corner because the two are the
+## same story: the notches are why the bar is sliding, and a wound count you
+## have to go looking for is a wound count nobody reads. The floor the bleed
+## stops at is marked on the bar itself for the same reason - it turns "the bar
+## keeps dropping" into "the bar stops there", which is the difference between
+## a bug and a mechanic.
+func _draw_injuries(bar: Rect2) -> void:
+	if _player.injuries <= 0:
+		return
+
+	# Where the bleeding gives up, so it is obvious this is not a slow death.
+	var floor_x: float = (bar.position.x + bar.size.x
+		* clampf(_player.injury_floor_health / maxf(_player.max_health, 1.0), 0.0, 1.0))
+	draw_line(Vector2(floor_x, bar.position.y),
+		Vector2(floor_x, bar.position.y + bar.size.y), LOW_AMMO, 1.0)
+
+	var notch := 9.0
+	var gap := 4.0
+	var at := Vector2(bar.position.x, bar.position.y + bar.size.y + 5.0)
+	for i in _player.injuries:
+		draw_rect(Rect2(at + Vector2(float(i) * (notch + gap), 0.0),
+			Vector2(notch, 3.0)), LOW_AMMO)
+
+	var label := "WOUNDED x%d" % _player.injuries
+	draw_string(_font, Vector2(at.x + float(_player.injuries) * (notch + gap) + 4.0,
+		at.y + 4.0), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, LOW_AMMO)
 
 
 ## Hooks in hand, as pips rather than a number - how many you have is a glance,
