@@ -398,7 +398,10 @@ func is_heal_just_pressed() -> bool:
 	return Input.is_action_just_pressed(&"heal")
 
 
-## True on the frame the surgical kit button is pressed (G, for now).
+## True on the frame the surgical kit button is pressed (X on a keyboard).
+##
+## X rather than G: G is the first throwable slot, and the two shared a key until
+## a wounded man reaching for a kit threw a grenade at his own feet instead.
 ##
 ## A key of its own rather than a second press of the heal key. The two items
 ## answer different problems and the wrong one is worse than nothing - patching

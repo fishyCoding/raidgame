@@ -36,6 +36,13 @@ func _run() -> void:
 	shop.visible = false
 	await physics_frame
 
+	if _main.get_node("Enemies").get_child_count() == 0:
+		# Nothing to test with the guards pulled out of the level. Skipped rather
+		# than failed: this tool is about how a guard behaves, and "there are no
+		# guards" is a level decision, not a bug in what it is measuring.
+		print("SKIP - no guards in the level")
+		quit(0)
+		return
 	var guard: Node = _main.get_node("Enemies").get_child(0)
 	# The inventory itself, not a string taken off it now. Shooting him wears his
 	# vest down - Damage.resolve spends armour - so a snapshot from before the

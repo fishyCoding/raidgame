@@ -59,6 +59,41 @@ func _init() -> void:
 	var heads := _rounds_to_kill(damage, ar, "medium_helmet", true)
 	_eq("AR headshots to kill, medium helmet", float(heads), 2.0)
 
+	# --- the armour ladder --------------------------------------------------
+	#
+	# The medium vest above is the benchmark, but it is not what anyone is
+	# actually wearing when they land: the deploy loadout is the light one. Four
+	# rounds has to be true of the vest you are issued, not only of the vest you
+	# might buy, or the number is a spec nobody plays against.
+	#
+	# The rest of the ladder is pinned for the same reason it exists. Every tier
+	# has to buy something you can count - a round, or a head hit - or the shop
+	# is selling a number that does not change the fight.
+	_eq("AR rounds to kill, light vest (the deploy loadout)",
+		float(_rounds_to_kill(damage, ar, "light_vest", false)), 4.0)
+	_eq("AR rounds to kill, heavy vest",
+		float(_rounds_to_kill(damage, ar, "heavy_vest", false)), 5.0)
+	_eq("AR headshots to kill, light helmet",
+		float(_rounds_to_kill(damage, ar, "light_helmet", true)), 2.0)
+	_eq("AR headshots to kill, heavy helmet",
+		float(_rounds_to_kill(damage, ar, "heavy_helmet", true)), 3.0)
+
+	# Armour has to survive the fight it is priced for. It used to be charged
+	# the whole incoming round rather than the part it stopped, which left a
+	# medium vest scrap after three rifle rounds - so the four-round kill above
+	# was only ever true of the first magazine, and nothing on screen said so.
+	var vest: Inventory = _kit("medium_vest", 1)
+	var worn: Item = vest.get_worn(Inventory.Wear.VEST)
+	for i in 4:
+		damage.resolve(ar.damage, Vector2.ZERO, Vector2.ZERO, BODY_HEIGHT, vest)
+	if not worn.armor.is_sound(worn.durability):
+		_failures.append("a medium vest is scrap after the four rounds it is "
+			+ "meant to survive (%.0f of %.0f left)"
+			% [worn.durability, worn.armor.max_durability])
+	else:
+		print("  ok   %-42s %.0f/%.0f" % ["medium vest left after four rounds",
+			worn.durability, worn.armor.max_durability])
+
 	# --- the benchmark has to actually be the benchmark ---------------------
 	#
 	# Worth pinning because the obvious tuning gets this backwards. Armour wears

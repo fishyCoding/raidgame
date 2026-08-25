@@ -41,6 +41,20 @@ extends CharacterBody2D
 ## walked away from is the fight you are still carrying. A grazing hit is not
 ## an injury; being properly shot is.
 @export var injury_threshold := 22.0
+## Chance an armoured hit that clears the threshold still leaves a wound.
+##
+## Caught with nothing on, a round that hurts always wounds - there was nothing
+## between it and you, and the threshold alone is the right rule. Behind plates
+## the threshold on its own is the wrong one: what gets through a vest is a
+## little over the bar by design, so every single exchange you survived would
+## leave a wound and you would limp out of every fight you won carrying three.
+##
+## Armour is what turns it back into a chance. Plates spread a round out rather
+## than deleting it, so being properly hit through them can still open you up -
+## roughly one hit in three does - but walking away plated usually means walking
+## away whole. That is most of what you are buying: not only the extra rounds it
+## takes to put you down, but the fight afterwards being one you can still run.
+@export_range(0.0, 1.0) var injury_armored_chance := 0.34
 ## The most you can be carrying at once. Past this you are not more injured,
 ## you are just as injured - a cap keeps the slow from compounding into being
 ## unable to move at all.
@@ -2282,7 +2296,7 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 
 	if health <= 0.0:
 		_go_down(false)
-	elif amount >= injury_threshold:
+	elif amount >= injury_threshold and _wounds_you(hit):
 		# Walked away from it, but not intact. Checked only on the surviving
 		# branch on purpose: a wound is something you carry, and the man who
 		# went down has a bleed-out clock to worry about instead.
@@ -2292,6 +2306,24 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 	# same rule guards follow, and the only place that knows whether the shot
 	# finished anyone. Net routes the mark back to whoever pulled the trigger.
 	Damage.report_hit(get_tree(), hit.headshot, is_downed or not is_alive)
+
+
+## Whether a hit you survived leaves something behind.
+##
+## Rolled here rather than folded into the threshold because the two say
+## different things. The threshold is about the round - was this a graze or were
+## you properly shot. This is about what was in the way, and it is the only
+## place armour gets to speak up after the damage is already worked out.
+##
+## Local, and deliberately not rolled by whoever fired: take_damage has already
+## handed off to the owner by this point, so the machine deciding whether you
+## are wounded is the one whose body it is. `injuries` replicates outwards from
+## there like health does, so everyone sees the same answer without anyone
+## needing to agree on a die roll.
+func _wounds_you(hit: Damage.Result) -> bool:
+	if hit.armor_hit == null:
+		return true
+	return randf() < injury_armored_chance
 
 
 ## Picks up a wound, if there is room for another one.

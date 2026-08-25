@@ -17,8 +17,13 @@ enum Slot { HEAD, BODY }
 ## Fraction of an incoming hit absorbed while the piece is intact.
 @export_range(0.0, 0.95) var protection := 0.5
 
-## How much damage the piece can soak before it is scrap. Every hit it absorbs
-## costs durability whether or not it saved you much.
+## How much damage the piece can soak before it is scrap.
+##
+## Read it literally: this is a budget of damage the piece will absorb, and each
+## hit spends what that hit actually stopped rather than what it arrived with.
+## The distinction is the difference between armour that lasts the fight it was
+## bought for and armour that is scrap three rounds in - see the note in
+## Damage.resolve, which is where the spending happens.
 @export var max_durability := 100.0
 
 ## Durability below this fraction and the piece is scrap: it stops nothing at

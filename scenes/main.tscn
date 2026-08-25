@@ -4,7 +4,6 @@
 [ext_resource type="Script" uid="uid://xeib8hy0neca" path="res://scripts/hud.gd" id="4_hud"]
 [ext_resource type="Texture2D" uid="uid://r6rxopipv1df" path="res://resources/pixil-frame-0(2).png" id="5_jbj1t"]
 [ext_resource type="Script" uid="uid://bcxfmp5s3q1rv" path="res://scripts/vision_system.gd" id="5_vision"]
-[ext_resource type="PackedScene" path="res://scenes/enemy.tscn" id="6_enemy"]
 [ext_resource type="Texture2D" uid="uid://bh864rkftdeep" path="res://resources/pixil-frame-0(3).png" id="6_muem4"]
 [ext_resource type="Script" uid="uid://oshl4qhxdbwj" path="res://scripts/inventory_ui.gd" id="7_invui"]
 [ext_resource type="Script" uid="uid://ds77uggwicvrj" path="res://scripts/screens.gd" id="8_screens"]
@@ -775,39 +774,6 @@ position = Vector2(1749, -958)
 display_name = "MAST DECK"
 
 [node name="Enemies" type="Node2D" parent="." unique_id=1002818592]
-
-[node name="GuardYard" parent="Enemies" unique_id=2096302872 instance=ExtResource("6_enemy")]
-position = Vector2(-1770, 395)
-
-[node name="GuardYard2" parent="Enemies" unique_id=692818654 instance=ExtResource("6_enemy")]
-position = Vector2(-1765, -87)
-
-[node name="GuardYard3" parent="Enemies" unique_id=18484775 instance=ExtResource("6_enemy")]
-position = Vector2(-1715, -662)
-
-[node name="GuardYard11" parent="Enemies" unique_id=1148716876 instance=ExtResource("6_enemy")]
-position = Vector2(-1661, -1030)
-
-[node name="GuardYard4" parent="Enemies" unique_id=1342476506 instance=ExtResource("6_enemy")]
-position = Vector2(-935, 10)
-
-[node name="GuardYard5" parent="Enemies" unique_id=1202221868 instance=ExtResource("6_enemy")]
-position = Vector2(-323, 2)
-
-[node name="GuardYard10" parent="Enemies" unique_id=1665318694 instance=ExtResource("6_enemy")]
-position = Vector2(-343, 381)
-
-[node name="GuardYard6" parent="Enemies" unique_id=1803167443 instance=ExtResource("6_enemy")]
-position = Vector2(-206, -615)
-
-[node name="GuardYard7" parent="Enemies" unique_id=722346007 instance=ExtResource("6_enemy")]
-position = Vector2(-172, -939)
-
-[node name="GuardYard8" parent="Enemies" unique_id=1093148849 instance=ExtResource("6_enemy")]
-position = Vector2(954, -547)
-
-[node name="GuardYard9" parent="Enemies" unique_id=268734520 instance=ExtResource("6_enemy")]
-position = Vector2(923, -205)
 
 [node name="Players" type="Node2D" parent="." unique_id=1382237455]
 

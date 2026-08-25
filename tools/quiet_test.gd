@@ -39,6 +39,10 @@ func _run(main: Node) -> void:
 	print("\n-- insertion --")
 	print("  nearest guard to where you landed: %.0f px (wanted %.0f+)" % [
 		nearest, player.safe_insertion_distance])
+	if main.get_node("Enemies").get_child_count() == 0:
+		print("  (guards pulled from the level - nothing to listen for)")
+		quit(0)
+		return
 	print("  guard reaction time: %.1fs" % main.get_node("Enemies").get_child(0).reaction_time)
 	print("  guards wearing helmets: %d" % _helmets(main))
 

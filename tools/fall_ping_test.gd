@@ -40,7 +40,12 @@ func _run() -> void:
 	print("-- the dials --")
 	# Said in men as well as pixels: the threshold is easier to argue about as
 	# "how far up is that" than as a number.
-	var guard_tall: float = (main.get_node("Enemies").get_child(0) as Node2D).size.y
+	# A guard is the unit of height here, so with none in the level fall back to
+	# the player rather than skipping - what this tool measures is the player.
+	var guards: Node = main.get_node("Enemies")
+	var guard_tall: float = player.size.y
+	if guards.get_child_count() > 0:
+		guard_tall = (guards.get_child(0) as Node2D).size.y
 	print("  past %.0f px it carries (%.1f guards tall), %.0f px around it, lit for %.1fs" % [
 			player.fall_ping_height, player.fall_ping_height / guard_tall,
 			player.fall_ping_radius, player.fall_ping_time])

@@ -73,8 +73,24 @@ static func resolve(amount: float, at: Vector2, centre: Vector2, height: float,
 	if worn == null:
 		return result
 
+	# Spent on what it stopped, not on what arrived.
+	#
+	# It used to be charged the whole incoming round, which read as fair and was
+	# not: a plate lost 51 durability for the 25 it actually caught, so a medium
+	# vest was scrap inside three rifle rounds and every round after that landed
+	# whole. The advertised four-round kill was really "four if the first one
+	# finds you fresh" - armour that stopped mattering halfway through the fight
+	# it was bought for, and a time-to-kill that slid from four rounds to two
+	# without anything on screen saying so.
+	#
+	# Charging the absorbed figure instead makes the bar mean what it looks like
+	# it means: durability is a budget of damage the piece will eat, and it eats
+	# it at the rate it is actually working. The four rounds hold up across a
+	# magazine, and a plate still wears out - just over a fight rather than over
+	# a burst.
+	var stopped := worn.armor.absorbed(amount, worn.durability)
 	result.armor_hit = worn
-	result.amount = amount - worn.armor.absorbed(amount, worn.durability)
-	worn.durability = maxf(
-		worn.durability - amount * (HELMET_WEAR if result.headshot else 1.0), 0.0)
+	result.amount = amount - stopped
+	var wear := stopped * (HELMET_WEAR if result.headshot else 1.0)
+	worn.durability = maxf(worn.durability - wear, 0.0)
 	return result

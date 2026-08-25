@@ -8,6 +8,7 @@ extends SceneTree
 ## a real fight:
 ##
 ##   - a hit you survive leaves a wound, and a wound bleeds you
+##   - behind plates that wound is a chance rather than a certainty
 ##   - the bleed stops at the floor instead of killing you
 ##   - a surgical kit closes every wound; a medkit closes none
 ##   - plates down means no vest, so the same round costs twice as much
@@ -48,16 +49,24 @@ func _run() -> void:
 		return _finish()
 
 	# --- a survivable hit leaves a wound ------------------------------------
-	player.armored = true
-	player.shield = 1.0
+	#
+	# Plates down for this one. Caught with nothing in the way a qualifying hit
+	# always wounds, which is the half of the rule that can be asserted flatly;
+	# the armoured half is a roll and is measured further down.
+	player.armored = false
+	player.shield = 0.0
 	await physics_frame
-	_check("plates up counts as shielded", player.is_shielded())
 
 	var before: float = player.health
 	player.take_damage(30.0, player.global_position, Vector2.RIGHT)
 	await physics_frame
 	_check("a solid hit wounds you", player.injuries == 1)
 	_check("and costs health", player.health < before)
+
+	player.armored = true
+	player.shield = 1.0
+	await physics_frame
+	_check("plates up counts as shielded", player.is_shielded())
 
 	# --- wounds bleed, and the bleed has a floor ----------------------------
 	var bleeding_from: float = player.health
@@ -99,6 +108,31 @@ func _run() -> void:
 	await physics_frame
 	_check("with nothing to treat it refuses rather than spending a use",
 		kit.count == 1)
+
+	# --- a wound through plates is a chance, not a certainty -----------------
+	#
+	# Counted over a run rather than checked on one hit, because one hit of a
+	# 34% roll tells you nothing. The bounds are deliberately loose: this is
+	# guarding the rule (armour sometimes keeps the wound out, and sometimes
+	# does not) rather than pinning the constant, which is a tuning dial.
+	var rolls := 60
+	var vest_for_rolls: ArmorData = load("res://resources/armor/medium_vest.tres")
+	player.armored = true
+	player.shield = 1.0
+	var wounded := 0
+	for i in rolls:
+		player.inventory.set_worn(
+			Inventory.Wear.VEST, Item.from_armor(vest_for_rolls))
+		player.injuries = 0
+		player.health = player.max_health
+		player._invulnerable = 0.0
+		await physics_frame
+		player.take_damage(51.0, player.global_position, Vector2.RIGHT)
+		await physics_frame
+		wounded += player.injuries
+	print("  %d of %d plated hits left a wound" % [wounded, rolls])
+	_check("a plated hit can still wound you", wounded > 0)
+	_check("but not every plated hit does", wounded < rolls)
 
 	# --- plates gate the vest -----------------------------------------------
 	var vest: ArmorData = load("res://resources/armor/medium_vest.tres")
