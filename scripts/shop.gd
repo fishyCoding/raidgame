@@ -130,6 +130,7 @@ const CATALOGUE := {
 	"throw": [
 		{"kind": "gadget", "path": "res://resources/gadgets/frag.tres", "price": 450},
 		{"kind": "gadget", "path": "res://resources/gadgets/smoke.tres", "price": 300},
+		{"kind": "gadget", "path": "res://resources/gadgets/flash.tres", "price": 380},
 	],
 	## Pockets take one cell, so only the small stuff is on offer here.
 	"pocket": [
@@ -599,6 +600,8 @@ func _detail(entry: Dictionary) -> String:
 			var gadget := load(entry.path) as GadgetData
 			if gadget.gadget_class == GadgetData.Class.ULTIMATE:
 				return "ultimate   charges in %ds" % roundi(gadget.charge_time)
+			if gadget.kind == GadgetData.Kind.FLASH:
+				return "throwable   pair   blinds for %.0fs   needs line of sight" % gadget.duration
 			return "throwable   pair   %dpx radius" % roundi(gadget.radius)
 		"ammo":
 			return "one stack, one cell"

@@ -489,6 +489,14 @@ var _extract_held := 0.0
 ## crossing ground you could not otherwise cross, or leaving somewhere fast.
 var overload_left := 0.0
 
+## How white the screen is, 0 to 1, and how long it has left. Set by a flash
+## grenade going off somewhere this body could see it - see Grenade._blind, which
+## works it out on this machine and calls flashed() directly, because a screen is
+## the one thing no other machine can do anything about.
+var flash_left := 0.0
+var flash_span := 1.0
+var flash_strength := 0.0
+
 ## Seconds of Projection left, for the readout and nothing else. The ghost runs
 ## its own clock on whichever machine owns it - this is a copy of that clock kept
 ## here so the HUD has a number to draw without reaching across the level for a
@@ -813,6 +821,13 @@ func is_local() -> bool:
 
 
 func _physics_process(delta: float) -> void:
+	# Before either early return. A flash is on the screen, not on the body, and
+	# it has to keep clearing while you are watching a replica, lying on the
+	# floor, or dead behind the death screen - none of which reach _update_timers.
+	# Left in there, dying two frames into a flash left the screen white for the
+	# rest of the run.
+	if is_local():
+		flash_left = maxf(flash_left - delta, 0.0)
 	if not is_local():
 		_update_replica(delta)
 		return
@@ -2533,6 +2548,47 @@ func mark_scanned() -> void:
 	# something else at the time.
 	if _audio:
 		_audio.explosion(global_position, 0.2)
+
+
+## A flash grenade went off where this body could see it.
+##
+## `strength` is how much of it landed, 1 in its face and tailing to nothing at
+## the edge of the radius; `span` is how long the worst of it lasts. A weak one
+## still clears in the full time, it just starts fainter - a flash that also got
+## *shorter* with distance would be two dials saying the same thing, and the one
+## worth feeling is how much of the screen you lost.
+##
+## Down does not protect you and neither does being mid-air. The only thing that
+## does is not having seen it, which Grenade._blind has already decided.
+func flashed(strength: float, span: float) -> void:
+	if not is_alive:
+		return
+	# The worse of the two, rather than the newer. A second flash landing while
+	# the first is still burning must never *improve* your situation, which
+	# taking the new value outright would do.
+	flash_strength = maxf(flash_strength, clampf(strength, 0.0, 1.0))
+	flash_span = maxf(span, 0.05)
+	flash_left = maxf(flash_left, flash_span)
+
+
+## How much of the screen is white right now, 0 to 1.
+##
+## Held at full for the first fifth of it and then falling away, rather than
+## fading evenly from the first frame. An even fade is readable the whole way
+## through, which makes a flash an inconvenience you play through; holding it
+## means there is a moment where you genuinely cannot see and then a recovery you
+## can feel arriving - and the difference between those two is whether the
+## gadget is worth a slot.
+##
+## `HOLD` is the fraction of the duration spent at full. At the shipped 2s that
+## is 0.4s of nothing, then 1.6s of coming back.
+func flash_amount() -> float:
+	if flash_left <= 0.0:
+		return 0.0
+	const HOLD := 0.8
+	var left := clampf(flash_left / maxf(flash_span, 0.01), 0.0, 1.0)
+	var curve := 1.0 if left > HOLD else pow(left / HOLD, 1.6)
+	return clampf(curve * flash_strength, 0.0, 1.0)
 
 
 ## Seconds left before bleeding out, ignoring anything further shot into you.

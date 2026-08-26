@@ -153,8 +153,10 @@ const PILLS_RIGHT := [
 	{"action": &"swap", "label": "SWAP", "mode": "swap"},
 	{"action": &"reload", "label": "RELOAD"},
 	{"action": &"ultimate", "label": "ULT"},
-	{"action": &"throw_1", "label": "FRAG", "mode": "place"},
-	{"action": &"throw_2", "label": "SMOKE", "mode": "place"},
+	# Labelled from whatever is actually in the slot - see _pill_rects. The
+	# names here are only the fallback for an empty one.
+	{"action": &"throw_1", "label": "THROW 1", "mode": "place", "slot": 0},
+	{"action": &"throw_2", "label": "THROW 2", "mode": "place", "slot": 1},
 ]
 ## The two buttons that end a throw, while one is being placed.
 ##
@@ -760,11 +762,34 @@ func _pill_rects() -> Array:
 	var span := PILLS_RIGHT.size() * wide + (PILLS_RIGHT.size() - 1) * PILL_GAP
 	x = size.x - SAFE - span
 	for pill in PILLS_RIGHT:
-		out.append({"action": pill.action, "label": pill.label,
+		out.append({"action": pill.action, "label": _pill_label(pill),
 			"mode": pill.get("mode", "press"),
 			"rect": Rect2(Vector2(x, top), Vector2(wide, PILL_SIZE.y))})
 		x += wide + PILL_GAP
 	return out
+
+
+## What to print on a pill.
+##
+## The two throw pills used to say FRAG and SMOKE because those were the only
+## two throwables there were. They are not any more, and a button labelled
+## SMOKE that throws a flash grenade is worse than one labelled THROW 2 - on a
+## phone the label is the only thing telling you what is about to leave your
+## hand, and there is no inventory open beside it to check against.
+func _pill_label(pill: Dictionary) -> String:
+	var slot: int = pill.get("slot", -1)
+	if slot < 0:
+		return pill.label
+	var player := Net.local_player
+	var kit: Variant = player.get(&"inventory") if player else null
+	if kit == null:
+		return pill.label
+	var item: Variant = kit.get_throwable(slot)
+	if item == null:
+		return pill.label
+	# The count too. Running out of throwables is something you plan around,
+	# and the pill is the only place a thumb ever sees it.
+	return "%s %d" % [item.gadget.short_name, item.count]
 
 
 func _holding(action: StringName) -> bool:

@@ -153,7 +153,11 @@ func _run() -> void:
 	# It does not vanish on the frame it dies - it comes apart over half a
 	# second, which is the whole point of the animation.
 	assert(is_instance_valid(ghost), "the glitch has to be watchable, not instant")
-	for i in 40:
+	# Long enough for the death animation however long that is, rather than a
+	# frame count tuned to whatever it was the day this was written. It was 40
+	# frames, the animation went from 0.5s to 0.78s to make room for the stutter,
+	# and this read as "the ghost never dies".
+	for i in 240:
 		await physics_frame
 		if not is_instance_valid(ghost):
 			break

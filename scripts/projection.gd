@@ -101,7 +101,27 @@ const TEAR_TIME := 0.42
 
 ## Seconds of coming apart at the end, whether that end is the third round or the
 ## clock running out.
-const DEATH_TIME := 0.5
+##
+## Longer than a fade needs to be, because this is not a fade. It is a signal
+## going: the body cuts in and out, faster and sparser as it goes, and the whole
+## point is that somebody who shot it gets long enough to watch it happen and
+## know what they shot at.
+const DEATH_TIME := 0.78
+
+## How long one on-or-off slot of the death strobe lasts, at the start and at the
+## end. Stepped in slots rather than rolled per frame so the flicker is the same
+## flicker at 30 fps and at 240 - a per-frame roll is a frame-rate readout.
+const BLINK_SLOW := 0.075
+const BLINK_FAST := 0.022
+
+## How likely the body is drawn in any one slot, at the start and at the end. It
+## does not fade out, it stops being there more and more of the time.
+const BLINK_ON_FIRST := 0.85
+const BLINK_ON_LAST := 0.06
+
+## Slots of stutter a single round buys, on top of the tear. A hit is not a
+## death, so it drops one or two frames rather than coming apart.
+const HIT_BLINKS := 3
 
 ## Matched to Player's Torso, so the resting colour of a ghost and the colour a
 ## real body tweens back to after a hit flash cannot drift apart.
@@ -193,6 +213,9 @@ var _watch_timer := 0.0
 ## bodies that have not moved since.
 var _eyes: Array[Vector2] = []
 var _dying := 0.0
+## 0 alive, 1 the instant it started coming apart. Read by ProjectionGlitch,
+## which draws the echoes that are left behind while the body itself is off.
+var dying_at := 0.0
 var _tear := 0.0
 var _seen_hits := 0
 var _cast_from := Vector2.ZERO
@@ -211,6 +234,9 @@ var _rng := RandomNumberGenerator.new()
 
 @onready var _body: Node2D = $Body
 @onready var _torso: Polygon2D = $Body/Torso
+@onready var _head: Polygon2D = $Body/Head
+@onready var _face: Polygon2D = $Body/Face
+@onready var _outline: Node2D = $Body/ShieldOutline
 @onready var _arm: Polygon2D = $AimPivot/Arm
 @onready var _aim_pivot: Node2D = $AimPivot
 @onready var _shape: CollisionShape2D = $CollisionShape2D
@@ -360,9 +386,16 @@ func _tick_looks(delta: float) -> void:
 		# inside the silhouette reads as an effect drawn on top of a character;
 		# moving the character says the character *is* the effect.
 		_body.position.x = _rng.randf_range(-3.0, 3.0) * glitch
+		# And drops a frame or two while it does. A round going through it
+		# should cost the picture something you can see, not just paint a
+		# tear on an otherwise perfectly solid body - the stutter is what
+		# says "this is a projection" to somebody who has never shot one.
+		var slot := int((TEAR_TIME - _tear) / (TEAR_TIME / float(HIT_BLINKS * 2)))
+		_show_body(slot % 2 == 0 or _tear < TEAR_TIME * 0.45)
 	elif _dying <= 0.0:
 		glitch = 0.0
 		_body.position.x = 0.0
+		_show_body(true)
 
 
 func _shield_ramp(delta: float) -> void:
@@ -916,6 +949,7 @@ func _begin_dying() -> void:
 	if _dying > 0.0:
 		return
 	_dying = DEATH_TIME
+	dying_at = 1.0
 	glitch_seed = _rng.randi()
 	# Out of the way of anything still being fired at it, and out of the group
 	# that decides what is drawn - from here it is an animation, not a body.
@@ -925,19 +959,77 @@ func _begin_dying() -> void:
 	visible = true
 
 
-## Coming apart. The tear goes to full and the body fades through it, so what is
-## left on screen for half a second is the shape breaking up rather than a
-## character being deleted.
+## Coming apart.
+##
+## Not a fade. A fade is what a thing made of matter does, and the one thing this
+## body has to say on its way out is that it was never made of anything - so it
+## cuts out instead. The silhouette is drawn in stuttering slots that get shorter
+## and rarer as it goes: at the start it is there most of the time and dropping
+## the odd frame, at the end it is a couple of stray frames a quarter of a second
+## apart, and then it is not there at all. Between the flashes the tear keeps
+## drawing where the body was, so the shape is still legible while the body
+## itself is missing.
+##
+## Stepped in fixed slots rather than rolled per frame, which matters more than
+## it sounds: a per-frame roll flickers at whatever the frame rate happens to be,
+## so the same death reads as a shiver on a 240 Hz monitor and a strobe on a
+## 30 fps phone. In slots it is the same animation on both.
 func _die_off(delta: float) -> void:
 	_dying -= delta
 	var left := clampf(_dying / DEATH_TIME, 0.0, 1.0)
-	glitch = maxf(glitch, left)
-	# A new tear every other frame at the end: holding one shape reads as damage,
-	# and this is not damage any more, it is the picture failing.
-	if _rng.randf() < 0.4:
-		glitch_seed = _rng.randi()
-	_body.modulate.a = left
-	_arm.modulate.a = left
-	_body.position.x = _rng.randf_range(-6.0, 6.0) * left
+	var through := 1.0 - left
+	dying_at = left
+
+	# The tear runs the whole way out at full strength and reshuffles constantly.
+	# During a hit it holds one shape, because a hit is damage to a picture;
+	# here the picture itself is failing, and it should never settle.
+	glitch = 1.0
+	glitch_seed = _blink_slot(through) * 2654435761
+
+	var on := _blink_on(through)
+	_show_body(on)
+	if on:
+		# Every time it comes back it comes back somewhere slightly else, and
+		# further off as it gets worse. Cutting back in exactly where it left is
+		# what makes a strobe read as a lamp rather than a picture breaking up.
+		_body.position.x = _rng.randf_range(-9.0, 9.0) * through
+		_body.position.y = _rng.randf_range(-4.0, 4.0) * through
 	if _dying <= 0.0:
 		queue_free()
+
+
+## Which stutter slot the animation is in, given how far through it is.
+##
+## Slots shorten as it goes, so this is the integral of a shrinking interval
+## rather than a division - stepping a shrinking beat with `time / beat` makes
+## the slot number run *backwards* when the beat shrinks faster than time moves.
+func _blink_slot(through: float) -> int:
+	var elapsed := DEATH_TIME * through
+	var beat := lerpf(BLINK_SLOW, BLINK_FAST, through)
+	return int(elapsed / maxf(beat, 0.001))
+
+
+## Whether the body is drawn in the current slot. Hashed off the slot number, so
+## every machine watching the same ghost die sees the same stutter, and so one
+## slot holds its answer for its whole length instead of shimmering.
+func _blink_on(through: float) -> bool:
+	var slot := _blink_slot(through)
+	# A cheap integer hash to 0..1. randf() would give a different pattern on
+	# every machine, and the tear is the one part of this that is worth agreeing
+	# on: two players watching the same body should see the same thing fail.
+	var mixed := (slot * 374761393 + 668265263) & 0x7fffffff
+	mixed = (mixed ^ (mixed >> 13)) * 1274126177 & 0x7fffffff
+	var roll := float(mixed % 1000) / 1000.0
+	return roll < lerpf(BLINK_ON_FIRST, BLINK_ON_LAST, through)
+
+
+## The character itself, on or off. Not the whole Body node: the tear and the
+## echoes behind it are children of Body and have to keep drawing while the
+## silhouette they are drawn from is missing, which is the entire effect.
+func _show_body(on: bool) -> void:
+	_torso.visible = on
+	_head.visible = on
+	_face.visible = on
+	_arm.visible = on
+	if _outline:
+		_outline.visible = on

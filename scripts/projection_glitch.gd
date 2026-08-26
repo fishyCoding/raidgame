@@ -43,6 +43,8 @@ var _shape: Polygon2D
 ## redrawn every frame for a value that has not moved.
 var _drawn := -1.0
 var _seed := 0
+## What Projection.dying_at was when this was last drawn. 0 while it is alive.
+var _ending := 0.0
 
 
 func _ready() -> void:
@@ -57,10 +59,13 @@ func _process(_delta: float) -> void:
 		return
 	var torn: float = _ghost.glitch
 	var seed_now: int = _ghost.glitch_seed
-	if is_equal_approx(torn, _drawn) and seed_now == _seed:
+	var ending: float = _ghost.dying_at
+	if (is_equal_approx(torn, _drawn) and seed_now == _seed
+			and is_equal_approx(ending, _ending)):
 		return
 	_drawn = torn
 	_seed = seed_now
+	_ending = ending
 	queue_redraw()
 
 
@@ -70,6 +75,14 @@ func _draw() -> void:
 	var box := _bounds()
 	if box.size.y <= 0.0:
 		return
+
+	# On the way out, the silhouette is left behind in both channels even while
+	# the body itself is not being drawn. Without it the strobe is a body
+	# blinking on an empty background, which reads as a rendering fault; with it
+	# there is always a shape in roughly the right place and the body is cutting
+	# in and out of its own after-image. It pulls further apart as it goes.
+	if _ending > 0.0:
+		_draw_echoes()
 
 	# Seeded per hit, so the bands are in the same places for the whole life of
 	# one tear. A fresh number every frame makes it a static field, which reads
@@ -97,6 +110,29 @@ func _draw() -> void:
 		b.position.x -= shove * 0.6
 		draw_rect(a, Color(CHANNEL_A, 0.5 * strength))
 		draw_rect(b, Color(CHANNEL_B, 0.42 * strength))
+
+
+## The two channels pulled apart around where the body is, drawn whether or not
+## the body is currently on screen.
+##
+## Widest at the moment it starts and closing to nothing as the thing goes, which
+## is backwards from most dissolve effects and deliberate: the picture fails
+## hardest at the instant it fails, and what is left at the end is a thin wrong
+## outline rather than a big soft one.
+func _draw_echoes() -> void:
+	var gone := clampf(1.0 - _ending, 0.0, 1.0)
+	var spread := lerpf(4.0, 26.0, gone)
+	var fade := lerpf(0.55, 0.08, gone)
+	var ring := _shape.polygon
+	if ring.size() < 3:
+		return
+	for pair in [[Vector2(spread, 0.0), CHANNEL_A], [Vector2(-spread, 0.0), CHANNEL_B]]:
+		var offset: Vector2 = pair[0]
+		var tint: Color = pair[1]
+		var moved := PackedVector2Array()
+		for point in ring:
+			moved.append(point + offset)
+		draw_colored_polygon(moved, Color(tint, tint.a * fade))
 
 
 ## The silhouette's own extent, so the bands cover exactly the body and not a

@@ -8,7 +8,7 @@ extends Resource
 ## that recharge over the course of a raid. Both are bought before you go in,
 ## which is what makes the shop a decision rather than a shopping list.
 
-enum Kind { FRAG, SMOKE, OVERLOAD, RECON_BOW, PROJECTION }
+enum Kind { FRAG, SMOKE, OVERLOAD, RECON_BOW, PROJECTION, FLASH }
 enum Class { THROWABLE, ULTIMATE }
 
 @export var display_name := "Gadget"
@@ -24,7 +24,8 @@ enum Class { THROWABLE, ULTIMATE }
 @export var radius := 160.0
 ## Peak damage at the centre, falling off to nothing at the edge (FRAG).
 @export var damage := 120.0
-## How long the effect lingers (SMOKE).
+## How long the effect lingers (SMOKE), and how long the screen stays white
+## after a FLASH goes off in your face.
 @export var duration := 8.0
 
 @export_group("Ultimate")

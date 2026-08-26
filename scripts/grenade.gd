@@ -70,6 +70,12 @@ func _physics_process(delta: float) -> void:
 func _detonate() -> void:
 	var audio := get_node_or_null(^"/root/Audio")
 	match data.kind:
+		GadgetData.Kind.FLASH:
+			_blind()
+			# A bang, and a loud one. A flash you cannot hear go off is a flash
+			# that gives the thrower away for free.
+			if audio:
+				audio.explosion(global_position, 0.8)
 		GadgetData.Kind.SMOKE:
 			var cloud := SMOKE_SCENE.instantiate()
 			cloud.setup(data.radius, data.duration)
@@ -175,6 +181,69 @@ func _points_on(target: Node2D) -> Array[Vector2]:
 	if vision and vision.has_method(&"sample_points"):
 		return vision.sample_points(target)
 	return [target.global_position] as Array[Vector2]
+
+
+## Whites out this machine's screen, if the person sitting behind it was looking
+## at the flash from close enough.
+##
+## Deliberately not on the damage path, and it needs no network message at all.
+## Damage is resolved once, by the host, and applied to a body - so it has to be
+## routed to whoever owns that body. Being blinded is not damage: it happens to a
+## *screen*, and the only machine that can white out a screen is the one drawing
+## it. A grenade already exists on every machine (see Net.throw_gadget), so each
+## copy asks the one question its own machine can answer - could the player here
+## see this go off - and answers it locally. Nothing is sent, nothing can be
+## dropped, and there is no owner to disagree with.
+##
+## That also means the check is against the *local* player only, which is why
+## this does not loop over Net.players(): every other player is running their own
+## copy of this grenade and blinding themselves.
+##
+## Line of sight is required, and that is the whole texture of the gadget. A frag
+## is stopped by a wall because shrapnel is; a flash is stopped by a wall because
+## you cannot be blinded by a light you did not see. Standing behind the corner
+## the flash came round is what saves you, and turning your back on one is not -
+## this is a 2D game seen from the side, and there is no honest way to say a
+## character was facing away from something in their own plane.
+func _blind() -> void:
+	# Every machine runs this over its own copy of the grenade and blinds only
+	# itself, so nothing has to be routed anywhere. The host is not special here:
+	# it is not deciding anything on anybody else's behalf.
+	var me := Net.local_player
+	if me == null or not me.has_method(&"flashed"):
+		return
+	var eye: Vector2 = me.global_position
+	if me.has_method(&"sight_centre"):
+		eye = me.sight_centre()
+	var distance := global_position.distance_to(eye)
+	if distance > data.radius:
+		return
+
+	var query := PhysicsRayQueryParameters2D.create(global_position, eye)
+	query.collision_mask = Layers.WORLD
+	if not get_world_2d().direct_space_state.intersect_ray(query).is_empty():
+		return
+	# Smoke is not a wall, but it is between you and it: a flash through a cloud
+	# is a glow, not a blinding. Same call concealment uses, so the two agree.
+	var through_smoke := Smoke.blocks_sight(get_tree(), global_position, eye)
+
+	# Full strength in its face, tailing off to nothing at the edge. Steeper than
+	# the frag's curve, because the useful thing about a flash is how bad a
+	# *close* one is - a distant one should be a flicker you shrug off, where a
+	# distant frag should still hurt.
+	#
+	# Squaring it was too steep and made most of the radius decorative: at half
+	# the radius it left a quarter of a white screen, which is not something you
+	# would notice in a firefight, so the gadget was effectively a direct-hit
+	# weapon with a 460 px circle drawn round it for show. At 1.4 the same throw
+	# takes about two fifths of the screen, which is a throw that did something.
+	var reach := clampf(1.0 - distance / maxf(data.radius, 1.0), 0.0, 1.0)
+	var strength := pow(reach, 1.4)
+	if through_smoke:
+		strength *= 0.35
+	if strength <= 0.04:
+		return
+	me.flashed(strength, data.duration)
 
 
 func _flash() -> void:

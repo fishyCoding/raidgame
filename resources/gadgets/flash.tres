@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="GadgetData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gadget_data.gd" id="1_gadget"]
+
+[resource]
+script = ExtResource("1_gadget")
+display_name = "Flash Grenade"
+short_name = "FLASH"
+kind = 5
+gadget_class = 0
+price = 380
+fuse = 1.3
+radius = 460.0
+duration = 2.0
+tint = Color(1.0, 0.97, 0.86, 1)
+grid_size = Vector2i(1, 1)

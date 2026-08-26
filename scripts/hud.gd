@@ -96,6 +96,7 @@ func _draw() -> void:
 	if _scanned_left > 0.0:
 		_draw_scanned()
 	if _weapon == null:
+		_draw_flash()
 		return
 	_draw_health()
 	# On the floor the weapon card comes down with you. Leaving a gun and its
@@ -148,6 +149,30 @@ func _draw() -> void:
 		origin.y + PANEL_SIZE.y + 22.0 if PlayerInput.is_touch() else origin.y - 30.0))
 
 
+## The white-out from a flash grenade, over everything.
+##
+## Drawn last from every branch of _draw rather than first, and that is the whole
+## behaviour: a flash has to take the readouts away too. Painted underneath, you
+## would be blinded but could still read your ammo, your health and the ultimate
+## meter off a screen that is otherwise useless - which turns the gadget into a
+## brief cosmetic annoyance instead of a thing that costs you the fight.
+##
+## Not quite pure white at full strength. A screen that is exactly #FFFFFF reads
+## as the game having crashed; a hair of warmth in it reads as light.
+func _draw_flash() -> void:
+	if _player == null:
+		return
+	var amount: float = _player.flash_amount()
+	if amount <= 0.003:
+		return
+	draw_rect(Rect2(Vector2.ZERO, size), Color(1.0, 0.99, 0.95, amount))
+	# The last of it goes warm rather than simply thinning out, so recovering
+	# from a flash looks like an eye adjusting instead of an overlay fading.
+	if amount < 0.5:
+		draw_rect(Rect2(Vector2.ZERO, size),
+			Color(1.0, 0.86, 0.62, amount * 0.35))
+
+
 ## Player health, bottom centre, plus the aim state so it is obvious at a glance
 ## whether the tighter cone is currently in effect.
 func _draw_health() -> void:
@@ -175,6 +200,7 @@ func _draw_health() -> void:
 		_draw_recon_pings()
 		if _player.extracting:
 			_draw_extraction(_player.extracting)
+		_draw_flash()
 		return
 
 	var fraction := clampf(_player.health / maxf(_player.max_health, 1.0), 0.0, 1.0)
@@ -200,6 +226,7 @@ func _draw_health() -> void:
 	_draw_recon_pings()
 	if _player.extracting:
 		_draw_extraction(_player.extracting)
+	_draw_flash()
 
 
 ## Wounds, as notches under the left end of the health bar.
