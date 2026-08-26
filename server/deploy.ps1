@@ -36,7 +36,15 @@ Get-ChildItem -Path $project -Force | Where-Object { $exclude -notcontains $_.Na
 
 Write-Host "== packing"
 if (Test-Path $tarball) { Remove-Item -Force $tarball }
-tar.exe -czf $tarball -C $stage .
+# Windows' own bsdtar, by full path, and not whatever `tar.exe` happens to
+# resolve to. Git for Windows ships one at /usr/bin/tar.exe, and if this script
+# is launched from a Git Bash shell that PATH is inherited and wins. GNU tar
+# reads the colon in `C:\Users\...` as a host separator and tries to *rsh* to a
+# machine called C, which fails as "Cannot connect to C: resolve failed" - a
+# message that says nothing about tar being the wrong tar.
+$tarExe = Join-Path $env:SystemRoot 'System32\tar.exe'
+if (-not (Test-Path $tarExe)) { $tarExe = 'tar.exe' }
+& $tarExe -czf $tarball -C $stage .
 $size = [math]::Round((Get-Item $tarball).Length / 1MB, 1)
 Write-Host "   $size MB"
 
