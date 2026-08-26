@@ -50,6 +50,7 @@ const MATCHMAKING_HOST := "150.136.57.86"
 
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const HOOK_SCENE := preload("res://scenes/grapple_hook.tscn")
+const PROJECTION_SCENE := preload("res://scenes/projection.tscn")
 
 ## The character this machine drives. Everything that used to ask the tree for
 ## "the player" wants this one specifically - the HUD, the map, the camera, the
@@ -741,6 +742,118 @@ func _make_grenade(gadget_path: String, at: Vector2, velocity: Vector2, mask: in
 	grenade.global_position = at
 	grenade.thrower_id = thrower
 	_effect_root().add_child(grenade)
+
+
+# --- the projection -----------------------------------------------------------
+#
+# A ghost is built on every machine at once and simulated on exactly one of them:
+# the caster's. That is the opposite bargain to a grenade, and it has to be. A
+# grenade is a ballistic arc against static geometry, so both ends can run it and
+# agree; a ghost makes decisions - where to walk, when to break cover, which
+# cable to take - and two machines rolling those independently would produce two
+# different people standing in two different places, which is the one failure a
+# decoy cannot survive. So it is replicated the way a character is, off a
+# synchroniser the caster owns, and every other copy is a drawing of it.
+#
+# There is one ghost per pair of hands, named after them, so anything said about
+# one later reaches the same body on every machine. Casting again while one is
+# still up takes the old one down first - see _build_projection.
+
+
+## Puts a ghost in the world, on every machine. Returns this machine's copy.
+func cast_projection(gadget_path: String, at: Vector2, look: Dictionary,
+		caster: int) -> Node:
+	var mine := _build_projection(gadget_path, at, look, caster)
+	if not is_networked():
+		return mine
+	if is_host:
+		for peer in multiplayer.get_peers():
+			if peer != caster:
+				_make_projection.rpc_id(peer, gadget_path, at, look, caster)
+	else:
+		_ask_to_project.rpc_id(1, gadget_path, at, look)
+	return mine
+
+
+@rpc("any_peer", "reliable")
+func _ask_to_project(gadget_path: String, at: Vector2, look: Dictionary) -> void:
+	if not is_host:
+		return
+	cast_projection(gadget_path, at, look, multiplayer.get_remote_sender_id())
+
+
+@rpc("authority", "reliable")
+func _make_projection(gadget_path: String, at: Vector2, look: Dictionary,
+		caster: int) -> void:
+	_build_projection(gadget_path, at, look, caster)
+
+
+func _build_projection(gadget_path: String, at: Vector2, look: Dictionary,
+		caster: int) -> Node:
+	var data := load(gadget_path) as GadgetData
+	if data == null:
+		return null
+	var root := _spawn_root()
+	if root == null:
+		return null
+
+	# One at a time. The old one does not fade out politely - a second ghost
+	# appearing while the first is still walking about would tell anybody
+	# watching exactly what they are looking at.
+	var wanted := "Ghost_%d" % caster
+	var standing := root.get_node_or_null(NodePath(wanted))
+	if standing:
+		standing.name = "%s_spent" % wanted
+		standing.queue_free()
+
+	var ghost: Node2D = PROJECTION_SCENE.instantiate()
+	# The name *is* the caster's peer id, and the ghost reads its own authority
+	# off it as it enters the tree. Same indirection Net.spawn_player needs, and
+	# for the same reason: a synchroniser is handed its network id on entering
+	# the tree, and authority set any later leaves the spawn without one.
+	ghost.name = wanted
+	ghost.setup(data, look)
+	ghost.position = at
+	root.add_child(ghost)
+	return ghost
+
+
+## This machine's copy of somebody's ghost, or null.
+func projection_for(caster: int) -> Node:
+	var root := _spawn_root()
+	if root == null:
+		return null
+	return root.get_node_or_null(NodePath("Ghost_%d" % caster))
+
+
+## Tells a caster's own machine that the host worked out their ghost was hit.
+##
+## Same route, and the same reason, as tell_owner_hit: the host is the only
+## machine allowed to decide a round connected, and the caster is the only
+## machine allowed to decide what the ghost does about it - anything applied on
+## the host is overwritten by the caster's next sync a frame later. Addressed to
+## this autoload rather than to the ghost, because an RPC is delivered by node
+## path and a body that appeared thirty seconds into the session is one the two
+## machines have to agree a shorthand for first.
+func tell_ghost_hit(caster: int, at: Vector2, direction: Vector2,
+		from: int) -> void:
+	_ghost_hit.rpc_id(caster, caster, at, direction, from)
+
+
+@rpc("any_peer", "reliable")
+func _ghost_hit(caster: int, at: Vector2, direction: Vector2, from: int) -> void:
+	# Only the host resolves damage, so only the host may say this.
+	if multiplayer.get_remote_sender_id() != 1:
+		return
+	var ghost := projection_for(caster)
+	if ghost == null:
+		return
+	# Set around the call rather than threaded through it, exactly as _hit_body
+	# does: the hitmarker is reported by the body that was hit, and this is the
+	# only thing that knows whose round it was.
+	attributing_to = from
+	ghost.hit(at, direction)
+	attributing_to = 0
 
 
 # --- the line -----------------------------------------------------------------

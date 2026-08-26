@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="GadgetData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gadget_data.gd" id="1_gadget"]
+
+[resource]
+script = ExtResource("1_gadget")
+display_name = "Projection"
+short_name = "PROJCT"
+kind = 4
+gadget_class = 1
+price = 1400
+charge_time = 55.0
+active_time = 14.0
+radius = 900.0
+hit_points = 3
+tint = Color(0.62, 0.72, 0.95, 1)
+grid_size = Vector2i(2, 1)

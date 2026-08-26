@@ -14,6 +14,7 @@ const GOOD := Color(0.42, 0.78, 0.6)
 const BAD := Color(0.85, 0.42, 0.42)
 const OVERLOAD := Color(1.0, 0.68, 0.28)
 const RECON := Color(0.55, 0.85, 0.95, 0.95)
+const PROJECTION := Color(0.62, 0.78, 1.0)
 
 ## How far the weapon panel steps back while fully aimed. Not all the way to
 ## invisible: ammo still matters mid-fight.
@@ -32,7 +33,8 @@ var _font: Font
 ## Alpha applied to the weapon panel. Aiming leans the camera hard enough that
 ## the player can end up standing behind the panel, so it gets out of the way.
 var _panel_fade := 1.0
-## Remembered so the countdown bar has something to be a fraction of.
+## Remembered so the countdown bar has something to be a fraction of. One span
+## for whichever ultimate is running, because only one ever is.
 var _overload_span := 8.0
 ## Seconds left of the "you have been scanned" banner. Counted here rather than
 ## on the player because it is nothing but a thing on a screen - the body it
@@ -74,8 +76,8 @@ func _on_scanned() -> void:
 func _process(delta: float) -> void:
 	# The bar needs the full duration, and only the player knows it - catch it on
 	# the frame it starts rather than hard-coding eight seconds here.
-	if _player and _player.overload_left > _overload_span:
-		_overload_span = _player.overload_left
+	if _player and _ult_left() > _overload_span:
+		_overload_span = _ult_left()
 	_scanned_left = maxf(_scanned_left - delta, 0.0)
 	queue_redraw()
 
@@ -161,6 +163,8 @@ func _draw_health() -> void:
 	# be used. Standing up you had no idea whether your ultimate was charged.
 	if _player.overload_left > 0.0:
 		_draw_overload()
+	if _player.projection_left > 0.0:
+		_draw_projection()
 	_draw_gadgets()
 	if _player.bow_out:
 		_draw_bow_meter(bar.position + Vector2(0.0, -52.0), bar.size.x)
@@ -380,6 +384,22 @@ func _draw_extraction(point) -> void:
 ## Overload running: a banner, a countdown and a rim of colour around the whole
 ## screen. It lasts eight seconds and changes how the gun behaves, so it should
 ## be impossible to forget that it is on.
+## Seconds left of whichever ultimate is currently burning, or 0.
+##
+## One number rather than one per gadget. Only one ultimate can be equipped, so
+## only one can ever be running, and the tile at the bottom of the screen asks
+## the same question of all of them: is this thing doing something right now.
+func _ult_left() -> float:
+	if _player == null:
+		return 0.0
+	return maxf(_player.overload_left, _player.projection_left)
+
+
+## What colour to say it in. Overload is a fire; a projection is a picture.
+func _ult_colour() -> Color:
+	return PROJECTION if _player and _player.projection_left > 0.0 else OVERLOAD
+
+
 func _draw_overload() -> void:
 	var left: float = _player.overload_left
 	var span := maxf(_overload_span, 0.01)
@@ -406,6 +426,49 @@ func _draw_overload() -> void:
 	var bar := Rect2(box.position + Vector2(14.0, 42.0), Vector2(box.size.x - 28.0, 6.0))
 	draw_rect(bar, Color(0.16, 0.18, 0.22))
 	draw_rect(Rect2(bar.position, Vector2(bar.size.x * fraction, bar.size.y)), OVERLOAD)
+
+
+## The ghost, while it is out.
+##
+## Deliberately quieter than Overload's banner: no border round the screen, no
+## pulse. Overload is something happening to you and wants to be felt; a
+## projection is something happening somewhere else, and the whole point of it is
+## that you have gone the other way. What you need off it is the two numbers -
+## how long it has left, and how many rounds it has taken - because between them
+## they tell you whether anybody has found it yet, which is the only thing that
+## decides whether your own next move is safe.
+func _draw_projection() -> void:
+	var left: float = _player.projection_left
+	var span := maxf(_overload_span, 0.01)
+
+	var box := Rect2(Vector2(size.x * 0.5 - 130.0, 132.0), Vector2(260.0, 52.0))
+	draw_rect(box, PANEL_BG)
+	draw_rect(Rect2(box.position, Vector2(3.0, box.size.y)), PROJECTION)
+	draw_string(_font, box.position + Vector2(14.0, 20.0), "PROJECTION",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 17, PROJECTION)
+	draw_string(_font, box.position + Vector2(0.0, 20.0), "%.1fs" % left,
+		HORIZONTAL_ALIGNMENT_RIGHT, box.size.x - 14.0, 15, TEXT)
+
+	# Asked of the ghost itself rather than tracked here. It is the caster's own
+	# machine that owns the body, so the count is sitting in the level already
+	# and does not need a second copy kept in step with it.
+	var ghost := Net.projection_for(Net.peer_id())
+	var note := "walking, unshot"
+	var tint := DIM
+	if ghost == null:
+		note = "gone"
+		tint = LOW_AMMO
+	elif ghost.hits > 0:
+		var spare: int = maxi(ghost.max_hits - ghost.hits, 0)
+		note = "found - %d round%s left in it" % [spare, "" if spare == 1 else "s"]
+		tint = LOW_AMMO
+	draw_string(_font, box.position + Vector2(14.0, 36.0), note,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, tint)
+
+	var bar := Rect2(box.position + Vector2(14.0, 42.0), Vector2(box.size.x - 28.0, 6.0))
+	draw_rect(bar, Color(0.16, 0.18, 0.22))
+	draw_rect(Rect2(bar.position,
+		Vector2(bar.size.x * clampf(left / span, 0.0, 1.0), bar.size.y)), PROJECTION)
 
 
 ## What you have to spend, along the bottom beside the health bar: the ultimate
@@ -441,12 +504,14 @@ func _draw_gadgets() -> void:
 		else Vector2(size.x * 0.5 + 150.0, size.y - MARGIN - tile.y)
 
 	var ult: Item = kit.ultimate
-	var running: bool = _player.overload_left > 0.0
+	var burning := _ult_left()
+	var running := burning > 0.0
+	var lit := _ult_colour()
 	var ready := ult != null and ult.charge >= 1.0
 	var box := Rect2(origin, tile)
 	draw_rect(box, PANEL_BG)
 	draw_rect(Rect2(box.position, Vector2(3.0, box.size.y)),
-		OVERLOAD if running else (ACCENT if ready else Color(DIM, 0.5)))
+		lit if running else (ACCENT if ready else Color(DIM, 0.5)))
 
 	if ult == null:
 		draw_string(_font, box.position + Vector2(12.0, 18.0), "Q",
@@ -458,21 +523,21 @@ func _draw_gadgets() -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, DIM)
 		draw_string(_font, box.position + Vector2(30.0, 18.0), ult.gadget.short_name,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 13,
-			OVERLOAD if running else (ACCENT if ready else TEXT))
-		var right := "%.1fs" % _player.overload_left if running \
-			else ("READY" if ready else "%d%%" % roundi(ult.charge * 100.0))
+			lit if running else (ACCENT if ready else TEXT))
+		var idle := "READY" if ready else "%d%%" % roundi(ult.charge * 100.0)
+		var right := "%.1fs" % burning if running else idle
 		draw_string(_font, box.position + Vector2(0.0, 18.0), right,
 			HORIZONTAL_ALIGNMENT_RIGHT, box.size.x - 12.0, 12,
-			OVERLOAD if running else (ACCENT if ready else DIM))
+			lit if running else (ACCENT if ready else DIM))
 
 		# Draining while it runs, filling while it charges. Same bar either way,
 		# because it is the same question asked from the two ends.
-		var fraction := clampf(_player.overload_left / maxf(_overload_span, 0.01), 0.0, 1.0) \
-			if running else clampf(ult.charge, 0.0, 1.0)
+		var spent := clampf(burning / maxf(_overload_span, 0.01), 0.0, 1.0)
+		var fraction := spent if running else clampf(ult.charge, 0.0, 1.0)
 		var bar := Rect2(box.position + Vector2(12.0, 28.0), Vector2(box.size.x - 24.0, 6.0))
 		draw_rect(bar, Color(0.16, 0.18, 0.22))
 		draw_rect(Rect2(bar.position, Vector2(bar.size.x * fraction, bar.size.y)),
-			OVERLOAD if running else (ACCENT if ready else Color(0.45, 0.62, 0.75)))
+			lit if running else (ACCENT if ready else Color(0.45, 0.62, 0.75)))
 
 	for i in Inventory.THROWABLE_SLOTS:
 		var item: Item = kit.get_throwable(i)

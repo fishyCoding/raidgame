@@ -8,7 +8,7 @@ extends Resource
 ## that recharge over the course of a raid. Both are bought before you go in,
 ## which is what makes the shop a decision rather than a shopping list.
 
-enum Kind { FRAG, SMOKE, OVERLOAD, RECON_BOW }
+enum Kind { FRAG, SMOKE, OVERLOAD, RECON_BOW, PROJECTION }
 enum Class { THROWABLE, ULTIMATE }
 
 @export var display_name := "Gadget"
@@ -32,6 +32,8 @@ enum Class { THROWABLE, ULTIMATE }
 @export var charge_time := 45.0
 ## How long the effect lasts once spent.
 @export var active_time := 8.0
+## How many rounds the effect can absorb before it comes apart (PROJECTION).
+@export var hit_points := 3
 
 @export_group("Look")
 @export var tint := Color(0.8, 0.8, 0.85)

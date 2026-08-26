@@ -1,0 +1,80 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/projection.gd" id="1_projection"]
+[ext_resource type="Script" path="res://scripts/shield_outline.gd" id="2_shield"]
+[ext_resource type="Script" path="res://scripts/projection_glitch.gd" id="3_glitch"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_projection"]
+size = Vector2(28, 48)
+
+[sub_resource type="SceneReplicationConfig" id="SceneReplicationConfig_projection"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:velocity")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:aim_angle")
+properties/2/spawn = true
+properties/2/replication_mode = 1
+properties/3/path = NodePath(".:facing")
+properties/3/spawn = true
+properties/3/replication_mode = 1
+properties/4/path = NodePath(".:crouch")
+properties/4/spawn = true
+properties/4/replication_mode = 1
+properties/5/path = NodePath(".:armored")
+properties/5/spawn = true
+properties/5/replication_mode = 2
+properties/6/path = NodePath(".:stowed")
+properties/6/spawn = true
+properties/6/replication_mode = 2
+properties/7/path = NodePath(".:riding")
+properties/7/spawn = true
+properties/7/replication_mode = 2
+properties/8/path = NodePath(".:hits")
+properties/8/spawn = true
+properties/8/replication_mode = 2
+properties/9/path = NodePath(".:gone")
+properties/9/spawn = true
+properties/9/replication_mode = 2
+
+[node name="Projection" type="CharacterBody2D" groups=["projection"]]
+collision_layer = 4
+collision_mask = 3
+motion_mode = 0
+floor_snap_length = 6.0
+script = ExtResource("1_projection")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_projection")
+
+[node name="Body" type="Node2D" parent="."]
+
+[node name="Torso" type="Polygon2D" parent="Body"]
+color = Color(0.831373, 0.85098, 0.878431, 1)
+polygon = PackedVector2Array(-14, -24, 14, -24, 14, 24, -14, 24)
+
+[node name="Head" type="Polygon2D" parent="Body"]
+color = Color(0.878431, 0.898039, 0.921569, 1)
+polygon = PackedVector2Array(-9, -24, 9, -24, 9, -11, -9, -11)
+
+[node name="Face" type="Polygon2D" parent="Body"]
+color = Color(0.184314, 0.211765, 0.254902, 1)
+polygon = PackedVector2Array(3, -19, 12, -19, 12, -11, 3, -11)
+
+[node name="ShieldOutline" type="Node2D" parent="Body"]
+script = ExtResource("2_shield")
+
+[node name="Glitch" type="Node2D" parent="Body"]
+script = ExtResource("3_glitch")
+
+[node name="AimPivot" type="Node2D" parent="."]
+position = Vector2(0, -6)
+
+[node name="Arm" type="Polygon2D" parent="AimPivot"]
+color = Color(0.976471, 0.639216, 0.301961, 1)
+polygon = PackedVector2Array(6, -4, 32, -2, 32, 3, 6, 5)
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+replication_config = SubResource("SceneReplicationConfig_projection")

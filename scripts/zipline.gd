@@ -120,8 +120,14 @@ func _process(delta: float) -> void:
 ## time you grabbed one - telling you a thing you had just done.
 func _someone_is_riding() -> bool:
 	var me := Net.local_player
-	for body in Net.players():
-		if body == me:
+	var riders: Array = Net.players()
+	# Ghosts count, and have to. A projection is a lie told to the eye, and a
+	# cable that lit up for a person and stayed grey for a decoy would be the
+	# level itself giving the lie away - somebody at the top of a rope would
+	# learn to read "no warning" as "that is not a man". See Projection.
+	riders.append_array(get_tree().get_nodes_in_group(&"projection"))
+	for body in riders:
+		if body == me or body == null or not is_instance_valid(body):
 			continue
 		var rides: Variant = body.get(&"riding")
 		if typeof(rides) != TYPE_BOOL or not rides:

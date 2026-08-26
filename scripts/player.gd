@@ -485,6 +485,12 @@ var _extract_held := 0.0
 ## crossing ground you could not otherwise cross, or leaving somewhere fast.
 var overload_left := 0.0
 
+## Seconds of Projection left, for the readout and nothing else. The ghost runs
+## its own clock on whichever machine owns it - this is a copy of that clock kept
+## here so the HUD has a number to draw without reaching across the level for a
+## body that may not be on this machine at all.
+var projection_left := 0.0
+
 ## Where the player is pointing before recoil is added.
 var _aim_base := 0.0
 ## Where the scope's wander has got to. Only advanced while aimed, so lowering
@@ -1663,6 +1669,7 @@ func _update_weapon() -> void:
 ## plus trouble: standing around fills it slowly, a fight fills it faster.
 func _charge_ultimate(delta: float) -> void:
 	overload_left = maxf(overload_left - delta, 0.0)
+	projection_left = maxf(projection_left - delta, 0.0)
 	var ult := inventory.ultimate if inventory else null
 	if ult == null or ult.charge >= 1.0:
 		return
@@ -1698,8 +1705,41 @@ func _use_ultimate() -> void:
 			bow_out = true
 			bow_drawn = 0.0
 			_say_loot("bow out - hold fire to draw, release to loose")
+		GadgetData.Kind.PROJECTION:
+			_cast_projection(ult.gadget)
+			projection_left = ult.gadget.active_time
+			_say_loot("PROJECTION - it walks, it cannot shoot, it makes no sound")
+			# Deliberately no sound, here of all places. Every other ultimate
+			# announces itself and should; this one is bought entirely to be
+			# quiet, and a click on the frame it is cast would tell anybody
+			# within earshot which of the two men they are now looking at is
+			# the one worth shooting.
+			return
 	if _audio:
 		_audio.reload_finished(global_position)
+
+
+## Steps a copy of you out of where you are standing.
+##
+## On top of the caster rather than beside them, and that is the whole trick: for
+## about a second there are two identical people in one place and no way to tell
+## which of them moved off. Offsetting the spawn would answer that question for
+## free - the one that appeared is the one that is not you.
+##
+## What it wears is sent with it rather than read off this body afterwards. A
+## decoy is supposed to be a photograph of the moment you spent the charge: it
+## keeps the plates you had up and the gun you had out even after you have
+## dropped yours and run, which is exactly the lie you paid for.
+func _cast_projection(gadget: GadgetData) -> void:
+	var look := {
+		"facing": facing,
+		"aim_angle": aim_angle,
+		"armored": armored,
+		"stowed": stowed,
+		"crouch": crouch,
+	}
+	Net.cast_projection(gadget.resource_path, global_position, look,
+		get_multiplayer_authority())
 
 
 ## The bow, while it is out: hold the trigger to pull it back, let go to shoot.
