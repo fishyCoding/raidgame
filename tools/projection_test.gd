@@ -72,18 +72,24 @@ func _run() -> void:
 	print("  it wears what you wore: facing=%d armored=%s stowed=%s crouch=%.2f" % [
 		ghost.facing, ghost.armored, ghost.stowed, ghost.crouch])
 	assert(ghost.facing == player.facing, "it faces the way the caster did")
-	assert(ghost.armored == player.armored, "and wears the plates the caster had up")
 	assert(ghost.stowed == player.stowed, "and carries the gun the same way")
 	assert(ghost.get_node_or_null(^"Body/ShieldOutline") != null,
 		"the plates have to be drawable on it, or armour is invisible on a ghost")
 	assert(ghost.get_node_or_null(^"AimPivot/Arm") != null,
 		"and so does the gun arm, or a ghost is unarmed at a glance")
 
-	# It keeps them after the caster drops theirs. That is the lie being bought:
-	# a photograph of the moment you spent the charge, not a mirror.
+	# Plates up whatever the caster had on, and up straight away rather than
+	# ramping into place - a ghost that spent its first third of a second
+	# unarmoured would be readable in exactly the moment somebody is deciding
+	# which of the two of you to shoot.
 	player.armored = false
 	await physics_frame
-	assert(ghost.armored, "the ghost keeps the plates after the caster drops theirs")
+	print("  plates: armored=%s shield=%.2f (caster armored=%s)" % [
+		ghost.armored, ghost.shield, player.armored])
+	assert(ghost.armored, "a ghost always comes out with its plates up")
+	assert(ghost.shield >= 1.0, "and up already, not ramping")
+	assert(ghost.get_node("Body/ShieldOutline")._drawn > 0.0,
+		"and the outline has to actually be drawing, or the plates are invisible")
 	# Not exactly zero: a physics frame has passed and the meter has already
 	# started refilling. Spent is what matters, not empty.
 	assert(item.charge < 0.05, "and the charge is spent")
@@ -108,9 +114,19 @@ func _run() -> void:
 	assert(is_instance_valid(ghost), "it should still be up three seconds in")
 	print("  wandered %.0f px from where it was cast in 3s" % walked)
 	assert(walked > 60.0, "a ghost that stands where you left it fools nobody")
+	# The checks below take longer than a ghost is supposed to live. Wound the
+	# clock forward rather than casting a fresh one each time, so what is being
+	# exercised is one body over its whole life.
+	ghost.life_left = 90.0
+
+	print("\n-- it runs at the caster's pace --")
+	await _check_speed(ghost, player)
 
 	print("\n-- it can zip --")
 	await _check_zipline(ghost, audio)
+
+	print("\n-- and not the same cable twice --")
+	await _check_cable_memory(ghost)
 
 	print("\n-- three rounds and it is gone --")
 	assert(is_instance_valid(ghost), "still up before anybody shoots it")
@@ -147,8 +163,249 @@ func _run() -> void:
 	print("\n-- it hides when it is seen --")
 	_check_cover(main, player)
 
+	print("\n-- the bow shows you where the arrow goes --")
+	await _check_bow(player)
+
+	print("\n-- throwing with a thumb --")
+	await _check_touch_throw(main, player)
+
 	print("\nPASS")
 	quit()
+
+
+## A ghost must not be quicker than the person it is pretending to be.
+##
+## Measured rather than read off the field: the whole chain - the caster's gun
+## weight and wounds coming over on speed_scale, the plates and the crouch
+## applied on this body - has to arrive at the same number Player._update_run
+## arrives at, and the only honest way to check that is to let it run and watch
+## how fast it actually goes.
+func _check_speed(ghost: Node2D, player: Node2D) -> void:
+	# What the caster could do right now, plated, by the same chain of
+	# multipliers. Not a hardcoded 260: the point is that the two agree.
+	var carrying := 1.0
+	if player.weapon.data:
+		carrying = player.weapon.data.get_move_multiplier()
+	var caster_cap: float = (player.max_speed * carrying
+		* player.injury_speed_multiplier() * player.shield_speed_scale)
+
+	# Somewhere flat and clear, walking one way, so it reaches its cap.
+	ghost.global_position = player.global_position
+	ghost._mind = 0
+	ghost._tucked = false
+	ghost.crouch = 0.0
+	ghost._target = ghost.global_position + Vector2(1400.0, 0.0)
+	ghost._rethink = 99.0
+
+	var top := 0.0
+	for i in 90:
+		await physics_frame
+		if not is_instance_valid(ghost):
+			return
+		if ghost.riding or ghost.crouch > 0.05:
+			continue
+		top = maxf(top, absf(ghost.velocity.x))
+	print("  ghost topped out at %.0f px/s, the caster's plated cap is %.0f" % [
+		top, caster_cap])
+	assert(top <= caster_cap + 2.0,
+		"a ghost must never outrun the person it is copying")
+	assert(top > caster_cap * 0.9,
+		"nor crawl - it has to look like somebody actually going somewhere")
+
+
+## Off a cable and straight back onto the same one is the failure here.
+func _check_cable_memory(ghost: Node2D) -> void:
+	var cables: Array = get_nodes_in_group(&"zipline")
+	var cable: Node2D = cables[0]
+	for line in cables:
+		if line.cable_length() > cable.cable_length():
+			cable = line
+
+	# Put it on, then take it off the way arriving at an end does.
+	ghost.global_position = cable.world_bottom()
+	ghost._target = cable.world_top()
+	ghost._grab(cable)
+	assert(ghost.riding, "it should be on the rope")
+	ghost._let_go(false)
+	print("  stepped off %s, cooldown %.1fs" % [cable.name, ghost._cable_cooldown])
+	assert(ghost._cable_cooldown > 0.0, "stepping off has to start the cooldown")
+	assert(ghost._last_cable == cable, "and remember which rope it was")
+
+	# Standing right on it, wanting to go somewhere it could take you: still no.
+	ghost._target = cable.world_top()
+	print("  standing on it, asked for a cable: %s" % ghost._cable_here())
+	assert(ghost._cable_here() == null,
+		"the rope it just rode must be off limits, or it rides it forever")
+
+	var grabbed_again := false
+	for i in 60:
+		await physics_frame
+		if not is_instance_valid(ghost):
+			break
+		if ghost.riding:
+			grabbed_again = true
+			break
+	print("  got back on within a second: %s" % grabbed_again)
+	assert(not grabbed_again, "and it must not climb straight back on")
+	if is_instance_valid(ghost):
+		ghost._cable_cooldown = 0.0
+		ghost._last_cable = null
+
+
+## Drawing the bow has to put the arrow's flight on screen, and the wind-up has
+## to visibly change it - that is the entire point of a wind-up.
+func _check_bow(player: Node2D) -> void:
+	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
+	var bow: Object = maker.from_gadget(load("res://resources/gadgets/recon_bow.tres"))
+	bow.charge = 1.0
+	player.inventory.set_ultimate(bow)
+	player.aim_angle = 0.0
+	player.aim_direction = Vector2.RIGHT
+
+	player._use_ultimate()
+	await physics_frame
+	assert(player.bow_out, "Q with a charged bow brings it out")
+
+	var line: Node2D = player.get_node("Overlay/AimLine")
+	print("  bow out: arc=%s points=%d sweep=%.0f" % [
+		line.showing_arc, line.arc_points.size(), line.arc_radius])
+	assert(line.showing_arc, "the flight has to be drawn before you commit to it")
+	assert(line.arc_points.size() > 2, "and be an actual flight, not two points")
+	assert(line.arc_radius > 1.0,
+		"with the sweep it will paint, or you cannot aim it at a room")
+
+	# Half-drawn against fully drawn. Compared on the first step of the flight
+	# and on the sweep, not on where the arrow ends up: the endpoint depends on
+	# whatever wall happens to be in front of the character when the test runs,
+	# and a check that passes or fails on where the insertion roll dropped you is
+	# no check at all. The first step is the muzzle velocity, which is exactly
+	# what the wind-up buys.
+	player.bow_drawn = 0.25
+	player._show_arrow_flight()
+	var slow: float = line.arc_points[0].distance_to(line.arc_points[1])
+	var small_sweep: float = line.arc_radius
+
+	player.bow_drawn = 1.0
+	player._show_arrow_flight()
+	var fast: float = line.arc_points[0].distance_to(line.arc_points[1])
+	var big_sweep: float = line.arc_radius
+
+	print("  quarter draw: %.1f px in the first step, sweeps %.0f" % [slow, small_sweep])
+	print("  full draw:    %.1f px in the first step, sweeps %.0f" % [fast, big_sweep])
+	assert(fast > slow * 1.5,
+		"pulling it back further has to visibly throw the arrow harder")
+	assert(big_sweep > small_sweep * 1.5, "and paint a wider sweep")
+
+	# Putting it away takes the line with it, or the level keeps a blue arc
+	# drawn across it for the rest of the raid.
+	player.bow_out = false
+	player.bow_drawn = 0.0
+	player._hide_arrow_flight()
+	print("  bow away: arc=%s radius=%.0f" % [line.showing_arc, line.arc_radius])
+	assert(not line.showing_arc, "putting the bow away clears the flight line")
+	assert(line.arc_radius == 0.0, "and the sweep circle with it")
+
+
+## The phone's grenade: tap the pill to arm it, drag to place it, THROW to
+## commit. The thing that must work is that it lands where the finger put it and
+## not where the crosshair happens to be.
+##
+## Every assertion is held back to the end, after the control scheme has been put
+## back. That is not style, it is damage control: PlayerInput.control_scheme has
+## a setter that writes user://controls.cfg, so forcing touch mode here changes a
+## setting that outlives the process and belongs to whoever owns this machine. An
+## assert firing mid-way through would abort the run with the file still saying
+## "touch", and every later run - and the actual game, which reads the same file -
+## would come up with thumbsticks on a desktop and no keyboard movement at all.
+## Which is exactly what happened while this was being written, and it read as
+## solo_test suddenly failing to walk.
+func _check_touch_throw(main: Node, player: Node2D) -> void:
+	var input: Node = root.get_node("PlayerInput")
+	var pad: Control = main.get_node("HUD/TouchControls")
+	var was: int = input.control_scheme
+	input.control_scheme = 1 # Controls.TOUCH
+	await process_frame
+
+	var seen := {}
+
+	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
+	var frag: Object = maker.from_gadget(load("res://resources/gadgets/frag.tres"))
+	player.inventory.set_throwable(0, frag)
+
+	pad._begin_placing(&"throw_1")
+	# Polled rather than checked on the next frame. A real thumb presses the pill
+	# from _input, which lands before the physics tick that reads the edge; this
+	# is being called from a coroutine that resumes after one, so which frame the
+	# just-pressed edge falls on is an artefact of the harness rather than
+	# anything about the pad.
+	await _wait_for(func() -> bool: return player.throw_slot == 0, 12)
+	print("  armed: placing=%s player throw_slot=%d" % [pad._placing, player.throw_slot])
+	seen["armed"] = pad._placing == &"throw_1"
+	seen["winding"] = player.throw_slot == 0
+
+	# A thumb somewhere on the map. Placed in world space directly - the screen
+	# maths is the camera's and is not what this is testing.
+	var spot: Vector2 = player.global_position + Vector2(260.0, -40.0)
+	pad._place_at = spot
+	await physics_frame
+	var line: Node2D = player.get_node("Overlay/AimLine")
+	print("  placed at %s: arc showing=%s, %d points" % [
+		str(spot), line.showing_arc, line.arc_points.size()])
+	seen["arc"] = line.showing_arc
+	seen["target"] = input.touch_aim_point.is_finite()
+
+	# A thumb lifting must NOT throw it - that is the whole reason for the
+	# two-button pad, and the bug it exists to prevent.
+	pad._lift(0)
+	await physics_frame
+	seen["survives_lift"] = pad._placing == &"throw_1" and player.throw_slot == 0
+	print("  a thumb lifting left it armed: %s" % seen["survives_lift"])
+
+	var before: int = main.get_node("Bullets").get_child_count()
+	pad._end_placing(true)
+	await physics_frame
+	await physics_frame
+	var after: int = main.get_node("Bullets").get_child_count()
+	print("  THROW: %d -> %d things in the world, throw_slot=%d" % [
+		before, after, player.throw_slot])
+	seen["threw"] = after > before
+	seen["finished"] = player.throw_slot < 0
+
+	# Where it went. Solved to land on the spot, so it should be heading there.
+	var toward := -1.0
+	if after > before:
+		var thrown: Node2D = main.get_node("Bullets").get_child(after - 1)
+		toward = (spot - player.global_position).normalized().dot(
+			thrown.velocity.normalized())
+	print("  it left travelling %.2f toward the placed spot (1.0 = straight at it)" % toward)
+	seen["aimed"] = toward > 0.3
+
+	# CANCEL puts it back.
+	pad._begin_placing(&"throw_1")
+	await _wait_for(func() -> bool: return player.throw_slot == 0, 12)
+	seen["rearmed"] = player.throw_slot == 0
+	pad._end_placing(false)
+	await physics_frame
+	print("  CANCEL: throw_slot=%d, target cleared=%s" % [
+		player.throw_slot, not input.touch_aim_point.is_finite()])
+	seen["cancelled"] = player.throw_slot < 0
+	seen["let_go"] = not input.touch_aim_point.is_finite()
+
+	# Before a single assert. See the note above this function.
+	input.control_scheme = was
+	await process_frame
+
+	assert(seen["armed"], "the pill arms it rather than throwing it")
+	assert(seen["winding"], "and the player starts winding up")
+	assert(seen["arc"], "placing has to show the arc, same as a mouse does")
+	assert(seen["target"], "and hand the player the spot")
+	assert(seen["survives_lift"], "lifting a thumb must not throw the grenade")
+	assert(seen["threw"], "THROW has to actually throw it")
+	assert(seen["finished"], "and end the wind-up")
+	assert(seen["aimed"], "and throw it at the spot, not at the crosshair")
+	assert(seen["rearmed"], "a second grenade arms the same way")
+	assert(seen["cancelled"], "CANCEL has to put the grenade back")
+	assert(seen["let_go"], "and let go of the target")
 
 
 ## Every keyboard action in the map has to be printed somewhere on the legend.
@@ -253,6 +510,15 @@ func _check_cover(main: Node, player: Node2D) -> void:
 	assert(not spot.is_equal_approx(ghost.global_position),
 		"and somewhere is not where it is already standing")
 	ghost.queue_free()
+
+
+## Runs physics frames until a condition holds, or gives up. Returns either way -
+## the assert that follows is what reports the failure, with its own message.
+func _wait_for(done: Callable, frames: int) -> void:
+	for i in frames:
+		if done.call():
+			return
+		await physics_frame
 
 
 func _the_ghost() -> Node2D:

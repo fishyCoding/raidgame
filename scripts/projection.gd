@@ -71,8 +71,24 @@ const WATCH_INTERVAL := 0.15
 ## Past this they cannot tell a ghost from a smudge anyway.
 const WATCH_RANGE := 1500.0
 
-## Distances tried when it goes looking for somewhere to stand out of sight.
+## Distances tried when it goes looking for somewhere to stand out of sight, and
+## when it is picking somewhere to wander to. One list for both: a good place to
+## wander to and a good place to hide are the same kind of place, and the only
+## difference between the two searches is how badly it wants one.
 const COVER_STEPS := [160.0, 280.0, 420.0, 560.0, 720.0]
+
+## How close a rival has to be before it starts moving like somebody who knows
+## they are there: crouched, and not out in the open. Being seen is handled
+## separately - this is the half-second before that, which is the half-second a
+## real player spends deciding not to be seen at all.
+const SNEAK_RANGE := 720.0
+
+## How long after stepping off a cable before it will consider that same cable
+## again. Long enough to have walked somewhere: without it a ghost that arrives
+## at the top of a rope immediately finds the same rope in reach, decides the
+## other end is worth going to, and spends its whole life riding one cable up and
+## down in front of everybody.
+const CABLE_MEMORY := 9.0
 
 ## How close to a target counts as arrived.
 const ARRIVED := 48.0
@@ -138,6 +154,17 @@ var life_left := 14.0
 ## How far from where it was cast it is willing to wander.
 var roam_range := 900.0
 
+## Everything the caster's own top speed was multiplied by that this body cannot
+## work out for itself: the weight of the gun they were carrying, and whatever
+## they were still bleeding from. Sent with the cast rather than guessed.
+##
+## Without it a ghost runs at the flat 260 while its caster - carrying an LMG,
+## or nursing two wounds - does 190, and the difference is not subtle. Speed is
+## the single easiest thing to read off a body at distance, and a decoy that
+## moves faster than any real player can is one you identify from across the map
+## without looking at it twice.
+var speed_scale := 1.0
+
 enum Mind { ROAM, HIDE }
 
 var _mind := Mind.ROAM
@@ -161,6 +188,10 @@ var _tucked := false
 ## for the rest of its life.
 var _stuck := 0.0
 var _watch_timer := 0.0
+## Where the rivals were at the last sweep. Refreshed by _watch, read by the
+## route search, so choosing somewhere to walk costs no extra raycasts against
+## bodies that have not moved since.
+var _eyes: Array[Vector2] = []
 var _dying := 0.0
 var _tear := 0.0
 var _seen_hits := 0
@@ -168,6 +199,9 @@ var _cast_from := Vector2.ZERO
 var _zipline: Zipline = null
 ## Which way along the cable it is travelling: -1 up, 1 down.
 var _ride_way := 0.0
+## The cable it just got off, and how long it stays off limits. See CABLE_MEMORY.
+var _last_cable: Zipline = null
+var _cable_cooldown := 0.0
 
 var _jump_velocity := 0.0
 var _jump_gravity := 0.0
@@ -231,10 +265,24 @@ func setup(gadget: GadgetData, look: Dictionary) -> void:
 	# goes on wearing it after you have dropped your plates and run.
 	facing = int(look.get("facing", 1))
 	aim_angle = float(look.get("aim_angle", 0.0))
-	armored = bool(look.get("armored", false))
 	stowed = bool(look.get("stowed", false))
 	crouch = float(look.get("crouch", 0.0))
-	shield = 1.0 if armored else 0.0
+	speed_scale = maxf(float(look.get("speed_scale", 1.0)), 0.1)
+
+	# Plates up, always, whatever the caster had on.
+	#
+	# Not a copy of their state, and deliberately not. A ghost is a body somebody
+	# is going to decide whether to shoot at, and the plates are the one thing
+	# about a body that changes that decision - blue rim, four rounds; no rim,
+	# two. Cast with them down it reads as an easy kill, which is the opposite of
+	# what a decoy is for: nobody breaks position over a target they think they
+	# can drop in a burst from where they are already standing.
+	#
+	# It also costs it the speed. is_shielded() has no meaning here, so this is
+	# the entire price - it moves at the plated pace, which is what makes the
+	# rim honest rather than free.
+	armored = true
+	shield = 1.0
 	stow = 1.0 if stowed else 0.0
 
 
@@ -362,7 +410,10 @@ func _watch(delta: float) -> void:
 		return
 	_watch_timer = WATCH_INTERVAL
 
-	var watcher := _who_can_see_me()
+	# Kept for the route search, which runs between sweeps and would otherwise
+	# have to gather the same list again.
+	_eyes = _watchers()
+	var watcher := _seen_from(_eyes, sight_centre())
 	if watcher.is_finite():
 		_threat = watcher
 		_settle = STAY_HIDDEN
@@ -392,13 +443,17 @@ func _seen_countdown(delta: float) -> void:
 		_pick_roam_target()
 
 
-## Where the nearest person with a clear line to it is standing, or INF.
-func _who_can_see_me() -> Vector2:
+## Where every rival who is near enough to matter is standing, nearest first.
+##
+## Line of sight is not consulted here - that is the next question, asked once
+## per place it is thinking about standing rather than once per person. Gathered
+## as a list because the route search asks it about half a dozen candidate spots
+## in a row, and walking Net.players() six times to get the same six positions
+## would be the expensive half of the whole thing.
+func _watchers() -> Array[Vector2]:
 	var mine := get_multiplayer_authority()
-	var here := sight_centre()
-	var space := get_world_2d().direct_space_state
-	var best := Vector2.INF
-	var best_distance := WATCH_RANGE
+	var here := global_position
+	var found: Array[Vector2] = []
 	for body in Net.players():
 		if body == null or not is_instance_valid(body):
 			continue
@@ -413,18 +468,29 @@ func _who_can_see_me() -> Vector2:
 		var eye: Vector2 = body.global_position
 		if body.has_method(&"sight_centre"):
 			eye = body.sight_centre()
-		var distance := eye.distance_to(here)
-		if distance >= best_distance:
-			continue
-		var query := PhysicsRayQueryParameters2D.create(eye, here)
+		if eye.distance_to(here) < WATCH_RANGE:
+			found.append(eye)
+	found.sort_custom(func(a: Vector2, b: Vector2) -> bool:
+		return a.distance_squared_to(here) < b.distance_squared_to(here))
+	return found
+
+
+## Which of those eyes, if any, has a clear line to a point. INF for none.
+func _seen_from(eyes: Array[Vector2], point: Vector2) -> Vector2:
+	if eyes.is_empty():
+		return Vector2.INF
+	var space := get_world_2d().direct_space_state
+	for eye in eyes:
+		var query := PhysicsRayQueryParameters2D.create(eye, point)
 		query.collision_mask = Layers.WORLD
 		if not space.intersect_ray(query).is_empty():
 			continue
-		if Smoke.blocks_sight(get_tree(), eye, here):
+		# Geometry is not the only thing that hides people, and a ghost standing
+		# in somebody's smoke is as hidden as they would be.
+		if Smoke.blocks_sight(get_tree(), eye, point):
 			continue
-		best = eye
-		best_distance = distance
-	return best
+		return eye
+	return Vector2.INF
 
 
 # --- making up its mind -------------------------------------------------------
@@ -432,6 +498,7 @@ func _who_can_see_me() -> Vector2:
 
 func _think(delta: float) -> void:
 	_rethink -= delta
+	_cable_cooldown = maxf(_cable_cooldown - delta, 0.0)
 
 	if _mind == Mind.HIDE:
 		if _reacting > 0.0:
@@ -458,15 +525,53 @@ func _think(delta: float) -> void:
 		if _rethink <= 0.0 or not _target.is_finite() or arrived:
 			_pick_roam_target()
 
-	crouch = move_toward(crouch, 0.0, delta / CROUCH_TIME)
+	# Down, when there is somebody near enough to walk into. Not because
+	# crouching hides it - it does not, there is no grass here - but because it
+	# is what a person does when they know roughly where the other man is and
+	# have not been seen yet: smaller target, slower, and committed to not being
+	# the one who starts the fight. Standing tall and jogging past a doorway with
+	# somebody behind it is the thing that reads as "that is not a player".
+	#
+	# Only while wandering. Once it has actually been spotted the crouch is
+	# exactly the wrong idea - it is running for cover now, and crouch-walking
+	# there at four tenths speed while somebody shoots at it is not caution, it
+	# is standing still slowly.
+	var careful := _mind == Mind.ROAM and _sneaking()
+	crouch = move_toward(crouch, 1.0 if careful else 0.0, delta / CROUCH_TIME)
 	_steer(delta)
 
 
-## Somewhere else to be. Sometimes a spot along the ground, sometimes the far end
-## of a cable - which is what makes a ghost use the ziplines rather than pace up
-## and down one floor of the yard.
+## Whether there is a rival close enough to be worth moving quietly for.
+##
+## Deliberately not "can anybody see me" - that question is answered by _watch,
+## and by the time it says yes it is too late to be sneaking. This is the state
+## before it: somebody is inside SNEAK_RANGE and does not have a line yet.
+func _sneaking() -> bool:
+	if _eyes.is_empty():
+		return false
+	var here := global_position
+	for eye in _eyes:
+		if eye.distance_to(here) < SNEAK_RANGE:
+			return true
+	return false
+
+
+## Somewhere else to be, chosen rather than rolled.
+##
+## The first version picked a direction and a distance out of the RNG, which
+## produced a body that paced. It went nowhere in particular, changed its mind on
+## a timer, and - the part that actually gave it away - was as happy to walk into
+## the middle of an open yard with somebody standing in it as anywhere else. A
+## person does not do that. A person going somewhere picks the side of the map
+## the other man is not on, and takes the route where there is something between
+## them.
+##
+## So candidates are scored instead. Distance is the smallest term in it; what
+## dominates is whether anybody could watch it walk there, and whether it is
+## going somewhere new. Ties are broken by the roll, so two runs of the same
+## situation do not produce the same walk.
 func _pick_roam_target() -> void:
-	_rethink = _rng.randf_range(2.5, 5.5)
+	_rethink = _rng.randf_range(2.6, 5.4)
 	_tucked = false
 
 	var cable := _a_cable_worth_taking()
@@ -474,21 +579,53 @@ func _pick_roam_target() -> void:
 		_target = cable
 		return
 
-	var reach := _rng.randf_range(240.0, 760.0)
-	var way := 1.0 if _rng.randf() < 0.5 else -1.0
-	var wanted := global_position.x + way * reach
-	# It was cast somewhere for a reason. Wandering off the edge of the fight
-	# makes it a decoy nobody is ever going to see.
-	if absf(wanted - _cast_from.x) > roam_range:
-		wanted = global_position.x - way * reach
-	_target = Vector2(wanted, global_position.y)
+	var best := Vector2.INF
+	var best_score := -INF
+	var back := signf(velocity.x)
+	for way in [-1.0, 1.0]:
+		for step in COVER_STEPS:
+			var spot := Vector2(global_position.x + way * step, global_position.y)
+			# It was cast somewhere for a reason. Wandering off the edge of the
+			# fight makes it a decoy nobody is ever going to see.
+			if absf(spot.x - _cast_from.x) > roam_range:
+				continue
+			var score := _rng.randf() * 40.0
+			# Out of sight is worth more than anything else on offer. This is
+			# most of what "stealthily" means for a body with no crouch-walking
+			# to hide behind: it is not that it sneaks, it is that it picks
+			# routes where being seen is not on the table.
+			if not _seen_from(_eyes, spot + Vector2(0.0, _shape.position.y)).is_finite():
+				score += 220.0
+			# Somewhere it can actually be bothered to walk to. Very close is not
+			# a journey and very far is a long time in the open.
+			score += 90.0 - absf(step - 430.0) * 0.16
+			# Carrying on beats turning round. A body that reverses every few
+			# seconds is a body doing a patrol animation, not going anywhere.
+			if not is_zero_approx(back) and signf(way) == back:
+				score += 45.0
+			if score > best_score:
+				best_score = score
+				best = spot
+
+	# Boxed in on both sides and pinned to the spot it was cast on. Take the
+	# nearest step anyway rather than standing still, which is the one thing a
+	# decoy must never do.
+	if not best.is_finite():
+		var way := 1.0 if _rng.randf() < 0.5 else -1.0
+		best = Vector2(global_position.x + way * COVER_STEPS[0], global_position.y)
+	_target = best
 
 
 ## The far end of a cable in reach, if taking it would actually get it somewhere.
+##
+## Never the cable it has just been on. Nothing else in here stops a ghost that
+## has ridden to the top of a rope from noticing the same rope is now in reach,
+## deciding the bottom is worth a look, and riding back down - forever, in full
+## view, which is about as far from a convincing person as it is possible to get.
 func _a_cable_worth_taking() -> Vector2:
 	if _rng.randf() > 0.45:
 		return Vector2.INF
-	var cable := Zipline.nearest(get_tree(), global_position)
+	var cable := _cable_here()
 	if cable == null:
 		return Vector2.INF
 	var top := cable.world_top()
@@ -499,6 +636,21 @@ func _a_cable_worth_taking() -> Vector2:
 	if absf(far.y - global_position.y) < WORTH_A_CABLE:
 		return Vector2.INF
 	return far
+
+
+## The nearest cable it is allowed to get on right now.
+##
+## Zipline.nearest answers "which rope is in reach", which is a different
+## question from "which rope should I take" for the whole CABLE_MEMORY seconds
+## after it stepped off one. Asked in both places that grab a cable, so the two
+## cannot disagree about what is off limits.
+func _cable_here() -> Zipline:
+	var cable := Zipline.nearest(get_tree(), global_position)
+	if cable == null:
+		return null
+	if cable == _last_cable and _cable_cooldown > 0.0:
+		return null
+	return cable
 
 
 ## Somewhere the person who just spotted it cannot see.
@@ -548,9 +700,10 @@ func _steer(delta: float) -> void:
 	facing = 1 if way > 0.0 else -1
 
 	# A cable beats a ladder it does not have. If the target is well above or
-	# below and there is a rope within arm's reach, take it.
+	# below and there is a rope within arm's reach - and it is not the rope it
+	# just got off - take it.
 	if absf(_target.y - global_position.y) > WORTH_A_CABLE:
-		var cable := Zipline.nearest(get_tree(), global_position)
+		var cable := _cable_here()
 		if cable:
 			_grab(cable)
 			return
@@ -577,7 +730,13 @@ func _steer(delta: float) -> void:
 		_target = Vector2.INF
 		_rethink = 0.0
 
-	var cap := MAX_SPEED * lerpf(1.0, CROUCH_SPEED_SCALE, crouch)
+	# The caster's own top speed, arrived at through the same chain of
+	# multipliers Player._update_run walks: the weight of the gun and any wounds
+	# come in on speed_scale, the plates and the crouch are applied here off this
+	# body's own ramps. Aiming is the only term left out, and it is left out
+	# because a ghost never aims down sights - it has nothing to aim.
+	var cap := MAX_SPEED * speed_scale
+	cap *= lerpf(1.0, CROUCH_SPEED_SCALE, crouch)
 	cap *= lerpf(1.0, SHIELD_SPEED_SCALE, shield)
 	var accel := GROUND_ACCEL if is_on_floor() else AIR_ACCEL
 	velocity.x = move_toward(velocity.x, way * cap, accel * delta)
@@ -667,9 +826,16 @@ func _ride(delta: float) -> bool:
 
 
 func _let_go(hop: bool) -> void:
+	# Remembered, and off limits for a while. See CABLE_MEMORY and _cable_here.
+	_last_cable = _zipline
+	_cable_cooldown = CABLE_MEMORY
 	_zipline = null
 	riding = false
 	velocity.y = -220.0 if hop else 0.0
+	# Wherever the rope let it out, that is a new place with new sightlines. The
+	# target it was walking to before it got on is on the floor it has just left.
+	_target = Vector2.INF
+	_rethink = 0.0
 
 
 # --- being shot ---------------------------------------------------------------

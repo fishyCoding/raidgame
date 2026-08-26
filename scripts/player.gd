@@ -324,6 +324,10 @@ const THROW_TIME_NEAR := 0.42
 const THROW_TIME_FAR := 1.15
 ## How far ahead the arc is simulated, in steps of a physics frame.
 const ARC_STEPS := 90
+## What the bow's flight line is drawn in. The same blue as a recon sweep and
+## a recon ping, because a blue circle on the ground already means "this is
+## about to be scanned" and the preview is a promise of exactly that.
+const RECON_ARC := Color(0.55, 0.85, 0.95, 0.9)
 
 ## Distance out along the shot line at which recoil lifts the aim point. Aiming
 ## level, a kick of N degrees still rotates the aim by exactly N degrees, so this
@@ -531,6 +535,9 @@ var grapple_left := 0
 var _grapple_recharge_timer := 0.0
 ## The hook in the air or biting into something, and where it bit.
 var _hook: GrappleHook = null
+## One arrow, built the first time the bow comes up and kept. Never enters
+## the tree - see _show_arrow_flight.
+var _bow_preview: ReconBolt = null
 var _grapple_anchor := Vector2.INF
 ## How much of your steering authority is left once you are hanging still at the
 ## anchor. Some, so you can shuffle along a ledge, not enough to swim about.
@@ -627,6 +634,10 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Net.forget_player(self)
+	# Never in the tree, so nothing else is going to collect it.
+	if _bow_preview:
+		_bow_preview.free()
+		_bow_preview = null
 
 
 ## Hands this character a kit that was filled in before it existed.
@@ -1640,6 +1651,7 @@ func _update_weapon() -> void:
 		if bow_out:
 			bow_out = false
 			bow_drawn = 0.0
+			_hide_arrow_flight()
 			_say_loot("bow away")
 		else:
 			_use_ultimate()
@@ -1728,15 +1740,24 @@ func _use_ultimate() -> void:
 ##
 ## What it wears is sent with it rather than read off this body afterwards. A
 ## decoy is supposed to be a photograph of the moment you spent the charge: it
-## keeps the plates you had up and the gun you had out even after you have
-## dropped yours and run, which is exactly the lie you paid for.
+## keeps the gun you had out even after you have stowed yours and run, which is
+## exactly the lie you paid for.
+##
+## `speed_scale` is the part that cannot be seen and matters most. A ghost has no
+## gun to be slowed by and no wounds to limp from, so left to itself it runs at
+## the flat 260 - and a body crossing the yard faster than any real player with a
+## rifle can is one you identify at a glance, from the far side of the map,
+## without ever having to look at it properly. So the two multipliers this body
+## knows and that one cannot are sent with the cast. The plates it wears are its
+## own business: see Projection.setup.
 func _cast_projection(gadget: GadgetData) -> void:
+	var carrying := weapon.data.get_move_multiplier() if weapon.data else 1.0
 	var look := {
 		"facing": facing,
 		"aim_angle": aim_angle,
-		"armored": armored,
 		"stowed": stowed,
 		"crouch": crouch,
+		"speed_scale": carrying * injury_speed_multiplier(),
 	}
 	Net.cast_projection(gadget.resource_path, global_position, look,
 		get_multiplayer_authority())
@@ -1748,20 +1769,92 @@ func _cast_projection(gadget: GadgetData) -> void:
 ## still for it, which is exactly the trade an ultimate should ask for.
 func _draw_bow(delta: float) -> void:
 	if inventory_open or not is_alive:
+		# The flight line is drawn on the world, not on the bow, so it does not
+		# go away by itself when the bow stops being usable.
+		_hide_arrow_flight()
 		return
 
 	if PlayerInput.is_fire_held():
 		bow_drawn = minf(bow_drawn + delta / maxf(bow_draw_time, 0.01), 1.0)
+		_show_arrow_flight()
 		return
 
 	if bow_drawn <= 0.0:
-		return # not drawn yet: the trigger has simply not been touched
+		# Not drawn yet: the trigger has simply not been touched. The flight is
+		# still shown, at the minimum draw, so bringing the bow out tells you
+		# where a shot would go before you commit to pulling it back.
+		_show_arrow_flight()
+		return
 
 	if bow_drawn < bow_min_draw:
 		bow_drawn = 0.0 # a twitch on the trigger, not a shot
+		_hide_arrow_flight()
 		return
 
 	_loose_arrow(bow_drawn)
+
+
+## Where this arrow would land, drawn on the world while the bow is up.
+##
+## The bow already made you wind up for the shot; what it never did was tell you
+## what the wind-up was buying. An arrow drops, and how far it drops depends
+## entirely on how hard the bow was pulled - so at half draw the thing lands
+## somewhere quite different from where the crosshair is pointing, and the only
+## way to learn that was to waste ultimates finding out. Now the flight is on
+## screen, and the sweep it will paint is drawn as a circle on the ground it will
+## paint, so a recon shot is aimed at a room rather than hoped at one.
+##
+## Simulated with the arrow's own numbers rather than an approximation of them:
+## same launch speed, same gravity, same mask, same fixed step. Anything else and
+## the line on the screen is a second opinion about where the arrow goes.
+func _show_arrow_flight() -> void:
+	var ult := inventory.ultimate if inventory else null
+	if ult == null:
+		return
+	# At rest the bow shows the shot it can actually take, not a full-power one
+	# it cannot: below bow_min_draw the trigger does nothing at all.
+	var power := maxf(bow_drawn, bow_min_draw)
+	# One arrow, kept and re-asked, rather than one built and thrown away every
+	# frame the bow is up. It is never put in the tree - it exists only to be
+	# asked the three questions below, and asking the real class is what stops
+	# the preview and the shot from ever disagreeing.
+	if _bow_preview == null:
+		_bow_preview = RECON_BOLT_SCENE.instantiate()
+	_bow_preview.setup(ult.gadget, power)
+
+	var at := _muzzle.global_position
+	var vel := aim_direction * _bow_preview.launch_speed()
+	var sweep := _bow_preview.sweep_radius()
+	var drop := _bow_preview.gravity
+
+	var step := 1.0 / 60.0
+	var space := get_world_2d().direct_space_state
+	var points := PackedVector2Array([at])
+	for i in ARC_STEPS:
+		vel.y += drop * step
+		var next := at + vel * step
+		var query := PhysicsRayQueryParameters2D.create(at, next)
+		# What stops an arrow, which is not what stops a grenade: a catwalk it
+		# would fly under still stops it dead, and so does a guard.
+		query.collision_mask = Layers.WORLD | Layers.ONE_WAY | Layers.ENEMY
+		var hit := space.intersect_ray(query)
+		if hit:
+			points.append(hit.position)
+			break
+		at = next
+		points.append(at)
+
+	_aim_line.arc_points = points
+	_aim_line.arc_power = power
+	_aim_line.arc_radius = sweep
+	_aim_line.arc_tint = RECON_ARC
+	_aim_line.showing_arc = true
+
+
+func _hide_arrow_flight() -> void:
+	_aim_line.showing_arc = false
+	_aim_line.arc_radius = 0.0
+	_aim_line.arc_tint = Color(0, 0, 0, 0)
 
 
 func _loose_arrow(power: float) -> void:
@@ -1775,6 +1868,7 @@ func _loose_arrow(power: float) -> void:
 	ult.charge = 0.0
 	bow_out = false
 	bow_drawn = 0.0
+	_hide_arrow_flight()
 	_shake = minf(_shake + 4.0, max_shake)
 	_say_loot("arrow away at %d%% draw" % roundi(power * 100.0))
 	if _audio:
@@ -1814,12 +1908,24 @@ func _update_throw(delta: float) -> void:
 		_cancel_throw()
 		return
 
+	# Thrown away rather than thrown. Touch only - see PlayerInput. Checked
+	# before the held branch, because the pad keeps the action held for the whole
+	# time the target is being placed and only lets go to throw.
+	if PlayerInput.is_throw_cancelled():
+		_cancel_throw()
+		return
+
 	if PlayerInput.is_throw_held(throw_slot):
 		var target := _throw_target()
 		throw_charge = clampf(_muzzle.global_position.distance_to(target) / THROW_MAX_RANGE,
 			0.0, 1.0)
 		_aim_line.arc_points = _simulate_throw(throw_charge)
 		_aim_line.arc_power = throw_charge
+		# Shared with the bow, so both of these have to be said rather than
+		# left: a grenade wound up straight after an arrow would otherwise be
+		# drawn blue, with a sweep circle around where it lands.
+		_aim_line.arc_radius = 0.0
+		_aim_line.arc_tint = Color(0, 0, 0, 0)
 		_aim_line.showing_arc = true
 		return
 
@@ -1841,7 +1947,7 @@ func _throw_target() -> Vector2:
 func _cancel_throw() -> void:
 	throw_slot = -1
 	throw_charge = 0.0
-	_aim_line.showing_arc = false
+	_hide_arrow_flight()
 
 
 func _release_throw() -> void:

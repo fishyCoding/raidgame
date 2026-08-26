@@ -24,6 +24,15 @@ const STICK_DEADZONE := 0.25
 ## is placed, not pointed. Vector2.INF means "not set, use the cursor".
 var touch_aim_point := Vector2.INF
 
+## Set true for one frame by the CANCEL button on the touch throw pad.
+##
+## A throw on glass has to be abandonable, and it cannot be abandoned the way a
+## key is - letting go of G throws the grenade, and a thumb leaving the screen is
+## the only "release" a phone has. So the two outcomes need two buttons, and this
+## is the one that is not a throw. Consumed on read, like every other one-frame
+## touch flag here.
+var touch_throw_cancelled := false
+
 ## Set true by a HUD jump button on press; consumed (reset) when read.
 var touch_jump_pressed := false
 
@@ -428,6 +437,18 @@ func is_throw_just_pressed(slot: int) -> bool:
 ## True while that throw key is held - grenades are wound up, not tapped.
 func is_throw_held(slot: int) -> bool:
 	return Input.is_action_pressed("throw_%d" % (slot + 1))
+
+
+## True on the frame a wound-up throw is thrown away rather than thrown.
+##
+## Only touch can answer yes. On a keyboard, letting go of the key is the throw
+## and there is nothing to cancel - which is fine, because the cursor is already
+## on the target and a throw you did not want costs one press to line up again.
+func is_throw_cancelled() -> bool:
+	if touch_throw_cancelled:
+		touch_throw_cancelled = false
+		return true
+	return false
 
 
 ## True on the frame the inventory screen is toggled (TAB, for now).

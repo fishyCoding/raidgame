@@ -153,9 +153,28 @@ const PILLS_RIGHT := [
 	{"action": &"swap", "label": "SWAP", "mode": "swap"},
 	{"action": &"reload", "label": "RELOAD"},
 	{"action": &"ultimate", "label": "ULT"},
-	{"action": &"throw_1", "label": "FRAG"},
-	{"action": &"throw_2", "label": "SMOKE"},
+	{"action": &"throw_1", "label": "FRAG", "mode": "place"},
+	{"action": &"throw_2", "label": "SMOKE", "mode": "place"},
 ]
+## The two buttons that end a throw, while one is being placed.
+##
+## Two of them, and that is the whole reason this mode exists. On a keyboard a
+## grenade is wound up by holding G and thrown by letting go, and the cursor
+## places it in between - three things one hand does at once. A thumb cannot: it
+## is either on the pill or on the map, never both, and "let go to throw" means
+## every throw goes wherever the arc happened to be pointing when the thumb
+## slipped. So the throw is split into place-then-commit, and abandoning it needs
+## a button of its own because letting go can no longer mean cancel.
+const PLACE_BUTTONS := [
+	{"id": "throw", "label": "THROW", "at": Vector2(-190.0, -200.0), "r": 84.0},
+	{"id": "cancel", "label": "CANCEL", "at": Vector2(-190.0, -390.0), "r": 62.0},
+]
+
+## Where the target starts, in pixels in front of the character, so an arc is on
+## screen from the first frame rather than after the first drag. Roughly half the
+## throw's range: far enough to be a throw, near enough to be a doorway.
+const PLACE_DEFAULT_REACH := 340.0
+
 const PILL_SIZE := Vector2(118.0, 56.0)
 const PILL_GAP := 8.0
 const PILL_SPLIT := 60.0
@@ -194,6 +213,12 @@ var _closing := &""
 var _riding := false
 ## True while standing over something that can be opened.
 var _looting := false
+## The throw action whose landing spot is currently being placed, or "". While
+## this is set the pad is that one job and nothing else: no stick, no aim
+## surface, no pills.
+var _placing := &""
+## Where the finger has put it, in world space.
+var _place_at := Vector2.INF
 
 
 func _ready() -> void:
@@ -217,6 +242,7 @@ func _on_controls_changed(_touch: bool) -> void:
 
 func _process(delta: float) -> void:
 	_age_taps(delta)
+	_forget_spent_target()
 	var touch := PlayerInput.is_touch()
 	# "A / D move ... SPACE jump" is a lie on a phone, and it sits exactly where
 	# the pills go.
@@ -240,6 +266,11 @@ func _process(delta: float) -> void:
 	if _closing != &"":
 		if not _pressed.is_empty() or not _move_vec.is_zero_approx():
 			_release_everything()
+		queue_redraw()
+		return
+
+	if _placing != &"":
+		_drive_placement()
 		queue_redraw()
 		return
 
@@ -286,6 +317,123 @@ func _age_taps(delta: float) -> void:
 		# tap that started it.
 		if not _holding(action):
 			_set_action(action, false)
+
+
+## Drops a placed target once the throw that was going to use it is over.
+##
+## Asked of the player rather than timed out. A frame count would have to be
+## right at every frame rate, and the thing it is really waiting for is a single
+## specific event: Player._cancel_throw clearing throw_slot, which happens at the
+## end of the throw whether it was thrown or abandoned.
+func _forget_spent_target() -> void:
+	if _placing != &"" or not PlayerInput.touch_aim_point.is_finite():
+		return
+	var player := Net.local_player
+	if player == null or int(player.get(&"throw_slot")) < 0:
+		PlayerInput.touch_aim_point = Vector2.INF
+
+
+# --- placing a throw ----------------------------------------------------------
+
+
+## Arms a grenade and hands the whole screen over to putting it somewhere.
+##
+## The action is pressed here and stays pressed - Player._update_throw treats a
+## held throw key as "winding up", which is exactly the state we want it parked
+## in while a thumb moves the target about. It is released by the THROW button
+## and only by the THROW button.
+func _begin_placing(action: StringName) -> void:
+	# Whatever else was under a thumb is not any more. The stick especially: it
+	# would otherwise be left reporting the last direction it was pushed for the
+	# whole time the pad is showing something else.
+	_release_everything()
+	_placing = action
+	_place_at = Vector2.INF
+	_set_action(action, true)
+
+
+func _end_placing(throw_it: bool) -> void:
+	if _placing == &"":
+		return
+	# Letting go of the action is the throw, same as a key coming up.
+	_set_action(_placing, false)
+	if not throw_it:
+		PlayerInput.touch_throw_cancelled = true
+		PlayerInput.touch_aim_point = Vector2.INF
+	_placing = &""
+	_place_at = Vector2.INF
+	# On a throw the target is deliberately left set. The pad runs in _process
+	# and the throw is resolved in _physics_process, so clearing it here would
+	# hand Player._throw_target an INF a frame before it reads it - and the
+	# grenade would go to the crosshair instead of to the spot that was just
+	# chosen, which is every throw on a phone landing in the wrong place. It is
+	# cleared once the player says the throw is done. See _process.
+
+
+## Written every frame while placing, for the same reason the stick is: this is a
+## level, not an event, and a target that stopped being reported would fall back
+## to the crosshair mid-throw.
+func _drive_placement() -> void:
+	var player := Net.local_player
+	if player == null or not player.get(&"is_alive"):
+		_end_placing(false)
+		return
+	# The screens take priority. Opening the bag mid-throw has to put the
+	# grenade back rather than leave it armed behind a menu.
+	if PlayerInput.wants_cursor():
+		_end_placing(false)
+		return
+	if not _place_at.is_finite():
+		var way := 1.0 if player.get(&"facing") > 0 else -1.0
+		_place_at = player.global_position + Vector2(way * PLACE_DEFAULT_REACH, -60.0)
+	PlayerInput.touch_aim_point = _place_at
+	# The stick is still yours. Written here rather than left to the main body of
+	# _process, which this mode returns before reaching.
+	PlayerInput.touch_move_axis = _move_vec.x
+	_set_action(&"move_down", _move_vec.y > 0.55)
+
+
+## Screen pixels to world pixels, through whichever camera is live.
+##
+## The pad is on a CanvasLayer, so a touch arrives in screen space and the thing
+## being placed is in the level. Worked out from the camera rather than from a
+## canvas transform because the camera is the only thing that knows about the
+## lean this game applies while aiming - see Player._get_lead_offset.
+func _world_at(screen: Vector2) -> Vector2:
+	var camera := get_viewport().get_camera_2d()
+	if camera == null or camera.zoom.x <= 0.0 or camera.zoom.y <= 0.0:
+		return screen
+	return camera.get_screen_center_position() + (screen - size * 0.5) / camera.zoom
+
+
+func _place_rects() -> Array:
+	var out: Array = []
+	for button in PLACE_BUTTONS:
+		out.append({
+			"id": button.id, "label": button.label, "r": button.r,
+			"at": Vector2(size.x + button.at.x, size.y + button.at.y),
+		})
+	return out
+
+
+## A finger down while a throw is being placed.
+##
+## The two buttons win, then the move stick, then everywhere else on the screen
+## is the map. The stick stays live on purpose: on a keyboard you can walk while
+## you wind a grenade up, and taking that away on a phone would mean every throw
+## is a second or two of standing perfectly still in the open - which is a worse
+## trade than the grenade is worth.
+func _placing_pointer(id: int, at: Vector2) -> bool:
+	for button in _place_rects():
+		if at.distance_to(button.at) <= button.r * 1.15:
+			_end_placing(button.id == "throw")
+			return true
+	if _move_id == -2 and at.distance_to(_move_home()) <= STICK_RADIUS * STICK_GRAB:
+		_move_id = id
+		_move_vec = _swing(at - _move_home())
+		return true
+	_place_at = _world_at(at)
+	return true
 
 
 func _exit_tree() -> void:
@@ -374,6 +522,11 @@ func _pointer(id: int, at: Vector2, down: bool) -> bool:
 	if not down:
 		return _lift(id)
 
+	# Placing a throw owns the whole screen. Checked before the close button
+	# and before every pad control, because none of them exist right now.
+	if _placing != &"":
+		return _placing_pointer(id, at)
+
 	if _closing != &"":
 		if _close_rect().has_point(at):
 			_hold(id, _closing)
@@ -385,10 +538,15 @@ func _pointer(id: int, at: Vector2, down: bool) -> bool:
 	for pill in _pill_rects():
 		if not (pill.rect as Rect2).has_point(at):
 			continue
-		if pill.get("mode", "press") == "swap":
-			_hold(id, _other_hand())
-		else:
-			_hold(id, pill.action)
+		match pill.get("mode", "press"):
+			"swap":
+				_hold(id, _other_hand())
+			"place":
+				# Not held. A grenade on glass is armed by this tap and thrown
+				# by a different button entirely - see _begin_placing.
+				_begin_placing(pill.action)
+			_:
+				_hold(id, pill.action)
 		return true
 	for button in _button_rects():
 		if at.distance_to(button.at) > button.r * 1.15:
@@ -447,6 +605,20 @@ func _take_aim(id: int, at: Vector2) -> void:
 ## A finger sliding. The stick measures from its ring; the aim measures from
 ## wherever the finger was a moment ago.
 func _drag(id: int, at: Vector2) -> bool:
+	# Dragging while placing is either the stick or the target, and which one it
+	# is was decided when the finger went down.
+	if _placing != &"":
+		if id == _move_id:
+			_move_vec = _swing(at - _move_home())
+			return true
+		var over_button := false
+		for button in _place_rects():
+			if at.distance_to(button.at) <= button.r * 1.15:
+				over_button = true
+		if not over_button:
+			_place_at = _world_at(at)
+		return true
+
 	var ours := false
 	if id == _move_id:
 		_move_vec = _swing(at - _move_home())
@@ -491,6 +663,19 @@ func _set_action(action: StringName, down: bool) -> void:
 
 
 func _release_everything() -> void:
+	# A placement in progress is abandoned, not thrown. This runs when the pad is
+	# taken away underneath it - scheme change, a screen opening, stepping onto a
+	# cable - and none of those are somebody deciding to throw a grenade.
+	#
+	# It has to release the action explicitly: a placed throw is held by nothing
+	# in _pressed, so the loop below would leave it pressed forever and the
+	# player would wind up a grenade with no way left to let go of it.
+	if _placing != &"":
+		_set_action(_placing, false)
+		PlayerInput.touch_throw_cancelled = true
+		_placing = &""
+	_place_at = Vector2.INF
+	PlayerInput.touch_aim_point = Vector2.INF
 	for id in _pressed:
 		_set_action(_pressed[id], false)
 	_pressed.clear()
@@ -604,6 +789,10 @@ func _draw() -> void:
 			HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, ACCENT if down else LABEL)
 		return
 
+	if _placing != &"":
+		_draw_placement(font)
+		return
+
 	if not _riding:
 		_draw_stick(_move_id != -2, _move_home(), _move_vec, "MOVE")
 
@@ -631,6 +820,40 @@ func _draw() -> void:
 		draw_rect(rect, ACCENT if down else RING, false, 1.5)
 		draw_string(font, rect.position + Vector2(0.0, 36.0), pill.label,
 			HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 14, ACCENT if down else LABEL)
+
+
+## The throw pad: two buttons and a mark on the spot.
+##
+## Everything else is deliberately gone. The arc itself is not drawn here - the
+## player's own AimLine already draws it, on the overlay above the world, and it
+## is the same arc a mouse gets. All this adds is the crosshair under the thumb,
+## because a finger covers the exact pixel it is choosing and the ring at the end
+## of the arc is the only part you can actually see.
+func _draw_placement(font: Font) -> void:
+	draw_string(font, Vector2(size.x * 0.5, SAFE * 1.6), "drag to place it",
+		HORIZONTAL_ALIGNMENT_CENTER, size.x * 0.5 - SAFE, 17, Color(LABEL, 0.5))
+	# Still yours to walk with, so it is still drawn. A stick that vanishes is a
+	# stick nobody tries.
+	_draw_stick(_move_id != -2, _move_home(), _move_vec, "MOVE")
+
+	if _place_at.is_finite():
+		var camera := get_viewport().get_camera_2d()
+		if camera and camera.zoom.x > 0.0:
+			var screen := (_place_at - camera.get_screen_center_position()) * camera.zoom
+			screen += size * 0.5
+			draw_arc(screen, 26.0, 0.0, TAU, 32, Color(ACCENT, 0.75), 2.0, true)
+			draw_line(screen - Vector2(36.0, 0.0), screen + Vector2(36.0, 0.0),
+				Color(ACCENT, 0.45), 1.5, true)
+			draw_line(screen - Vector2(0.0, 36.0), screen + Vector2(0.0, 36.0),
+				Color(ACCENT, 0.45), 1.5, true)
+
+	for button in _place_rects():
+		var throwing: bool = button.id == "throw"
+		var tint := ACCENT if throwing else RING
+		draw_circle(button.at, button.r, PANEL)
+		draw_arc(button.at, button.r, 0.0, TAU, 32, tint, 2.5, true)
+		draw_string(font, button.at + Vector2(-button.r, 5.0), button.label,
+			HORIZONTAL_ALIGNMENT_CENTER, button.r * 2.0, 17, tint)
 
 
 func _draw_stick(live: bool, centre: Vector2, vec: Vector2, label: String) -> void:

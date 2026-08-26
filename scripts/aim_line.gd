@@ -22,9 +22,24 @@ var spread := 0.0
 var focus := 0.0
 ## Where a grenade would land, while one is being wound up. Drawn here because
 ## this node already lives on the overlay layer, above the world's darkness.
+##
+## The bow uses the same three fields for the same reason: an arrow is a thing
+## that flies, drops and lands somewhere, which is exactly what this already
+## draws. Two arc renderers that had to be kept looking alike would be two
+## chances to drift.
 var arc_points: PackedVector2Array = PackedVector2Array()
 var arc_power := 0.0
 var showing_arc := false
+## What the thing does where it lands, in world pixels. A grenade leaves this at
+## zero and gets the plain ring; a recon arrow sets it to the sweep it will paint
+## so the shot can be placed on a room rather than on a spot. Being able to see
+## the circle shrink as the draw comes off is the whole argument for winding the
+## bow up at all.
+var arc_radius := 0.0
+## Overrides the arc's colour. Zero alpha means "use the grenade's amber". The
+## bow is blue, the same blue everything recon is drawn in, because a blue circle
+## on a wall means one thing in this game and it should keep meaning it.
+var arc_tint := Color(0, 0, 0, 0)
 
 @export var color := Color(0.72, 0.85, 1.0, 0.16)
 ## Colour once fully aimed. Brighter, because by then the line is a sight.
@@ -78,6 +93,8 @@ func _draw_throw_arc() -> void:
 	if arc_points.size() < 2:
 		return
 	var tint := Color(0.7, 0.78, 0.86, 0.6).lerp(Color(1.0, 0.72, 0.34, 0.95), arc_power)
+	if arc_tint.a > 0.0:
+		tint = Color(arc_tint, lerpf(arc_tint.a * 0.45, arc_tint.a, arc_power))
 	for i in arc_points.size():
 		if i % 3 != 0:
 			continue
@@ -88,6 +105,13 @@ func _draw_throw_arc() -> void:
 	var landing := to_local(arc_points[arc_points.size() - 1])
 	draw_arc(landing, 9.0, 0.0, TAU, 20, tint, 1.5, true)
 	draw_circle(landing, 2.0, tint)
+	if arc_radius > 1.0:
+		# What it will actually cover, drawn on the ground it will cover.
+		# Fainter than the flight path and the landing mark: it is the answer
+		# to "is that room inside it", which you check once, not the thing you
+		# are steering with.
+		draw_arc(landing, arc_radius, 0.0, TAU, 64,
+			Color(tint.r, tint.g, tint.b, tint.a * 0.4), 1.5, true)
 
 
 ## One ray from the muzzle, drawn between two distances. Alpha fades in off the
