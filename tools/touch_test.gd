@@ -415,6 +415,15 @@ func _run() -> void:
 	# a desktop player the left button for the rest of the session.
 	_check("the mouse can shoot again on desktop", _has_mouse_binding(&"fire"))
 
+	# Put the machine back the way it was found. control_scheme has a setter that
+	# writes user://controls.cfg, and that is the same file the real game reads on
+	# launch - so a run that ends here leaves the exported build pinned to
+	# DESKTOP, and a run that ends in TOUCH leaves it drawing thumbsticks on a PC
+	# with the keyboard unable to move. That has already cost an afternoon once:
+	# see the note in tools/projection_test.gd. AUTO is the shipped default and
+	# follows the device.
+	_input.control_scheme = _input.Controls.AUTO
+
 	_finish()
 
 
