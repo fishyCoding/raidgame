@@ -81,34 +81,40 @@ const HELD_TINT := Color(0.98, 0.78, 0.35, 0.4)
 ##   swap    - presses whichever hand you are *not* holding, worked out on the
 ##             press, because "the other gun" is not a fixed action
 const BUTTONS := [
-	# Right, under the aiming thumb.
-	{"action": &"fire", "label": "FIRE", "at": Vector2(-180.0, -330.0), "r": 86.0,
-		"mode": "fire"},
-	{"action": &"aim", "label": "ADS", "at": Vector2(-350.0, -180.0), "r": 74.0,
-		"mode": "toggle"},
+	# Everything the shooting and moving hands do now sits on the right, under
+	# one thumb, with the left kept for the stick and the hook.
+	#
+	# FIRE aims as well as shoots. They were two buttons and a thumb can only be
+	# on one of them, so ADS was a latch you had to remember the state of - and
+	# forgetting it is a fight lost. Holding this holds both, which is what
+	# pulling a trigger on a phone should mean.
+	{"action": &"fire", "label": "FIRE", "at": Vector2(-150.0, -300.0), "r": 92.0,
+		"mode": "fire", "also": &"aim", "riding": true},
 	# Tapped, not pressed. The player cuts a jump short when you let go of it
 	# (Player.jump_cut), which is right for a key and wrong for glass: a thumb is
 	# off the button before the character has left the floor, so every jump on a
 	# phone was a 45% hop and the height was unreachable. Tap it and you get all
 	# of it, which is the only jump a phone can usefully offer.
-	{"action": &"jump", "label": "JUMP", "at": Vector2(-330.0, -420.0), "r": 62.0,
-		"mode": "tap"},
-	# Left, under the steering thumb.
-	{"action": &"interact", "label": "USE", "at": Vector2(390.0, -150.0), "r": 62.0,
-		"mode": "press", "left": true},
-	{"action": &"crouch", "label": "DUCK", "at": Vector2(350.0, -330.0), "r": 62.0,
-		"mode": "toggle", "left": true},
-	{"action": &"grapple", "label": "HOOK", "at": Vector2(200.0, -390.0), "r": 62.0,
-		"mode": "press", "left": true},
+	#
+	# Becomes ZIP when there is a cable in reach - see _live_buttons. One button,
+	# because jumping and grabbing a rope are never both what you want, and a
+	# phone has no room for a control that is wrong most of the time.
+	{"action": &"jump", "label": "JUMP", "at": Vector2(-330.0, -420.0), "r": 66.0,
+		"mode": "tap", "zip": true},
+	{"action": &"crouch", "label": "DUCK", "at": Vector2(-320.0, -230.0), "r": 62.0,
+		"mode": "toggle"},
+	{"action": &"interact", "label": "USE", "at": Vector2(-500.0, -340.0), "r": 60.0,
+		"mode": "press"},
 	# Pressed, not latched, even though the shield *is* a latch in the game.
 	# The latching lives in Player._update_shield, which flips on the press edge -
 	# so a pad button that held the action down would flip it once and then never
 	# again. One tap, one edge, one toggle.
-	#
-	# Left hand, with the movement controls rather than the shooting ones: the
-	# plates cost you speed, so putting them up is a decision about how you are
-	# moving and it belongs under the thumb that moves you.
-	{"action": &"shield", "label": "PLATES", "at": Vector2(530.0, -300.0), "r": 62.0,
+	{"action": &"shield", "label": "PLATES", "at": Vector2(-490.0, -180.0), "r": 58.0,
+		"mode": "press"},
+	# The one thing left on the steering hand. It is a movement verb in the sense
+	# that matters - it is how you cross a room - but it is aimed with the stick,
+	# so it belongs next to it.
+	{"action": &"grapple", "label": "HOOK", "at": Vector2(200.0, -390.0), "r": 62.0,
 		"mode": "press", "left": true},
 ]
 
@@ -127,12 +133,12 @@ const LOOT_BUTTON := {
 ## not stay as they were - "W up, S down" is not advice a thumb can take, and it
 ## was the whole reason ziplines were unusable on a phone.
 const RIDE_BUTTONS := [
-	{"action": &"jump", "label": "UP", "at": Vector2(200.0, -400.0), "r": 68.0,
-		"mode": "press", "left": true},
-	{"action": &"move_down", "label": "DOWN", "at": Vector2(200.0, -180.0), "r": 68.0,
-		"mode": "press", "left": true},
-	{"action": &"interact", "label": "LET GO", "at": Vector2(390.0, -290.0), "r": 60.0,
-		"mode": "press", "left": true},
+	{"action": &"jump", "label": "UP", "at": Vector2(-330.0, -420.0), "r": 68.0,
+		"mode": "press"},
+	{"action": &"move_down", "label": "DOWN", "at": Vector2(-330.0, -220.0), "r": 68.0,
+		"mode": "press"},
+	{"action": &"interact", "label": "LET GO", "at": Vector2(-500.0, -320.0), "r": 60.0,
+		"mode": "press"},
 ]
 
 ## The rest of it, as pills along the top - a deliberate press rather than a
@@ -152,9 +158,19 @@ const PILLS_LEFT := [
 const PILLS_RIGHT := [
 	{"action": &"swap", "label": "SWAP", "mode": "swap"},
 	{"action": &"reload", "label": "RELOAD"},
+]
+
+## The things you spend, along the bottom edge between the two thumbs.
+##
+## They were up on the top rail with the reloads and the map, which put the ult
+## and both grenades at the far end of a reach - and all three are things you
+## use in the half second when something has gone wrong. Down here they are
+## where the hands already are.
+##
+## Labelled from whatever is actually in the slot - see _pill_label. The names
+## here are only the fallback for an empty one.
+const PILLS_BOTTOM := [
 	{"action": &"ultimate", "label": "ULT"},
-	# Labelled from whatever is actually in the slot - see _pill_rects. The
-	# names here are only the fallback for an empty one.
 	{"action": &"throw_1", "label": "THROW 1", "mode": "place", "slot": 0},
 	{"action": &"throw_2", "label": "THROW 2", "mode": "place", "slot": 1},
 ]
@@ -655,7 +671,7 @@ func _pointer(id: int, at: Vector2, down: bool) -> bool:
 			"swap":
 				_hold(id, _other_hand())
 			"fire":
-				_hold(id, button.action)
+				_hold(id, button.action, button.get("also", &""))
 				_take_aim(id, at)
 			_:
 				_hold(id, button.action)
@@ -736,15 +752,22 @@ func _lift(id: int) -> bool:
 		_aim_id = -2
 		ours = true
 	if _pressed.has(id):
-		_set_action(_pressed[id], false)
+		for one in _pressed[id]:
+			_set_action(one, false)
 		_pressed.erase(id)
 		ours = true
 	return ours
 
 
-func _hold(id: int, action: StringName) -> void:
-	_pressed[id] = action
-	_set_action(action, true)
+## `also` lets one button press two actions - the trigger holds fire and aim
+## together, because on glass they are one gesture.
+func _hold(id: int, action: StringName, also := &"") -> void:
+	var actions: Array = [action]
+	if also != &"":
+		actions.append(also)
+	_pressed[id] = actions
+	for one in actions:
+		_set_action(one, true)
 
 
 ## Pressed and released through the real input map, so everything downstream -
@@ -773,7 +796,8 @@ func _release_everything() -> void:
 	_place_at = Vector2.INF
 	PlayerInput.touch_aim_point = Vector2.INF
 	for id in _pressed:
-		_set_action(_pressed[id], false)
+		for one in _pressed[id]:
+			_set_action(one, false)
 	_pressed.clear()
 	for action in _tapped:
 		_set_action(action, false)
@@ -823,20 +847,43 @@ func _button_rects() -> Array:
 func _live_buttons() -> Array:
 	var out: Array = []
 	if _riding:
-		# The left cluster is replaced; the right hand is untouched, because you
-		# can still shoot from a cable.
+		# Only the trigger survives a ride - you can still shoot from a cable,
+		# and everything else about standing on the ground has stopped applying.
 		for button in BUTTONS:
-			if not button.get("left", false):
+			if button.get("riding", false):
 				out.append(button)
 		out.append_array(RIDE_BUTTONS)
-	else:
-		out.append_array(BUTTONS)
-	if _looting:
-		out.append(LOOT_BUTTON)
+		return out
+
+	for button in BUTTONS:
+		# One button for jumping and for catching a rope, showing whichever the
+		# ground under you actually offers.
+		if button.get("zip", false) and _cable_in_reach():
+			var zipping: Dictionary = (button as Dictionary).duplicate()
+			zipping.action = &"interact"
+			zipping.label = "ZIP"
+			# A press, not a tap: grabbing reads the press edge, and TAP_HOLD
+			# would leave interact held down afterwards - which is the same
+			# button that loots, so it would rifle the next body you walked over.
+			zipping.mode = "press"
+			out.append(zipping)
+			continue
+		out.append(button)
 	return out
 
 
+## Whether there is a cable close enough to catch hold of.
+func _cable_in_reach() -> bool:
+	var player := Net.local_player
+	if player == null:
+		return false
+	return Zipline.nearest(get_tree(), player.global_position) != null
+
+
 func _pill_rects() -> Array:
+	# Widths come off the top rail only. The bottom row is short and sits in open
+	# space, so letting it squeeze the ones along the top would shrink every pill
+	# on screen to fit a problem that does not exist.
 	var count := PILLS_LEFT.size() + PILLS_RIGHT.size()
 	var gaps := (PILLS_LEFT.size() - 1 + PILLS_RIGHT.size() - 1) * PILL_GAP
 	var room := size.x - SAFE * 2.0 - PILL_SPLIT
@@ -859,6 +906,18 @@ func _pill_rects() -> Array:
 		out.append({"action": pill.action, "label": _pill_label(pill),
 			"mode": pill.get("mode", "press"),
 			"rect": Rect2(Vector2(x, top), Vector2(wide, PILL_SIZE.y))})
+		x += wide + PILL_GAP
+
+	# Centred along the bottom, in the gap between the steering thumb's stick and
+	# the shooting thumb's cluster. The middle of the bottom edge is the one part
+	# of a phone held in two hands that nothing else wants.
+	var across := PILLS_BOTTOM.size() * wide + (PILLS_BOTTOM.size() - 1) * PILL_GAP
+	x = (size.x - across) * 0.5
+	var floor_row := size.y - SAFE - PILL_SIZE.y
+	for pill in PILLS_BOTTOM:
+		out.append({"action": pill.action, "label": _pill_label(pill),
+			"mode": pill.get("mode", "press"),
+			"rect": Rect2(Vector2(x, floor_row), Vector2(wide, PILL_SIZE.y))})
 		x += wide + PILL_GAP
 	return out
 
@@ -887,7 +946,10 @@ func _pill_label(pill: Dictionary) -> String:
 
 
 func _holding(action: StringName) -> bool:
-	return _pressed.values().has(action)
+	for actions in _pressed.values():
+		if (actions as Array).has(action):
+			return true
+	return false
 
 
 ## A control reads as on when a thumb is on it or when it is latched, so a toggle

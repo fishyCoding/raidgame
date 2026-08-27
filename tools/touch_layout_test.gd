@@ -106,8 +106,10 @@ func _measure(screen: Vector2) -> void:
 	var reach: float = _pad.STICK_RADIUS * _pad.STICK_GRAB
 	for control in controls:
 		var centre: Vector2 = (control.rect as Rect2).get_center()
-		if centre.distance_to(_pad._move_home()) <= reach \
-				or centre.distance_to(_pad._aim_home()) <= reach:
+		# One stick, not two. This asked about a second one on the aiming side
+		# that no longer exists, so the call errored and took the whole check
+		# with it - it has been quietly not running, while still reporting PASS.
+		if centre.distance_to(_pad._move_home()) <= reach:
 			grabbed.append(control.name)
 	_check("no button sits inside a stick's grab", grabbed.is_empty(), " ".join(grabbed))
 
