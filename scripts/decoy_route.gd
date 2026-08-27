@@ -73,6 +73,41 @@ static func ends_of(line: Zipline, from: Vector2) -> Array:
 ## Three rules: the end you get on at has to be on this floor, walking to it is
 ## measured across the ground rather than through the air, and riding it has to
 ## actually buy height towards where you are going.
+## The cable that best bridges a gap the walk cannot cross.
+##
+## Used when the direct walk is blocked but the destination is at much the same
+## height - two platforms level with each other and a chasm in between, which
+## "same floor, just walk" gets exactly wrong. Height gain is no use as a score
+## here, so it is scored on how much closer the far end leaves you to where you
+## are actually going.
+static func bridging_cable(tree: SceneTree, from: Vector2, to: Vector2,
+		used: Array) -> Zipline:
+	var best: Zipline = null
+	var best_score := -INF
+	for node in tree.get_nodes_in_group(&"zipline"):
+		var line := node as Zipline
+		if line == null or line in used:
+			continue
+		var ends := ends_of(line, from)
+		var near: Vector2 = ends[0]
+		var far: Vector2 = ends[1]
+		if absf(near.y - from.y) > FLOOR_REACH:
+			continue
+		var walk := absf(near.x - from.x)
+		if walk > CABLE_SEARCH:
+			continue
+		# Worth taking only if the far end is meaningfully nearer the goal than
+		# standing here is, or it is a detour for its own sake.
+		var gain := from.distance_to(to) - far.distance_to(to)
+		if gain < 200.0:
+			continue
+		var score := gain - walk * 0.8
+		if score > best_score:
+			best_score = score
+			best = line
+	return best
+
+
 static func best_cable(tree: SceneTree, from: Vector2, goal_y: float,
 		used: Array) -> Zipline:
 	var climb := absf(from.y - goal_y)

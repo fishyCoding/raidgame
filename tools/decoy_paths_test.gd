@@ -198,6 +198,12 @@ func _journey(ghost: Node2D, from: Vector2, to: Vector2, frames: int) -> Diction
 	var closest := INF
 	var rode := false
 	var picked := false
+	# The dominant miss is a body ending a floor or more below a route it had
+	# right, so the fall itself is what needs describing: how far, from where,
+	# and whether it was on a rope at the time.
+	var worst_fall := 0.0
+	var fell_from := Vector2.INF
+	var falling_from := Vector2.INF
 	for i in frames:
 		await physics_frame
 		if not is_instance_valid(ghost):
@@ -206,6 +212,15 @@ func _journey(ghost: Node2D, from: Vector2, to: Vector2, frames: int) -> Diction
 			rode = true
 		if ghost._leg_cable != null:
 			picked = true
+
+		# A fall is time spent off the floor and not on a rope.
+		if ghost.is_on_floor() or ghost.riding:
+			falling_from = ghost.global_position
+		elif falling_from.is_finite():
+			var drop: float = ghost.global_position.y - falling_from.y
+			if drop > worst_fall:
+				worst_fall = drop
+				fell_from = falling_from
 		var gap := ghost.global_position - to
 		if absf(gap.x) <= ARRIVE_X and absf(gap.y) <= ARRIVE_Y:
 			return {"from": from, "to": to, "arrived": true, "closest": 0.0,
@@ -224,5 +239,7 @@ func _journey(ghost: Node2D, from: Vector2, to: Vector2, frames: int) -> Diction
 		why += ", never took a rope"
 	why += "  [plan %d ride(s), chose %s, rode %s]" % [
 		planned_rides, picked, rode]
+	if worst_fall > 150.0:
+		why += "  FELL %.0f px from %s" % [worst_fall, str(fell_from.round())]
 	return {"from": from, "to": to, "arrived": false, "closest": closest,
 		"why": why, "plan": planned_rides, "picked": picked, "rode": rode}

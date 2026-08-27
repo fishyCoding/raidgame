@@ -136,10 +136,13 @@ const ARRIVED_Y := 90.0
 ## disqualify a rope, but the floor above does.
 const FLOOR_REACH := 130.0
 
-## How far ahead it feels for a wall, and for the floor falling away.
+## How far ahead it feels for a wall.
 const WALL_PROBE := 20.0
-const LEDGE_PROBE := 26.0
-const LEDGE_DROP := 16.0
+
+## How far past its own leading edge it looks for floor, and how far down it
+## looks before calling the absence a drop rather than a step.
+const LEDGE_PROBE := 16.0
+const LEDGE_DROP := 90.0
 
 ## How long after stepping off a cable before it will drive itself sideways
 ## again. Just long enough to land: a body that steers while airborne cannot see
@@ -167,6 +170,10 @@ const TURN_COMMIT := 1.8
 
 ## How long it has to make no headway before it stops believing in the route.
 const STUCK_TIME := 1.4
+
+## How often it re-asks whether the direct walk to its destination goes through.
+## A dozen raycasts, and the answer does not change while it walks.
+const WALK_RECHECK := 1.0
 
 ## How long it works towards where it was sent before going back to baiting on
 ## its own. Click again to renew it.
@@ -312,6 +319,10 @@ var destination := Vector2.INF
 var _leg_cable: Zipline = null
 ## The end of `_leg_cable` it is walking to in order to get on.
 var _leg_end := Vector2.INF
+## Whether the direct walk to the destination goes through, and when to ask
+## again. See _next_leg.
+var _walk_blocked := false
+var _walk_check := 0.0
 ## Somewhere to get to first, because the direct way is blocked. See _turn_back.
 var _detour := Vector2.INF
 var _detour_left := 0.0
@@ -727,6 +738,7 @@ func _think(delta: float) -> void:
 			# walks to and the destination is picked up again on the far side.
 			_orders_left -= delta
 			_detour_left = maxf(_detour_left - delta, 0.0)
+			_walk_check = maxf(_walk_check - delta, 0.0)
 			if not destination.is_finite() or _orders_left <= 0.0:
 				_stand_down()
 			elif _arrived_at(destination):
@@ -795,6 +807,8 @@ func order_to(spot: Vector2) -> bool:
 	_leg_cable = null
 	_leg_end = Vector2.INF
 	_refusals = 0
+	_walk_check = 0.0
+	_walk_blocked = false
 	# A fresh order is a clean slate, cable grudge included. CABLE_MEMORY
 	# stops it riding one rope up and down in front of everybody while it is
 	# baiting on its own; under orders it is the wrong rule entirely, because
@@ -847,8 +861,34 @@ func _next_leg() -> Vector2:
 	# Backing out of something it could not get past, for a moment.
 	if _detour_left > 0.0 and _detour.is_finite():
 		return _detour
-	# Same floor, near enough: just go.
+	# Level with it: walk, but only if the walk actually goes through. Two
+	# platforms at the same height can have a chasm between them, and "same
+	# floor, just go" reads that as a stroll - which is a body pacing at the
+	# lip of a gap for the whole errand. Re-checked on a timer rather than
+	# every frame; it is a dozen raycasts and the answer does not change
+	# while it walks.
 	if absf(destination.y - global_position.y) <= FLOOR_REACH:
+		if _walk_check <= 0.0:
+			_walk_check = WALK_RECHECK
+			var walk: Dictionary = ROUTE.trace_walk(
+				get_world_2d().direct_space_state, global_position, destination)
+			_walk_blocked = walk.blocked
+		if not _walk_blocked:
+			_leg_cable = null
+			return destination
+		# Blocked. A rope that bridges the gap will do, whether or not it
+		# buys any height.
+		if _leg_cable == null:
+			var skip: Array = []
+			if _last_cable and _cable_cooldown > 0.0:
+				skip.append(_last_cable)
+			_leg_cable = ROUTE.bridging_cable(
+				get_tree(), global_position, destination, skip)
+			_leg_end = Vector2.INF
+			if _leg_cable:
+				_leg_end = (ROUTE.ends_of(_leg_cable, global_position) as Array)[0]
+		if _leg_cable and _leg_end.is_finite():
+			return _leg_end
 		_leg_cable = null
 		return destination
 
@@ -1078,8 +1118,7 @@ func _steer(delta: float) -> void:
 
 	if is_on_floor():
 		var blocked := test_move(global_transform, Vector2(way * WALL_PROBE, 0.0))
-		var ledge := not test_move(global_transform,
-			Vector2(way * LEDGE_PROBE, LEDGE_DROP))
+		var ledge := _ledge_ahead(way)
 		if blocked:
 			# Something in the way. Ask whether it can actually be got over
 			# before trying - the old version jumped at everything, every frame,
@@ -1104,12 +1143,10 @@ func _steer(delta: float) -> void:
 				_turn_back(way)
 				return
 		elif ledge:
-			# A drop. Three different right answers, and picking the wrong one is
-			# what produced the pacing:
-			if _mind == Mind.ORDERS and destination.y > global_position.y + FLOOR_REACH:
-				# Sent somewhere below. The edge is the way down, so take it -
-				# nothing here hurts a body that falls, and refusing meant
-				# walking to the lip, backing off, walking to the lip again.
+			# A drop, and whether to take it is the question that produced most
+			# of the pacing. Nothing here hurts a body that falls, so the only
+			# cost of a drop is ending up on a floor the errand did not want.
+			if _mind == Mind.ORDERS and _drop_is_progress(way):
 				pass
 			elif _mind == Mind.BREAK and _can_land_across(way):
 				_hop()
@@ -1166,6 +1203,50 @@ func _clearance_over(way: float) -> float:
 ## Whether the thing in front of it is a crate or a wall.
 func _can_step_over(way: float) -> bool:
 	return _clearance_over(way) >= 0.0
+
+
+## Whether walking off the edge in front takes it nearer where it was sent.
+##
+## Refusing every drop is as wrong as taking every drop, and both look the same
+## from outside: one paces at the lip, the other ends up two floors down. What
+## decides it is where the errand is. If the destination is below the floor it
+## would land on, the edge is the way there; if it is level with here or above,
+## the edge is a mistake and the route wants a rope instead.
+##
+## Bottomless is always refused, whatever the destination - falling off the map
+## is not a route.
+func _drop_is_progress(way: float) -> bool:
+	if not destination.is_finite():
+		return false
+	var toe := global_position + Vector2(way * (size.x * 0.5 + LEDGE_PROBE), -6.0)
+	var query := PhysicsRayQueryParameters2D.create(toe, toe + Vector2(0.0, 1200.0))
+	query.collision_mask = Layers.WORLD | Layers.ONE_WAY
+	var hit := get_world_2d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return false
+	var lands: float = (hit.position as Vector2).y
+	# The floor it would land on has to be no lower than where it is going.
+	# Overshooting downwards is how it ends up under the route rather than on it.
+	return lands <= destination.y + FLOOR_REACH
+
+
+## Whether the floor runs out just ahead.
+##
+## A ray in front of the body, not an attempt to move the body. This was
+## test_move() with a down-and-forward vector, which asks "would the whole box
+## collide" - and the box is twenty-eight pixels wide, so while any part of it is
+## still over the platform the answer is yes and no ledge is reported. By the
+## time the centre has cleared the edge the body is already off it.
+##
+## That is the whole of the "walks off platforms" report, and a soak across the
+## level put the falls within eighty pixels of where each journey started: it was
+## stepping off the first edge it met, every time, and then spending the rest of
+## its errand a floor below the route it had correctly planned.
+func _ledge_ahead(way: float) -> bool:
+	var toe := global_position + Vector2(way * (size.x * 0.5 + LEDGE_PROBE), -6.0)
+	var query := PhysicsRayQueryParameters2D.create(toe, toe + Vector2(0.0, LEDGE_DROP))
+	query.collision_mask = Layers.WORLD | Layers.ONE_WAY
+	return get_world_2d().direct_space_state.intersect_ray(query).is_empty()
 
 
 ## Whether there is anything to land on across the gap ahead.
