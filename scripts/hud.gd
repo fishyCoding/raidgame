@@ -602,27 +602,60 @@ func _draw_projection_route(to: Vector2) -> void:
 		if float(out.get("_cable_cooldown")) <= 0.0:
 			skip = null
 
-	var route: PackedVector2Array = ROUTE.plan(get_tree(), from, to, skip)
-	if route.size() < 2:
-		return
+	var space := _player.get_world_2d().direct_space_state
+	for leg in ROUTE.plan(get_tree(), from, to, skip):
+		if leg.cable:
+			# A rope genuinely is a straight line through the air, so this one
+			# is drawn straight - and drawn heavier, because it is the part of
+			# the plan worth reading. Everything else is "and then it walks".
+			_draw_route_leg([leg.from, leg.to] as PackedVector2Array, 4.0, 0.9)
+			_draw_route_knot(leg.from)
+			_draw_route_knot(leg.to)
+			continue
 
+		# A walk is not. Followed over the ground it would be walked on, so the
+		# line bends over the floor instead of cutting through the room - a
+		# straight line here is a promise of a walk nothing can take.
+		var walk: Dictionary = ROUTE.trace_walk(space, leg.from, leg.to)
+		_draw_route_leg(walk.line, 2.0, 0.5)
+		if walk.blocked:
+			# It does not get there. Say so where it stops rather than drawing
+			# the rest of a journey that will not happen.
+			_draw_route_stop((walk.line as PackedVector2Array)[-1])
+			return
+
+
+## One run of the route, in screen space. Silently drops any leg the camera
+## cannot place, which headless is all of them.
+func _draw_route_leg(points: PackedVector2Array, width: float, alpha: float) -> void:
+	if points.size() < 2:
+		return
 	var screen := PackedVector2Array()
-	for point in route:
+	for point in points:
 		var at := _to_screen(point)
 		if not at.is_finite():
 			return
 		screen.append(at)
+	draw_polyline(screen, Color(ROUTE_LINE, alpha), width, true)
 
-	# The legs, then the corners on top. Cable rides are drawn heavier than the
-	# walks because they are the part of the plan worth reading: everything else
-	# is "and then it walks", and a rope is a decision.
-	for i in screen.size() - 1:
-		var riding := i % 2 == 1 and screen.size() > 2 and i < screen.size() - 2
-		draw_line(screen[i], screen[i + 1],
-			Color(ROUTE_LINE, 0.9 if riding else 0.5),
-			4.0 if riding else 2.0, true)
-	for i in range(1, screen.size() - 1):
-		draw_circle(screen[i], 5.0, Color(ROUTE_LINE, 0.85))
+
+## A corner it turns - getting on or off a rope.
+func _draw_route_knot(world: Vector2) -> void:
+	var at := _to_screen(world)
+	if at.is_finite():
+		draw_circle(at, 5.0, Color(ROUTE_LINE, 0.85))
+
+
+## Where the walk gives out. A cross rather than a dot: this is the one mark on
+## the line that means "and no further", and it should not read as another
+## corner.
+func _draw_route_stop(world: Vector2) -> void:
+	var at := _to_screen(world)
+	if not at.is_finite():
+		return
+	var arm := 9.0
+	draw_line(at - Vector2(arm, arm), at + Vector2(arm, arm), ROUTE_LINE, 3.0, true)
+	draw_line(at - Vector2(arm, -arm), at + Vector2(arm, -arm), ROUTE_LINE, 3.0, true)
 
 
 ## World space to screen space, through whichever camera is live. INF when there

@@ -142,10 +142,9 @@ const SETTLE_TIME := 0.45
 ## cooldown and a missing question: *can* it get over that.
 const JUMP_COOLDOWN := 0.55
 
-## How high it will try to climb. Under the 100 px the jump actually reaches, so
-## a thing it decides it can clear is a thing it clears with room to spare rather
-## than one it scrapes and falls back off.
-const STEP_UP := 68.0
+## How high it will try to climb. Taken from the planner so the red line drawn
+## over the level and the body walking it agree about what counts as a wall.
+const STEP_UP := ROUTE.STEP_UP
 
 ## How far it turns back when it meets something it cannot pass, and how long it
 ## sticks with that decision. Without the commitment it turns round, immediately
@@ -1044,8 +1043,17 @@ func _steer(delta: float) -> void:
 			# Something in the way. Ask whether it can actually be got over
 			# before trying - the old version jumped at everything, every frame,
 			# which against a two storey wall is a body bouncing on the spot.
-			if _can_step_over(way):
+			var lift := _clearance_over(way)
+			if lift >= 0.0:
 				_hop()
+				# Over it, not up at it. Pressed against a crate the collision has
+				# already scrubbed its horizontal speed to nothing, so a standing
+				# jump goes straight up and lands back on the same side - which is
+				# the "struggles to get over boxes" report. The nudge is what
+				# carries it across, and it is only applied on the frame it
+				# actually leaves the ground.
+				if is_zero_approx(_jump_cool - JUMP_COOLDOWN):
+					velocity.x = way * MAX_SPEED * speed_scale * 0.9
 			else:
 				_turn_back(way)
 				return
@@ -1086,18 +1094,31 @@ func _hop() -> void:
 	_jump_cool = JUMP_COOLDOWN
 
 
-## Whether the thing in front of it is a crate or a wall.
+## How high it would have to be to get past what is in front of it, or -1 if
+## nothing it can manage would do.
 ##
-## Two questions, and both are needed. Can it rise at all - a low ceiling makes
-## every obstacle unjumpable however short it is - and from up there, is the way
-## forward clear. Without the second one it jumps at walls; without the first it
-## jumps into girders.
+## Probed at a ladder of heights rather than tested once at the top of its reach.
+## One test at full height answers "could it get over this if it were already up
+## there", which is the wrong question twice over: under a low ceiling it says no
+## to a knee-high crate, and it gives no idea how far it actually has to rise -
+## so every obstacle got the same maximum-effort hop.
+func _clearance_over(way: float) -> float:
+	var reach := Vector2(way * (WALL_PROBE + 10.0), 0.0)
+	for step in [14.0, 26.0, 38.0, 50.0, 62.0, STEP_UP]:
+		# Is there room to be at that height at all? A girder overhead rules out
+		# everything above it, however short the thing in front is.
+		if test_move(global_transform, Vector2(0.0, -step)):
+			return -1.0
+		var lifted := global_transform
+		lifted.origin.y -= step
+		if not test_move(lifted, reach):
+			return step
+	return -1.0
+
+
+## Whether the thing in front of it is a crate or a wall.
 func _can_step_over(way: float) -> bool:
-	if test_move(global_transform, Vector2(0.0, -STEP_UP)):
-		return false
-	var lifted := global_transform
-	lifted.origin.y -= STEP_UP
-	return not test_move(lifted, Vector2(way * (WALL_PROBE + 10.0), 0.0))
+	return _clearance_over(way) >= 0.0
 
 
 ## Whether there is anything to land on across the gap ahead.

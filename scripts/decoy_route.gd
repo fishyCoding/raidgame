@@ -32,6 +32,27 @@ const CABLE_SEARCH := 900.0
 ## either side, which is the whole height of this level twice over.
 const MAX_HOPS := 3
 
+## How finely a walking leg is followed along the ground, and how far below each
+## sample to look for a floor before calling it a gap.
+const TRACE_STEP := 26.0
+const TRACE_DROP := 280.0
+## How far above the sample the downward probe starts, so a probe that lands on
+## the exact lip of a step is not a coin flip about which side it hits.
+const TRACE_LIFT := 44.0
+## How big a step up a decoy can take without being stopped by it.
+##
+## The canonical figure, shared with the body that does the climbing, because the
+## drawn route and the walked route have to agree about what counts as a wall.
+## Under the 100 px its jump actually reaches, so something it decides it can
+## clear is something it clears with room rather than scrapes.
+const STEP_UP := 68.0
+
+## Headroom checked above the higher of two adjacent ground samples, to catch
+## real walls and overhangs. Measured from the floor it would be standing on
+## rather than from a fixed height, or every crate reads as a wall - which is
+## exactly what it used to do.
+const TRACE_CLEAR := 26.0
+
 
 ## A cable's two ends, ordered: the one on this floor first.
 ##
@@ -79,15 +100,19 @@ static func best_cable(tree: SceneTree, from: Vector2, goal_y: float,
 	return best
 
 
-## The whole journey, as the corners it turns.
+## The whole journey, leg by leg.
 ##
-## Always starts at `from` and ends at `to`; every pair in between is one cable,
-## boarded at the first and left at the second. `skip` is a cable to pretend does
-## not exist, which is how a body that has just stepped off one plans its next
-## leg without immediately getting back on.
+## Each entry is `{from, to, cable}` - `cable` true for the ones spent hanging
+## off a rope. Legs rather than a flat list of corners because the two kinds are
+## drawn and walked completely differently: a rope really is a straight line
+## through the air, and a walk really is not, and something reading this plan has
+## to be able to tell them apart without counting indices.
+##
+## `skip` is a cable to pretend does not exist, which is how a body that has just
+## stepped off one plans its next leg without immediately getting back on.
 static func plan(tree: SceneTree, from: Vector2, to: Vector2,
-		skip: Zipline = null) -> PackedVector2Array:
-	var points := PackedVector2Array([from])
+		skip: Zipline = null) -> Array:
+	var legs: Array = []
 	var used: Array = []
 	if skip:
 		used.append(skip)
@@ -100,10 +125,64 @@ static func plan(tree: SceneTree, from: Vector2, to: Vector2,
 		if line == null:
 			break
 		var ends := ends_of(line, at)
-		points.append(ends[0])
-		points.append(ends[1])
+		legs.append({"from": at, "to": ends[0], "cable": false})
+		legs.append({"from": ends[0], "to": ends[1], "cable": true})
 		at = ends[1]
 		used.append(line)
 
-	points.append(to)
-	return points
+	legs.append({"from": at, "to": to, "cable": false})
+	return legs
+
+
+## One walking leg, followed along the ground it would actually be walked on.
+##
+## A straight line between two points on different floors - or across a gap, or
+## through a wall - is a line drawn through mid-air, which is what a route
+## preview must never do: it promises a walk nothing can take. So the ground is
+## sampled every TRACE_STEP along the way and the line bends over whatever is
+## under it.
+##
+## Returns `{line, blocked}`. `blocked` means the walk does not get there: either
+## the floor ran out from under a sample, or something solid stands between one
+## sample and the next. The line stops at the last place it could actually reach,
+## so what is drawn is the part of the journey that is real.
+static func trace_walk(space: PhysicsDirectSpaceState2D, from: Vector2,
+		to: Vector2) -> Dictionary:
+	var line := PackedVector2Array([from])
+	var steps := maxi(1, int(absf(to.x - from.x) / TRACE_STEP))
+	var at := from
+	for i in range(1, steps + 1):
+		var t := float(i) / float(steps)
+		var aim := Vector2(lerpf(from.x, to.x, t), lerpf(from.y, to.y, t))
+
+		var down := PhysicsRayQueryParameters2D.create(
+			aim - Vector2(0.0, TRACE_LIFT),
+			aim + Vector2(0.0, TRACE_DROP))
+		down.collision_mask = Layers.WORLD | Layers.ONE_WAY
+		var floor_hit := space.intersect_ray(down)
+		if floor_hit.is_empty():
+			return {"line": line, "blocked": true}
+
+		var spot: Vector2 = floor_hit.position
+		# A step up it can climb is not a wall. This was a flat ray at ankle
+		# height, so every crate on the map read as impassable and the preview
+		# stopped dead at things a body walks straight over.
+		if at.y - spot.y > STEP_UP:
+			return {"line": line, "blocked": true}
+
+		# Headroom over the higher of the two, which catches genuine walls and
+		# overhangs without catching the crate itself.
+		var head := minf(at.y, spot.y) - TRACE_CLEAR
+		var wall := PhysicsRayQueryParameters2D.create(
+			Vector2(at.x, head), Vector2(spot.x, head))
+		wall.collision_mask = Layers.WORLD
+		if not space.intersect_ray(wall).is_empty():
+			return {"line": line, "blocked": true}
+
+		at = spot
+		line.append(spot)
+
+	# Finish on the point that was asked for rather than on the last sample, so
+	# a destination standing a few pixels off a sample does not read as a miss.
+	line.append(to)
+	return {"line": line, "blocked": false}

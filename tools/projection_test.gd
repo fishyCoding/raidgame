@@ -206,7 +206,10 @@ func _run() -> void:
 	await _check_routes_by_cable(main, player)
 
 	print("\n-- the drawn route is the walked route --")
-	_check_route_preview(main)
+	_check_route_preview(main, player)
+
+	print("\n-- it gets over a crate --")
+	await _check_climbs_a_crate(main, player)
 
 	print("\n-- and it does not bounce off walls --")
 	await _check_not_jumpy(main, player)
@@ -843,14 +846,17 @@ func _check_routes_by_cable(main: Node, player: Node2D) -> void:
 		ghost.queue_free()
 
 
-## The red line has to be the route the body actually walks.
+## The red line has to be the route the body actually walks, and it must never
+## be drawn through open air.
 ##
-## A preview computed separately from the behaviour is a preview that lies, and a
-## line promising a cable ride the ghost then ignores is worse than drawing
-## nothing at all. Both come out of decoy_route.gd; this checks that what the
-## plan says is what the body then does.
-func _check_route_preview(main: Node) -> void:
+## Two separate promises. A preview computed apart from the behaviour is a
+## preview that lies - so the plan and the ghost have to name the same cable. And
+## a walking leg drawn as a straight line between two points is a line through
+## whatever happens to be between them, which is how a route ends up hanging in
+## mid-air: every point of a walk has to have floor under it.
+func _check_route_preview(main: Node, player: Node2D) -> void:
 	var route: Object = (load("res://scripts/decoy_route.gd") as GDScript).new()
+	var space := player.get_world_2d().direct_space_state
 	var cables: Array = get_nodes_in_group(&"zipline")
 	if cables.is_empty():
 		print("  no cables to plan through - skipped")
@@ -860,25 +866,65 @@ func _check_route_preview(main: Node) -> void:
 		if line.cable_length() > cable.cable_length():
 			cable = line
 
-	# Same floor: a straight walk, two points and no rope.
-	# `self` is the tree in a --script tool; there is no get_tree() to call.
-	var flat: PackedVector2Array = route.plan(
+	# Same floor: one walking leg and no rope.
+	var flat: Array = route.plan(
 		self, cable.world_bottom(), cable.world_bottom() + Vector2(300.0, 0.0))
-	print("  a walk on one floor plans %d points" % flat.size())
-	_check_that(flat.size() == 2, "a route on one floor is just here and there")
+	print("  a walk on one floor plans %d leg(s)" % flat.size())
+	_check_that(flat.size() == 1, "a route on one floor is a single walk")
+	_check_that(not flat[0].cable, "with no rope in it")
 
-	# Another floor: the rope has to be in the plan, as its two ends, in the
-	# order it would be ridden.
-	var up: PackedVector2Array = route.plan(
+	# Another floor: walk, ride, walk - and the ride is the cable's own ends.
+	var up: Array = route.plan(
 		self, cable.world_bottom(), cable.world_top() + Vector2(200.0, 0.0))
-	print("  a walk to the floor above plans %d points" % up.size())
-	_check_that(up.size() >= 4, "a route to another floor goes via a cable")
-	if up.size() < 4:
+	print("  a walk to the floor above plans %d legs, %d of them rides" % [
+		up.size(), _rides_in(up)])
+	_check_that(up.size() >= 3, "a route to another floor is walk, ride, walk")
+	_check_that(_rides_in(up) == 1, "with exactly one ride in it")
+	if up.size() >= 2:
+		_check_that((up[1].from as Vector2).distance_to(cable.world_bottom()) < 2.0,
+			"boarding at the end on this floor")
+		_check_that((up[1].to as Vector2).distance_to(cable.world_top()) < 2.0,
+			"and leaving at the other")
+
+	# --- the part that was drawing through the air ---------------------------
+	# Every point of a traced walk has to have ground under it. A straight line
+	# between the ends would fail this the moment the two ends are not level.
+	# A run the level genuinely offers, found by asking the tracer itself rather
+	# than by a chest-height raycast. The raycast version picked directions that
+	# were clear at shoulder height and had a wall at the ankles, so this failed
+	# on some spawns and passed on others - and the thing it was reporting was
+	# the trace working correctly, which is the worst kind of red.
+	var walk := {}
+	var found := false
+	for way in [1.0, -1.0]:
+		walk = route.trace_walk(space, player.global_position,
+			player.global_position + Vector2(way * 300.0, 0.0))
+		if not walk.blocked:
+			found = true
+			break
+	if not found:
+		print("  no clear 300 px run at this spawn - skipped")
 		return
-	_check_that((up[1] as Vector2).distance_to(cable.world_bottom()) < 2.0,
-		"boarding at the end on this floor")
-	_check_that((up[2] as Vector2).distance_to(cable.world_top()) < 2.0,
-		"and leaving at the other")
+	var floating := 0
+	for point in walk.line:
+		var probe := PhysicsRayQueryParameters2D.create(
+			point - Vector2(0.0, 6.0), point + Vector2(0.0, 60.0))
+		probe.collision_mask = 3
+		if space.intersect_ray(probe).is_empty():
+			floating += 1
+	print("  a 300 px walk is %d points, blocked=%s, %d of them over nothing" % [
+		walk.line.size(), walk.blocked, floating])
+	_check_that(not walk.blocked, "a walk down a clear floor gets there")
+	_check_that(walk.line.size() >= 8, "sampled along the way, not guessed at")
+	_check_that(floating == 0, "and never drawn through open air")
+
+	# A walk that cannot be made says so, rather than drawing the rest of it.
+	# Straight out sideways from the top of a tall cable is over the drop.
+	var over: Dictionary = route.trace_walk(
+		space, cable.world_top(), cable.world_top() + Vector2(1400.0, 0.0))
+	print("  a walk out over the yard: blocked=%s after %d points" % [
+		over.blocked, over.line.size()])
+	_check_that(over.blocked, "a walk off the end of the floor is reported blocked")
 
 	# And the ghost picks the same rope the line drew.
 	var ghost: Node2D = (load("res://scenes/projection.tscn") as PackedScene).instantiate()
@@ -891,6 +937,72 @@ func _check_route_preview(main: Node) -> void:
 		cable.name, walked.name if walked else "nothing"])
 	_check_that(walked == cable, "the body rides the cable the line drew")
 	ghost.queue_free()
+
+
+func _rides_in(legs: Array) -> int:
+	var rides := 0
+	for leg in legs:
+		if leg.cable:
+			rides += 1
+	return rides
+
+
+## A crate is something it walks over, not something it gives up at.
+##
+## Built rather than found: the yard's geometry varies by spawn, and "does it
+## clear a knee-high box" needs a knee-high box in a known place. Forty pixels is
+## well inside the sixty-eight it can climb, so failing this is the body refusing
+## something it is supposed to manage.
+func _check_climbs_a_crate(main: Node, player: Node2D) -> void:
+	var crate := StaticBody2D.new()
+	var shape := CollisionShape2D.new()
+	var box := RectangleShape2D.new()
+	box.size = Vector2(60.0, 40.0)
+	shape.shape = box
+	crate.add_child(shape)
+	crate.collision_layer = 1
+	main.get_node("World").add_child(crate)
+
+	var ghost: Node2D = (load("res://scenes/projection.tscn") as PackedScene).instantiate()
+	ghost.name = "Ghost_crateprobe"
+	main.get_node("Players").add_child(ghost)
+	ghost.global_position = player.global_position
+
+	# Let it settle onto the floor before anything is placed relative to it.
+	for i in 20:
+		await physics_frame
+	var here: Vector2 = ghost.global_position
+
+	# Put the crate on whichever side has room to run at it.
+	var space := player.get_world_2d().direct_space_state
+	var way := 1.0
+	for side in [1.0, -1.0]:
+		var clear := PhysicsRayQueryParameters2D.create(
+			here - Vector2(0.0, 20.0), here + Vector2(side * 420.0, -20.0))
+		clear.collision_mask = 1
+		if space.intersect_ray(clear).is_empty():
+			way = side
+			break
+	crate.global_position = here + Vector2(way * 110.0, -4.0)
+	await physics_frame
+
+	var _sent: bool = ghost.order_to(here + Vector2(way * 420.0, 0.0))
+	var best := 0.0
+	for i in 200:
+		await physics_frame
+		if not is_instance_valid(ghost):
+			break
+		best = maxf(best, (ghost.global_position.x - here.x) * way)
+	print("  crate 40 px tall at 110 px: it got %.0f px past its start" % best)
+	# The crate spans 110 to 140, so anything past ~165 is a body that got over
+	# the whole of it and kept going. How much further it gets depends on what
+	# the spawn happens to put beyond it - 197 on one roll, 838 on another -
+	# and none of that is what this is measuring.
+	_check_that(best > 165.0, "a knee-high crate has to be climbed, not given up at")
+
+	if is_instance_valid(ghost):
+		ghost.queue_free()
+	crate.queue_free()
 
 
 ## It should not spend its life bouncing off walls.
