@@ -240,6 +240,9 @@ func _check_speed(ghost: Node2D, player: Node2D) -> void:
 	var carrying := 1.0
 	if player.weapon.data:
 		carrying = player.weapon.data.get_move_multiplier()
+	# The decoy walks at a deliberate fraction of it - see Projection.DECOY_PACE.
+	# Fast enough to be somebody going somewhere, slow enough to be followed.
+	var pace: float = (load("res://scripts/projection.gd") as GDScript).get("DECOY_PACE")
 	var caster_cap: float = (player.max_speed * carrying
 		* player.injury_speed_multiplier() * player.shield_speed_scale)
 
@@ -261,12 +264,15 @@ func _check_speed(ghost: Node2D, player: Node2D) -> void:
 		if ghost.riding or ghost.crouch > 0.05:
 			continue
 		top = maxf(top, absf(ghost.velocity.x))
-	print("  ghost topped out at %.0f px/s, the caster's plated cap is %.0f" % [
-		top, caster_cap])
-	_check_that(top <= caster_cap + 2.0,
-		"a ghost must never outrun the person it is copying")
-	_check_that(top > caster_cap * 0.9,
+	print("  ghost topped out at %.0f px/s; the caster's plated cap is %.0f, "
+		% [top, caster_cap] + "so the decoy should reach about %.0f"
+		% (caster_cap * pace))
+	_check_that(top <= caster_cap * pace + 3.0,
+		"a ghost must never outrun the pace it is meant to walk at")
+	_check_that(top > caster_cap * pace * 0.9,
 		"nor crawl - it has to look like somebody actually going somewhere")
+	_check_that(top < caster_cap,
+		"and it has to be slower than its caster, or it cannot be followed")
 
 
 ## Off a cable and straight back onto the same one is the failure here.

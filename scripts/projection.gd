@@ -42,9 +42,22 @@ const GROUP := &"projection"
 ## route as a line while the caster is choosing one - see decoy_route.gd.
 const ROUTE := preload("res://scripts/decoy_route.gd")
 
-## Run, taken from Player so the gait reads as the same person. A ghost that
-## moved at its own speed would be a tell you could measure with a stopwatch.
+## Run, taken from Player so the gait reads as the same person.
 const MAX_SPEED := 260.0
+
+## What it does relative to the person it is copying.
+##
+## Under one, deliberately, and this reverses an earlier decision. The argument
+## for matching the caster exactly was that speed is the easiest thing to read
+## off a body at distance, so a decoy moving at its own pace is one you identify
+## with a stopwatch. That is true and it turned out not to be the point: a decoy
+## nobody can follow is not bait. At full pelt it crossed the yard faster than
+## anybody chasing it could commit to a corner, which makes it a thing you glimpse
+## rather than a thing you follow - and being followed is the entire job.
+##
+## Slower is also what a man moving carefully through somewhere dangerous looks
+## like, which is what it is pretending to be.
+const DECOY_PACE := 0.72
 const GROUND_ACCEL := 2200.0
 const GROUND_FRICTION := 2600.0
 const AIR_ACCEL := 1500.0
@@ -156,10 +169,14 @@ const TURN_COMMIT := 1.8
 const STUCK_TIME := 1.4
 
 ## How long it works towards where it was sent before going back to baiting on
-## its own. Long enough to cross most of the yard with a cable ride in the
-## middle, short enough that one sent into a dead end is working again rather
-## than wasting its whole life in there. Click again to renew it.
-const ORDERS_TIME := 11.0
+## its own. Click again to renew it.
+##
+## Raised from 11 when a soak across the level showed the errand expiring
+## underneath perfectly good routing: a fifteen-hundred pixel walk takes nine
+## seconds at the pace it now moves, and anything with a rope in the middle takes
+## longer, so most journeys were being abandoned a few strides short. Slowing the
+## body down without lengthening its errand was half a change.
+const ORDERS_TIME := 18.0
 
 ## How far it will walk to reach a cable that is on its way. Beyond this the
 ## detour costs more than the climb is worth and it would rather take the long
@@ -1043,9 +1060,17 @@ func _steer(delta: float) -> void:
 		if _leg_cable.in_reach(global_position):
 			_grab(_leg_cable)
 			return
-	elif absf(_target.y - global_position.y) > WORTH_A_CABLE:
-		# Not under orders, or no cable chosen: take a rope that happens to be
-		# in reach if the target is on another floor.
+	elif _mind != Mind.ORDERS and absf(_target.y - global_position.y) > WORTH_A_CABLE:
+		# Baiting on its own: take a rope that happens to be in reach if the
+		# target is on another floor.
+		#
+		# Never while under orders, and that exclusion is the whole point. On an
+		# errand the only rope worth taking is the one the plan chose; grabbing
+		# whatever is nearby sends it somewhere the route never mentioned. It
+		# fired most often after a stumble - a body that has slipped off a lip is
+		# suddenly a long way below its target, which is exactly the condition
+		# this used to read as "time to take a cable" - and the ride then carried
+		# it further from the errand than the fall had.
 		var cable := _cable_here()
 		if cable:
 			_grab(cable)
@@ -1060,7 +1085,12 @@ func _steer(delta: float) -> void:
 			# before trying - the old version jumped at everything, every frame,
 			# which against a two storey wall is a body bouncing on the spot.
 			var lift := _clearance_over(way)
-			if lift >= 0.0:
+			# And only if there is something on the far side to come down on.
+			# A crate sitting at the lip of a platform is climbable and still the
+			# wrong thing to climb: the hop clears it and the body lands in open
+			# air, falls a floor or two, and the errand is finished. Falls are
+			# how a decoy ends up a thousand pixels off a route it had right.
+			if lift >= 0.0 and _can_land_across(way):
 				_hop()
 				# Over it, not up at it. Pressed against a crate the collision has
 				# already scrubbed its horizontal speed to nothing, so a standing
@@ -1093,7 +1123,7 @@ func _steer(delta: float) -> void:
 	# come in on speed_scale, the plates and the crouch are applied here off this
 	# body's own ramps. Aiming is the only term left out, and it is left out
 	# because a ghost never aims down sights - it has nothing to aim.
-	var cap := MAX_SPEED * speed_scale
+	var cap := MAX_SPEED * speed_scale * DECOY_PACE
 	cap *= lerpf(1.0, CROUCH_SPEED_SCALE, crouch)
 	cap *= lerpf(1.0, SHIELD_SPEED_SCALE, shield)
 	var accel := GROUND_ACCEL if is_on_floor() else AIR_ACCEL
@@ -1170,9 +1200,11 @@ func _turn_back(way: float) -> void:
 	# towards where it was sent. Giving up outright on the first obstacle would
 	# be worse: most walls on this map have a way round.
 	if _mind == Mind.ORDERS:
-		# Twice is a barrier, not an obstacle. Backing off, walking forward,
-		# backing off again is the pacing people see - so the second refusal
-		# ends the order rather than starting another lap of it.
+		# Twice *without getting anywhere in between* is a barrier rather than an
+		# obstacle. Backing off, walking forward, backing off again is the pacing
+		# people see - so the second refusal ends the order rather than starting
+		# another lap of it. The counter is cleared by any real headway; see
+		# _watch_for_headway.
 		_refusals += 1
 		if _refusals >= 2:
 			_stand_down()
@@ -1198,6 +1230,12 @@ func _watch_for_headway(delta: float) -> void:
 	if not is_finite(_was_at) or absf(global_position.x - _was_at) > 3.0:
 		_was_at = global_position.x
 		_stuck = 0.0
+		# Ground covered clears the refusal count as well. Two refusals means
+		# "this is a barrier, not an obstacle" only if nothing was achieved
+		# between them - counted across a whole order it meant that any journey
+		# long enough to pass two crates was abandoned halfway, which a soak
+		# across the level showed was very nearly every journey there is.
+		_refusals = 0
 		return
 	_stuck += delta
 	if _stuck > STUCK_TIME:
