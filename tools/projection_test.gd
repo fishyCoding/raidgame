@@ -208,6 +208,9 @@ func _run() -> void:
 	print("\n-- the drawn route is the walked route --")
 	_check_route_preview(main, player)
 
+	print("\n-- and keeps going after a ride --")
+	_check_keeps_going_after_a_ride(main, player)
+
 	print("\n-- it gets over a crate --")
 	await _check_climbs_a_crate(main, player)
 
@@ -1003,6 +1006,64 @@ func _check_climbs_a_crate(main: Node, player: Node2D) -> void:
 	if is_instance_valid(ghost):
 		ghost.queue_free()
 	crate.queue_free()
+
+
+## Getting off a rope must not be followed by walking straight back to it.
+##
+## The reported symptom was "gets off a zip and goes the opposite direction".
+## Stepping off zeroes the body's horizontal speed, and the route scorer read its
+## heading off exactly that - so the one moment it most needed to remember which
+## way it was going was the moment it had no memory at all, and the next target
+## was a coin flip. Half the time that flip sent it back down the way it came, in
+## front of whoever it had just ridden up to interest.
+func _check_keeps_going_after_a_ride(main: Node, player: Node2D) -> void:
+	var cables: Array = get_nodes_in_group(&"zipline")
+	if cables.is_empty():
+		print("  no cables at this spawn - skipped")
+		return
+	var cable: Node2D = cables[0]
+	for line in cables:
+		if line.cable_length() > cable.cable_length():
+			cable = line
+
+	var ghost: Node2D = (load("res://scenes/projection.tscn") as PackedScene).instantiate()
+	ghost.name = "Ghost_rideprobe"
+	main.get_node("Players").add_child(ghost)
+	ghost.life_left = 90.0
+
+	# Ridden to the top and stepped off, exactly as the real thing arrives:
+	# on the far end, with the cable freshly on its grudge list.
+	ghost.global_position = cable.world_top()
+	ghost._last_cable = cable
+	ghost._cable_cooldown = 9.0
+	ghost._went = 1.0
+	ghost._mind = 1 # Mind.LURE
+	ghost._target = Vector2.INF
+	ghost._rethink = 0.0
+
+	# The heading has to survive the ride rather than being re-rolled from a
+	# velocity that stepping off has already zeroed.
+	print("  after a ride: remembered heading=%.0f" % ghost._went)
+	_check_that(not is_zero_approx(ghost._went),
+		"it remembers which way it was going across a ride")
+
+	var toward_rope := 0
+	for i in 20:
+		ghost._pick_lure_target()
+		var rope: Vector2 = (ghost._ends_of(cable) as Array)[0]
+		var closer: bool = (absf(ghost._target.x - rope.x)
+			< absf(ghost.global_position.x - rope.x))
+		if closer:
+			toward_rope += 1
+	print("  %d of 20 fresh targets head back towards the rope it just left"
+		% toward_rope)
+	# Not zero - the level sometimes offers nothing else, and forbidding it
+	# outright would wedge a ghost on a dead-end platform. But it must be the
+	# exception rather than the coin flip it was.
+	_check_that(toward_rope <= 5,
+		"walking back to the rope it just left has to be the exception")
+
+	ghost.queue_free()
 
 
 ## It should not spend its life bouncing off walls.

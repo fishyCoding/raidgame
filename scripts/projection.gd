@@ -314,6 +314,13 @@ var _commit := 0.0
 var _settle_left := 0.0
 ## How many times it has backed away from something on the current order.
 var _refusals := 0
+## The last direction it actually travelled, -1 or 1, kept across rides and
+## stops. Not read off velocity: stepping off a rope zeroes that, so a body that
+## has just spent a ride getting somewhere arrives with no memory of which way it
+## was going - and the route scorer's "carrying on beats turning round" term goes
+## with it. That is the coin flip that had it get off a cable and walk straight
+## back the way it came.
+var _went := 0.0
 var _watch_timer := 0.0
 ## Where the rivals were at the last sweep. Refreshed by _watch, read by the
 ## route search, so choosing somewhere to walk costs no extra raycasts against
@@ -924,7 +931,7 @@ func _pick_lure_target() -> void:
 
 	var home := _caster_at()
 	var here := global_position.x
-	var back := signf(velocity.x)
+	var back := _went
 	var best := Vector2.INF
 	var best_score := -INF
 
@@ -952,6 +959,15 @@ func _pick_lure_target() -> void:
 
 			if not is_zero_approx(back) and signf(way) == back:
 				score += 40.0
+
+			# Not back to the rope it has just got off. Riding somewhere and then
+			# immediately walking back to the foot of the same cable undoes the
+			# journey in front of whoever it was trying to interest, and the cable
+			# grudge only stops it getting *on* again, not from wandering back.
+			if _last_cable and _cable_cooldown > 0.0 and is_instance_valid(_last_cable):
+				var rope: Vector2 = (ROUTE.ends_of(_last_cable, global_position) as Array)[0]
+				if absf(spot.x - rope.x) < absf(here - rope.x):
+					score -= 120.0
 
 			if score > best_score:
 				best_score = score
@@ -1082,6 +1098,7 @@ func _steer(delta: float) -> void:
 	cap *= lerpf(1.0, SHIELD_SPEED_SCALE, shield)
 	var accel := GROUND_ACCEL if is_on_floor() else AIR_ACCEL
 	velocity.x = move_toward(velocity.x, way * cap, accel * delta)
+	_went = way
 	_aim_along(delta, way)
 
 
