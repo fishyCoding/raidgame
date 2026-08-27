@@ -590,8 +590,18 @@ func _watchers() -> Array[Vector2]:
 		# glanced at it would be unusable.
 		if body.get_multiplayer_authority() == mine:
 			continue
-		var alive: Variant = body.get(&"is_alive")
-		if typeof(alive) == TYPE_BOOL and not alive:
+		# Nobody who cannot do anything about it. A decoy exists to be followed,
+		# and a man who is dead or on the floor bleeding out is not going to
+		# follow anything - so peeking at him, holding still for three quarters
+		# of a second and then sprinting off is a whole cycle of the gadget spent
+		# on an audience of one who cannot come.
+		#
+		# Worse than wasted: the ghost breaks away from where it was working and
+		# runs, which is exactly the behaviour that reads as "it panics at
+		# corpses". Downed counts as out of it as much as dead does. Somebody
+		# revived is a rival again on the next sweep, a fraction of a second
+		# later, which is soon enough.
+		if not _can_be_lured(body):
 			continue
 		var eye: Vector2 = body.global_position
 		if body.has_method(&"sight_centre"):
@@ -601,6 +611,30 @@ func _watchers() -> Array[Vector2]:
 	found.sort_custom(func(a: Vector2, b: Vector2) -> bool:
 		return a.distance_squared_to(here) < b.distance_squared_to(here))
 	return found
+
+
+## Whether a body is somebody worth playing to.
+##
+## Guards are excluded by construction rather than by a test here: this sweep
+## walks Net.players() and a guard is never on it, alive or dead. That is
+## deliberate and load-bearing - a decoy that spent its life peeking at a patrol
+## would never draw the one person it was cast for - and `tools/projection_test`
+## checks it against a yard full of them, living and killed.
+##
+## What has to be tested is the state of the people who *are* on that list. Dead
+## is obvious; downed matters just as much and is easy to miss, because a man on
+## the floor is still `is_alive`. He cannot chase anything, cannot shoot much,
+## and will most likely be dead shortly - baiting him is a cycle of the gadget
+## thrown away, and running from him is worse, because it takes the ghost off the
+## floor where it was working.
+func _can_be_lured(body: Node) -> bool:
+	var alive: Variant = body.get(&"is_alive")
+	if typeof(alive) == TYPE_BOOL and not alive:
+		return false
+	var downed: Variant = body.get(&"is_downed")
+	if typeof(downed) == TYPE_BOOL and downed:
+		return false
+	return true
 
 
 ## Which of those eyes, if any, has a clear line to a point. INF for none.

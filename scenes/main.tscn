@@ -4,7 +4,6 @@
 [ext_resource type="Script" uid="uid://xeib8hy0neca" path="res://scripts/hud.gd" id="4_hud"]
 [ext_resource type="Texture2D" uid="uid://r6rxopipv1df" path="res://resources/pixil-frame-0(2).png" id="5_jbj1t"]
 [ext_resource type="Script" uid="uid://bcxfmp5s3q1rv" path="res://scripts/vision_system.gd" id="5_vision"]
-[ext_resource type="Script" path="res://scripts/controls_hint.gd" id="16_hint"]
 [ext_resource type="PackedScene" path="res://scenes/enemy.tscn" id="6_enemy"]
 [ext_resource type="Texture2D" uid="uid://bh864rkftdeep" path="res://resources/pixil-frame-0(3).png" id="6_muem4"]
 [ext_resource type="Script" uid="uid://oshl4qhxdbwj" path="res://scripts/inventory_ui.gd" id="7_invui"]
@@ -16,6 +15,7 @@
 [ext_resource type="Script" uid="uid://dwh6vswml06ja" path="res://scripts/editor_view.gd" id="13_editor"]
 [ext_resource type="Script" uid="uid://cb34p0md66qw0" path="res://scripts/touch_controls.gd" id="14_touch"]
 [ext_resource type="PackedScene" path="res://scenes/decor.tscn" id="15_decor"]
+[ext_resource type="Script" uid="uid://ydgxhwysseee" path="res://scripts/controls_hint.gd" id="16_hint"]
 [ext_resource type="Texture2D" uid="uid://c6o6vc7jgasri" path="res://resources/pixil-frame-0.png" id="16_tile"]
 [ext_resource type="Texture2D" uid="uid://dfy5h33w6udqn" path="res://resources/pixil-frame-1.png" id="17_end"]
 
@@ -626,7 +626,7 @@ color = Color(0.231373, 0.278431, 0.341176, 1)
 
 [node name="ZipYard" parent="Ziplines" unique_id=1847529886 instance=ExtResource("10_zip")]
 position = Vector2(-1776, 144)
-top = Vector2(208.02429, -181.51111)
+top = Vector2(231.28046, -184.0097)
 bottom = Vector2(-205.2728, 190.54547)
 speed = 800.0
 
@@ -637,38 +637,38 @@ bottom = Vector2(5.855316, 92.10333)
 speed = 800.0
 
 [node name="ZipYard3" parent="Ziplines" unique_id=363385456 instance=ExtResource("10_zip")]
-position = Vector2(-2347, -159)
+position = Vector2(-2366, -163)
 top = Vector2(5.329712, -27.849976)
 bottom = Vector2(5.855316, 92.10333)
 speed = 800.0
 
 [node name="ZipYard4" parent="Ziplines" unique_id=2100860766 instance=ExtResource("10_zip")]
 position = Vector2(-2190, -404)
-top = Vector2(294.12784, -206.18933)
+top = Vector2(330.65784, -190.60016)
 bottom = Vector2(-232.6861, 210.94183)
 speed = 800.0
 
 [node name="ZipYard5" parent="Ziplines" unique_id=562961245 instance=ExtResource("10_zip")]
 position = Vector2(-1264, -753)
-top = Vector2(-136.80609, 17.424194)
+top = Vector2(-98, -3)
 bottom = Vector2(-389.16522, 117.3797)
 speed = 800.0
 
 [node name="ZipYard20" parent="Ziplines" unique_id=527839991 instance=ExtResource("10_zip")]
 position = Vector2(-675, -975)
-top = Vector2(-104.16516, 52.34735)
+top = Vector2(-70.62488, 52.081085)
 bottom = Vector2(-389.16522, 117.3797)
 speed = 800.0
 
 [node name="ZipYard7" parent="Ziplines" unique_id=366791774 instance=ExtResource("10_zip")]
 position = Vector2(280, -1041)
-top = Vector2(334.62686, -247.61536)
+top = Vector2(362.60815, -235.9651)
 bottom = Vector2(-389.16522, 117.3797)
 speed = 800.0
 
 [node name="ZipYard9" parent="Ziplines" unique_id=546928841 instance=ExtResource("10_zip")]
 position = Vector2(1174, -1390)
-top = Vector2(-390, 105)
+top = Vector2(-399.62286, 109.041916)
 bottom = Vector2(78.86279, 458.38477)
 speed = 800.0
 
@@ -699,7 +699,7 @@ speed = 800.0
 
 [node name="ZipYard16" parent="Ziplines" unique_id=1357634951 instance=ExtResource("10_zip")]
 position = Vector2(1516, 182)
-top = Vector2(191.04199, -112.20581)
+top = Vector2(233.72739, -108.272766)
 bottom = Vector2(-226.68286, 163.97583)
 speed = 800.0
 
@@ -711,14 +711,14 @@ speed = 800.0
 
 [node name="ZipYard10" parent="Ziplines" unique_id=1950945338 instance=ExtResource("10_zip")]
 position = Vector2(-380, -135)
-top = Vector2(146.67236, -130.03552)
+top = Vector2(153, -130)
 bottom = Vector2(10.616272, 162.93872)
 speed = 800.0
 
 [node name="ZipYard14" parent="Ziplines" unique_id=970687558 instance=ExtResource("10_zip")]
 position = Vector2(-238, -131)
-top = Vector2(68.599976, -126.900024)
-bottom = Vector2(338.86816, -12.330566)
+top = Vector2(50, -132)
+bottom = Vector2(377, -17)
 speed = 800.0
 
 [node name="ZipYard12" parent="Ziplines" unique_id=1289750680 instance=ExtResource("10_zip")]
@@ -741,7 +741,7 @@ speed = 800.0
 
 [node name="ZipYard6" parent="Ziplines" unique_id=798740017 instance=ExtResource("10_zip")]
 position = Vector2(-1352, -761)
-top = Vector2(-74.253784, -260.98285)
+top = Vector2(-104.37897, -259.08157)
 bottom = Vector2(-389.16522, 117.3797)
 speed = 800.0
 
@@ -753,8 +753,8 @@ speed = 800.0
 
 [node name="ZipControl" parent="Ziplines" unique_id=262480997 instance=ExtResource("10_zip")]
 position = Vector2(-1347, -548)
-top = Vector2(-201.10156, -52.34021)
-bottom = Vector2(176.17017, 183.45459)
+top = Vector2(-234.49292, -47.492615)
+bottom = Vector2(230.02606, 192.0874)
 speed = 800.0
 
 [node name="Spawns" type="Node2D" parent="." unique_id=1755117685]

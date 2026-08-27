@@ -193,8 +193,8 @@ func _run() -> void:
 	print("\n-- it lures rather than hides --")
 	_check_bait(main, player)
 
-	print("\n-- and it plays to people, not to guards --")
-	_check_ignores_guards(main, player)
+	print("\n-- and it plays to people who can chase it --")
+	await _check_ignores_the_uninterested(main, player)
 
 	print("\n-- you click where it should go --")
 	await _check_orders(main, player)
@@ -587,28 +587,75 @@ func _check_bait(main: Node, player: Node2D) -> void:
 	ghost.queue_free()
 
 
-## Guards are not who it is playing to.
+## Nobody it cannot usefully bait counts as a watcher.
 ##
-## The sweep walks Net.players() and nothing else, so a yard full of security is
-## invisible to it - which is the whole reason it does not spend its life peeking
-## at a patrol that was never going to chase it anywhere useful.
-func _check_ignores_guards(main: Node, player: Node2D) -> void:
+## Three separate ways a body can be on the map and not be an audience: it is a
+## guard, it is dead, or it is on the floor bleeding out. Peeking at any of them
+## costs a whole cycle of the gadget - three quarters of a second stood still,
+## then a sprint away from wherever it was working - spent on somebody who is not
+## coming. Running from a corpse is the version of this you can actually see.
+func _check_ignores_the_uninterested(main: Node, player: Node2D) -> void:
 	var guards: Array = main.get_node("Enemies").get_children()
 	_check_that(not guards.is_empty(), "the level has to have guards to ignore")
+	if guards.is_empty():
+		return
 
 	var ghost: Node2D = (load("res://scenes/projection.tscn") as PackedScene).instantiate()
 	ghost.name = "Ghost_guardprobe"
 	main.get_node("Players").add_child(ghost)
-	# Standing on top of a guard, which is as seen as it is possible to be.
+
+	# --- guards, alive ------------------------------------------------------
+	# Standing on top of one, which is as seen as it is possible to be.
 	ghost.global_position = guards[0].global_position
 	var eyes: Array = ghost._watchers()
-	print("  %d guards on the map, %d of them count as watchers" % [
-		guards.size(), eyes.size()])
-	_check_that(eyes.is_empty(), "a guard must never be something it plays to")
+	print("  standing on a live guard: %d of %d guards count as watchers" % [
+		eyes.size(), guards.size()])
+	_check_that(eyes.is_empty(), "a guard is never something it plays to")
+
+	# --- guards, dead -------------------------------------------------------
+	# Same question of a corpse. Guards are excluded by construction - they are
+	# not on Net.players() at all - so this is really checking that killing one
+	# does not somehow put it on a list it was never on.
+	var corpse: Node2D = guards[0]
+	corpse.take_damage(1000.0, corpse.global_position, Vector2.RIGHT)
+	await physics_frame
+	ghost.global_position = corpse.global_position
+	eyes = ghost._watchers()
+	print("  standing on a dead guard: %d watchers" % eyes.size())
+	_check_that(eyes.is_empty(), "and a dead one even less so")
+
+	# --- players, dead and downed -------------------------------------------
+	# The player *is* on that list, so these are the ones a test has to hold.
+	# Checked through _can_be_lured rather than by killing the only character in
+	# a solo run, which would take the level down with it.
+	print("  a live player: lured=%s" % ghost._can_be_lured(player))
+	_check_that(ghost._can_be_lured(player), "a player on their feet is an audience")
+
+	var was_down: bool = player.is_downed
+	player.is_downed = true
+	print("  a downed player: lured=%s" % ghost._can_be_lured(player))
+	_check_that(not ghost._can_be_lured(player),
+		"a man on the floor bleeding out is not worth baiting")
+	player.is_downed = was_down
+
+	var was_alive: bool = player.is_alive
+	player.is_alive = false
+	print("  a dead player: lured=%s" % ghost._can_be_lured(player))
+	_check_that(not ghost._can_be_lured(player), "and neither is a dead one")
+	player.is_alive = was_alive
+
+	# And the sweep actually uses it: a downed rival must not appear as an eye.
+	player.is_downed = true
+	ghost.global_position = player.global_position
+	eyes = ghost._watchers()
+	print("  standing on a downed player: %d watchers" % eyes.size())
+	_check_that(eyes.is_empty(), "so the sweep drops them too")
+	player.is_downed = was_down
+
 	ghost.queue_free()
 
 
-## Q opens a pulled-back view, and a click on the level sends it there.
+## Q opens a pulled-back view, and a click on the level sends it there.## Q opens a pulled-back view, and a click on the level sends it there.
 func _check_orders(main: Node, player: Node2D) -> void:
 	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
 	var item: Object = maker.from_gadget(load(GADGET))
