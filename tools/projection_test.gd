@@ -192,8 +192,11 @@ func _run() -> void:
 	print("\n-- and it plays to people, not to guards --")
 	_check_ignores_guards(main, player)
 
-	print("\n-- you can tell it where to go --")
+	print("\n-- you can tell it which way to go --")
 	await _check_orders(main, player)
+
+	print("\n-- and it does not bounce off walls --")
+	await _check_not_jumpy(main, player)
 
 	print("\n-- the bow shows you where the arrow goes --")
 	await _check_bow(player)
@@ -595,52 +598,127 @@ func _check_ignores_guards(main: Node, player: Node2D) -> void:
 	ghost.queue_free()
 
 
-## The caster can point it somewhere, and it goes there.
+## The caster can point it, and it goes that way - on either control scheme.
 func _check_orders(main: Node, player: Node2D) -> void:
-	var input: Node = root.get_node("PlayerInput")
 	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
 	var item: Object = maker.from_gadget(load(GADGET))
 	item.charge = 1.0
 	player.inventory.set_ultimate(item)
 
-	# Somewhere it can actually walk to. Pointed blindly 520 px left, this landed
-	# on the far side of a wall at this spawn, and the ghost spent the whole check
-	# jumping at it - which reads as "orders are ignored" and is really "you asked
-	# for somewhere unreachable".
+	# A direction the level actually lets it walk. Pointed blindly left, most
+	# spawns put a wall there, the ghost correctly stood down, and the check
+	# passed on its escape clause every single run - so "does it walk the
+	# heading" was never once measured. Same shape of hole as a check that
+	# always skips.
 	var space := player.get_world_2d().direct_space_state
 	var eye: Vector2 = player.sight_centre()
-	var sent: Vector2 = player.global_position + Vector2(-520.0, 0.0)
+	var open := -1.0
 	for way in [-1.0, 1.0]:
-		var spot := eye + Vector2(way * 520.0, 0.0)
-		var query := PhysicsRayQueryParameters2D.create(eye, spot)
+		var query := PhysicsRayQueryParameters2D.create(eye, eye + Vector2(way * 420.0, 0.0))
 		query.collision_mask = 1
 		if space.intersect_ray(query).is_empty():
-			sent = player.global_position + Vector2(way * 520.0, 0.0)
+			open = way
 			break
 
-	# Aiming is read through PlayerInput.get_aim_point, the same call the grenade
-	# arc uses, so a placed touch point stands in for a mouse here.
-	input.touch_aim_point = sent
+	# Pointing is read off aim_direction, which the mouse drives on a desktop and
+	# the aim drag drives on glass - so setting it here is what both ends do.
+	player.aim_direction = Vector2(open, 0.0)
+	player.aim_angle = 0.0 if open > 0.0 else PI
 	player._use_ultimate()
-	input.touch_aim_point = Vector2.INF
 
 	var ghost: Node2D = _the_ghost()
 	_check_that(ghost != null, "the cast has to produce a ghost")
-	print("  told to go to %s: mind=%d orders=%s" % [
-		str(sent), ghost._mind, str(ghost._orders)])
-	_check_that(ghost._mind == 0, "a cast with an aim point starts under orders")
-	_check_that(ghost._orders.is_finite(), "and remembers where it was sent")
-	_check_that(ghost._orders.distance_to(sent) < 2.0, "which is where you pointed")
+	if ghost == null:
+		return
+	print("  pointed %s: heading=%d climb=%d mind=%d" % [
+		"right" if open > 0.0 else "left", ghost.heading, ghost.climb, ghost._mind])
+	_check_that(ghost.heading == int(open), "it goes the way you pointed")
+	_check_that(ghost.climb == 0, "and level, since the aim was flat")
+	_check_that(ghost._mind == 0, "under orders rather than off baiting")
 
-	var start: float = ghost.global_position.x
+	var start_x: float = ghost.global_position.x
 	for i in 90:
 		await physics_frame
 		if not is_instance_valid(ghost):
 			break
-	var closed: float = absf(start - sent.x) - absf(ghost.global_position.x - sent.x)
-	print("  closed %.0f px on it in 1.5s (mind now %d)" % [
-		closed, ghost._mind if is_instance_valid(ghost) else -1])
-	_check_that(closed > 40.0, "and it has to actually set off that way")
+	var moved: float = (ghost.global_position.x - start_x) * open
+	print("  travelled %.0f px the way it was pointed in 1.5s" % moved)
+	# A heading, not a destination, so what matters is that it made ground that
+	# way. Pointed down a direction the level actually opens onto, standing down
+	# is no longer an acceptable answer - which is the point of choosing the
+	# direction above rather than guessing one.
+	_check_that(moved > 60.0, "and has to actually set off that way")
+
+	# Re-pointing costs nothing and works on a ghost already out. This is the
+	# control the caster actually uses - the cast happens under fire, the aiming
+	# happens afterwards.
+	player.aim_direction = Vector2(-open, 0.0)
+	player.aim_angle = PI if open > 0.0 else 0.0
+	var charge_before: float = item.charge
+	player._use_ultimate()
+	print("  re-pointed the other way: heading=%d (charge %.2f -> %.2f)" % [
+		ghost.heading, charge_before, item.charge])
+	_check_that(ghost.heading == int(-open), "a second press turns it round")
+	_check_that(item.charge <= charge_before + 0.01,
+		"and does not cost another charge")
+
+	# Up and down only decide whether a cable is worth taking, so the band for
+	# "level" is wide - roughly flat must never read as a climb.
+	player.aim_direction = Vector2(0.9, -0.2).normalized()
+	player._use_ultimate()
+	_check_that(ghost.climb == 0, "a slightly raised crosshair is still level")
+	player.aim_direction = Vector2(0.3, -0.95).normalized()
+	player._use_ultimate()
+	print("  pointed steeply up: climb=%d" % ghost.climb)
+	_check_that(ghost.climb == -1, "but a steep one means climb")
+
+	if is_instance_valid(ghost):
+		ghost.queue_free()
+
+
+## It should not spend its life bouncing off walls.
+##
+## The reported symptom was "jumps around a lot and runs into walls", which was
+## two missing things rather than one: no cooldown between jumps, and no question
+## asked about whether the obstacle could be cleared at all. Walking a body into
+## a wall it cannot pass is the exact case that produced it.
+func _check_not_jumpy(main: Node, player: Node2D) -> void:
+	var ghost: Node2D = (load("res://scenes/projection.tscn") as PackedScene).instantiate()
+	ghost.name = "Ghost_wallprobe"
+	main.get_node("Players").add_child(ghost)
+	ghost.global_position = player.global_position
+
+	# Aim it at whichever side has solid geometry close by, so it is walking into
+	# something it genuinely cannot get past.
+	var space := player.get_world_2d().direct_space_state
+	var eye: Vector2 = player.sight_centre()
+	var into := 0
+	for way in [1.0, -1.0]:
+		var query := PhysicsRayQueryParameters2D.create(eye, eye + Vector2(way * 300.0, 0.0))
+		query.collision_mask = 1
+		if not space.intersect_ray(query).is_empty():
+			into = int(way)
+			break
+	if into == 0:
+		print("  no wall within reach of this spawn - skipped")
+		ghost.queue_free()
+		return
+
+	ghost.order_to(into, 0)
+	var jumps := 0
+	var airborne := false
+	for i in 180:
+		await physics_frame
+		if not is_instance_valid(ghost):
+			break
+		var up: bool = not ghost.is_on_floor()
+		if up and not airborne:
+			jumps += 1
+		airborne = up
+	print("  walked into a wall for 3s and jumped %d times" % jumps)
+	# A handful is fine - getting onto a crate, dropping off a lip. Thirty is the
+	# bug: that is one per two frames, which is what no cooldown looks like.
+	_check_that(jumps <= 8, "a ghost against a wall must not bounce on the spot")
 	if is_instance_valid(ghost):
 		ghost.queue_free()
 

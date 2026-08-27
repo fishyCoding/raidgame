@@ -16,11 +16,18 @@ extends CharacterBody2D
 ## you can notice if you are listening for it. That is the counterplay, and it is
 ## deliberately a hard one: it asks you to trust your ears over your eyes.
 ##
-## It behaves like somebody who knows they are outgunned. Left alone it wanders,
-## takes cables to get about, and generally goes somewhere. Caught in the open it
-## breaks line of sight and gets behind something, which is what a real player
-## does and is also, usefully, what keeps it alive long enough to be worth
-## casting.
+## It is bait, and it plays like bait rather than like a survivor. Left alone it
+## goes looking for somewhere a rival can see it, as far from its caster as it
+## can get - because the whole job is that somebody follows it *somewhere else*.
+## Found, it holds their eye for the better part of a second, then runs. Shot at,
+## it skips the holding and just runs.
+##
+## An earlier version hid when it was seen, which is what a real player does and
+## made a beautifully convincing ghost nobody ever looked at twice: it broke line
+## of sight at exactly the moment it had somebody's attention, which is the one
+## moment the gadget is paid for.
+##
+## Its caster can point it - see order_to. A direction, not a destination.
 ##
 ## Deliberately has no `class_name`. It reaches Net, and a global that reaches
 ## Net is a global a `--script` tool can poison for a whole process by so much as
@@ -100,6 +107,39 @@ const CABLE_MEMORY := 9.0
 ## How close to a target counts as arrived.
 const ARRIVED := 48.0
 
+## How far ahead it feels for a wall, and for the floor falling away.
+const WALL_PROBE := 20.0
+const LEDGE_PROBE := 26.0
+const LEDGE_DROP := 16.0
+
+## Least time between two jumps.
+##
+## There was none, and the jump was driven straight off "is something in front of
+## me" - so a body walking into a wall hopped against it every single frame for
+## as long as it took to give up. That is the single most obvious thing a player
+## reported about this gadget, and it is not a tuning problem, it is a missing
+## cooldown and a missing question: *can* it get over that.
+const JUMP_COOLDOWN := 0.55
+
+## How high it will try to climb. Under the 100 px the jump actually reaches, so
+## a thing it decides it can clear is a thing it clears with room to spare rather
+## than one it scrapes and falls back off.
+const STEP_UP := 68.0
+
+## How far it turns back when it meets something it cannot pass, and how long it
+## sticks with that decision. Without the commitment it turns round, immediately
+## re-scores the route it just abandoned, and walks back into the same wall.
+const TURN_BACK := 420.0
+const TURN_COMMIT := 1.8
+
+## How long it has to make no headway before it stops believing in the route.
+const STUCK_TIME := 1.4
+
+## How long one press of "go that way" is worth. Long enough to cross most of the
+## yard, short enough that a ghost sent into a dead end is working for itself
+## again before it has wasted its whole life in there. Press again to renew it.
+const ORDERS_TIME := 7.0
+
 ## Height difference that makes a cable worth taking rather than walking.
 const WORTH_A_CABLE := 140.0
 
@@ -178,8 +218,8 @@ var size := Vector2(28.0, 48.0)
 ## How many rounds it takes, and how long it lasts. Set from the gadget.
 var max_hits := 3
 var life_left := 14.0
-## How far from where it was cast it is willing to be sent. Only bounds the
-## caster's aimed order - once it is loose it goes wherever the bait takes it.
+## Unused as a bound now that orders are a direction rather than a place. Kept
+## because the gadget resource still carries a radius and the shop prints it.
 var roam_range := 900.0
 
 ## Everything the caster's own top speed was multiplied by that this body cannot
@@ -216,12 +256,30 @@ var _threat := Vector2.INF
 ## Counts down while it is holding somebody's eye, and again while it is running
 ## away from them afterwards.
 var _hold := 0.0
-## Where the caster told it to go, in world space, or INF for "your own way".
-var _orders := Vector2.INF
-## Rising while it is walking into something it cannot get past, so a ghost
-## jammed in a corner eventually tries elsewhere instead of leaning on the wall
-## for the rest of its life.
+
+## The direction its caster last pointed it in: -1 left, 1 right, 0 for "your own
+## way". `climb` is the same idea vertically - -1 up, 1 down, 0 level - and only
+## decides whether a cable in reach is worth taking.
+##
+## A direction and not a destination, deliberately. A point on the map is a thing
+## you have to place accurately while somebody is shooting at you, and if you
+## miss by a room the ghost walks somewhere useless and stops. "That way" is one
+## press with no aiming budget, it is the same gesture on a mouse and a thumb,
+## and it stays meaningful however far it gets.
+var heading := 0
+var climb := 0
+## Seconds of walking the heading before it goes back to working for itself.
+var _orders_left := 0.0
+## Rising while it is making no headway, so a ghost jammed in a corner eventually
+## tries elsewhere instead of leaning on the wall for the rest of its life.
+## Driven by whether it is actually moving, not by whether something is in front
+## of it - a body can be against a wall and still walking usefully along it.
 var _stuck := 0.0
+var _was_at := INF
+## Seconds until the next jump is allowed, and until it will reconsider a route
+## it has just committed to.
+var _jump_cool := 0.0
+var _commit := 0.0
 var _watch_timer := 0.0
 ## Where the rivals were at the last sweep. Refreshed by _watch, read by the
 ## route search, so choosing somewhere to walk costs no extra raycasts against
@@ -307,16 +365,8 @@ func setup(gadget: GadgetData, look: Dictionary) -> void:
 	# rather than read off their body, because the two are not the same thing:
 	# the point of a decoy is that it wears the kit you had when you cast it, and
 	# goes on wearing it after you have dropped your plates and run.
-	# Where the caster was pointing when they spent it, if anywhere. This is the
-	# only steering anybody gets: after it arrives it is on its own.
-	var sent: Variant = look.get("orders", null)
-	if sent != null and (sent as Vector2).is_finite():
-		_orders = sent
-		_mind = Mind.ORDERS
-		_target = _orders
-		# Long enough to walk a screen, short enough that a ghost wedged against
-		# a crate gives up and starts working instead of leaning on it.
-		_rethink = 8.0
+	# Which way the caster was pointing when they spent it.
+	var _sent := order_to(int(look.get("heading", 0)), int(look.get("climb", 0)))
 
 	facing = int(look.get("facing", 1))
 	aim_angle = float(look.get("aim_angle", 0.0))
@@ -490,7 +540,8 @@ func _spotted_by(watcher: Vector2) -> void:
 	# Found. Stop whatever it was doing - including the caster's orders, which
 	# have just been overtaken by the thing they were issued for - and hold.
 	if _mind == Mind.LURE or _mind == Mind.ORDERS:
-		_orders = Vector2.INF
+		heading = 0
+		_orders_left = 0.0
 		_mind = Mind.PEEK
 		_hold = PEEK_TIME
 		_target = Vector2.INF
@@ -577,21 +628,25 @@ func _think(delta: float) -> void:
 				_target = Vector2.INF
 				_rethink = 0.0
 		Mind.ORDERS:
-			# Walking to wherever the caster pointed. Nothing interrupts this
-			# except arriving or being seen on the way - if you sent it somewhere
-			# you had a reason, and second-guessing you halfway there would make
-			# the aim pointless.
-			if not _orders.is_finite():
-				_mind = Mind.LURE
-			elif _arrived() or _rethink <= 0.0:
-				_orders = Vector2.INF
-				_mind = Mind.LURE
-				_target = Vector2.INF
-				_rethink = 0.0
+			# Walking the way the caster pointed. The target is re-projected out
+			# in front of it every frame rather than fixed once, which is what
+			# makes this a heading instead of a destination: it cannot arrive,
+			# so it cannot stop early, and it keeps going that way until the
+			# clock runs out or somebody sees it.
+			_orders_left -= delta
+			if heading == 0 or _orders_left <= 0.0:
+				_stand_down()
 			else:
-				_target = _orders
+				_target = Vector2(
+					global_position.x + heading * 900.0,
+					global_position.y + climb * 320.0)
 		Mind.LURE:
-			if _rethink <= 0.0 or not _target.is_finite() or _arrived():
+			_commit = maxf(_commit - delta, 0.0)
+			# A route it has just committed to is left alone, unless it has no
+			# route at all - see _turn_back for why re-scoring too eagerly walks
+			# it back into whatever it just backed away from.
+			var loose := _rethink <= 0.0 or _arrived()
+			if not _target.is_finite() or (_commit <= 0.0 and loose):
 				_pick_lure_target()
 
 	# Never crouched while luring. An earlier version crouch-walked whenever a
@@ -616,6 +671,44 @@ func _arrived() -> bool:
 	if absf(_target.x - global_position.x) > ARRIVED:
 		return false
 	return absf(_target.y - global_position.y) <= WORTH_A_CABLE
+
+
+## Point it somewhere. -1 left, 1 right, 0 to let it go back to its own devices;
+## `up_down` is -1 up, 1 down, 0 level.
+##
+## Public, and callable at any point in its life: the caster owns this body, so
+## re-pointing one that is already out is a local call on a node this machine is
+## authoritative for. Nothing goes over the wire and no RPC exists for it - the
+## walk that results replicates like any other movement, which is the whole
+## reason this is cheap enough to be a free, repeatable press.
+## Answers false if it is in no state to be pointed anywhere - which is how the
+## caster's own key tells "re-point the one that is out" from "cast a new one".
+func order_to(way: int, up_down: int) -> bool:
+	if _dying > 0.0 or gone:
+		return false
+	heading = signi(way)
+	climb = signi(up_down)
+	if heading == 0:
+		_stand_down()
+		return true
+	_mind = Mind.ORDERS
+	_orders_left = ORDERS_TIME
+	_commit = 0.0
+	_stuck = 0.0
+	_was_at = INF
+	_target = Vector2(global_position.x + heading * 900.0,
+		global_position.y + climb * 320.0)
+	return true
+
+
+## Back to working for itself.
+func _stand_down() -> void:
+	heading = 0
+	climb = 0
+	_orders_left = 0.0
+	_mind = Mind.LURE
+	_target = Vector2.INF
+	_rethink = 0.0
 
 
 ## Somewhere to run when it has been seen: away from the watcher, and further
@@ -756,6 +849,7 @@ func _cable_here() -> Zipline:
 
 ## Turns a target into a heading, a jump and a cable.
 func _steer(delta: float) -> void:
+	_jump_cool = maxf(_jump_cool - delta, 0.0)
 	if not _target.is_finite():
 		velocity.x = move_toward(velocity.x, 0.0, GROUND_FRICTION * delta)
 		return
@@ -774,27 +868,29 @@ func _steer(delta: float) -> void:
 			_grab(cable)
 			return
 
-	var blocked := test_move(global_transform, Vector2(way * 20.0, 0.0))
-	var ledge := not test_move(global_transform, Vector2(way * 24.0, 14.0))
 	if is_on_floor():
+		var blocked := test_move(global_transform, Vector2(way * WALL_PROBE, 0.0))
+		var ledge := not test_move(global_transform,
+			Vector2(way * LEDGE_PROBE, LEDGE_DROP))
 		if blocked:
-			# Something in the way. Try to get over it; if it has been trying for
-			# a while, it is a wall, not a crate.
-			velocity.y = _jump_velocity
-			_stuck += delta * 3.0
-		elif ledge and _mind != Mind.BREAK:
-			# Roaming, a drop is not worth taking. Turn around and go the other
-			# way, which is also how it stops walking off every catwalk it meets.
-			_target = Vector2(global_position.x - way * 400.0, global_position.y)
-			return
-		elif _target.y < global_position.y - WORTH_A_CABLE * 0.5 and not ledge:
-			velocity.y = _jump_velocity
-		else:
-			_stuck = maxf(_stuck - delta, 0.0)
-	if _stuck > 2.0:
-		_stuck = 0.0
-		_target = Vector2.INF
-		_rethink = 0.0
+			# Something in the way. Ask whether it can actually be got over
+			# before trying - the old version jumped at everything, every frame,
+			# which against a two storey wall is a body bouncing on the spot.
+			if _can_step_over(way):
+				_hop()
+			else:
+				_turn_back(way)
+				return
+		elif ledge:
+			# A drop. Worth taking at a run when there is something to land on,
+			# never worth taking otherwise - walking off a catwalk to reach a
+			# target on the floor below is how it used to spend its life falling.
+			if _mind == Mind.BREAK and _can_land_across(way):
+				_hop()
+			else:
+				_turn_back(way)
+				return
+		_watch_for_headway(delta)
 
 	# The caster's own top speed, arrived at through the same chain of
 	# multipliers Player._update_run walks: the weight of the gun and any wounds
@@ -807,6 +903,86 @@ func _steer(delta: float) -> void:
 	var accel := GROUND_ACCEL if is_on_floor() else AIR_ACCEL
 	velocity.x = move_toward(velocity.x, way * cap, accel * delta)
 	_aim_along(delta, way)
+
+
+## A jump, if it is allowed one. Everything that wants to jump goes through here,
+## so the cooldown cannot be forgotten at one of the call sites.
+func _hop() -> void:
+	if _jump_cool > 0.0:
+		return
+	velocity.y = _jump_velocity
+	_jump_cool = JUMP_COOLDOWN
+
+
+## Whether the thing in front of it is a crate or a wall.
+##
+## Two questions, and both are needed. Can it rise at all - a low ceiling makes
+## every obstacle unjumpable however short it is - and from up there, is the way
+## forward clear. Without the second one it jumps at walls; without the first it
+## jumps into girders.
+func _can_step_over(way: float) -> bool:
+	if test_move(global_transform, Vector2(0.0, -STEP_UP)):
+		return false
+	var lifted := global_transform
+	lifted.origin.y -= STEP_UP
+	return not test_move(lifted, Vector2(way * (WALL_PROBE + 10.0), 0.0))
+
+
+## Whether there is anything to land on across the gap ahead.
+##
+## Three reaches rather than one, so a narrow gap and a wide one are told apart:
+## the near sample catches a step down it can hop, the far one catches the other
+## side of a real gap. Nothing at any of them is a drop, and a drop is not a
+## route.
+func _can_land_across(way: float) -> bool:
+	var space := get_world_2d().direct_space_state
+	for reach in [90.0, 150.0, 215.0]:
+		var from := global_position + Vector2(way * reach, -12.0)
+		var query := PhysicsRayQueryParameters2D.create(from, from + Vector2(0.0, 80.0))
+		query.collision_mask = Layers.WORLD | Layers.ONE_WAY
+		if not space.intersect_ray(query).is_empty():
+			return true
+	return false
+
+
+## Gives up on the direction it was walking and commits to the other one.
+##
+## The commitment is the point. Turning round on its own is not enough: the route
+## scorer immediately re-scores the way it just came from, likes it for the same
+## reasons it liked it the first time, and sends it straight back into the wall.
+func _turn_back(way: float) -> void:
+	velocity.x = 0.0
+	# Under orders there is nothing to turn back to. The heading re-projects the
+	# target in front of the body every frame, so a turn-back is overwritten
+	# before it can take a single step and it walks into the same wall until it
+	# dies - which is the original complaint arriving by a new route. A heading
+	# it cannot walk is a heading that is finished, so it goes back to working
+	# for itself and the caster can point it somewhere else.
+	if _mind == Mind.ORDERS:
+		_stand_down()
+		return
+	_target = Vector2(global_position.x - way * TURN_BACK, global_position.y)
+	_commit = TURN_COMMIT
+	_rethink = maxf(_rethink, TURN_COMMIT)
+	_stuck = 0.0
+	_was_at = global_position.x
+
+
+## Notices when it has stopped getting anywhere.
+##
+## Measured on distance covered rather than on whether something is in front of
+## it, which is what it used to be. A body can be pressed against a wall and
+## still walking usefully along it, and a body in clear air can be going nowhere
+## because it is wedged on a corner - only one of those is worth reacting to and
+## the old test got both of them wrong.
+func _watch_for_headway(delta: float) -> void:
+	if not is_finite(_was_at) or absf(global_position.x - _was_at) > 3.0:
+		_was_at = global_position.x
+		_stuck = 0.0
+		return
+	_stuck += delta
+	if _stuck > STUCK_TIME:
+		_turn_back(signf(_target.x - global_position.x))
 
 
 ## Where the arm points. Down range of wherever it is walking, wandering a little
@@ -945,7 +1121,8 @@ func hit(at: Vector2, direction: Vector2) -> void:
 	# direction of travel is a good enough answer to "which way do I not want to
 	# be standing".
 	_threat = at - direction.normalized() * 600.0
-	_orders = Vector2.INF
+	heading = 0
+	_orders_left = 0.0
 	# Straight to the run, with no peek. It has already been found and shot at,
 	# and standing there holding somebody's eye is a thing you do to be noticed -
 	# a man who is already being fired on and stays put is not baiting anybody,

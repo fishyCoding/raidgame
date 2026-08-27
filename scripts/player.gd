@@ -1726,6 +1726,23 @@ func _use_ultimate() -> void:
 	if ult == null:
 		_say_loot("no ultimate equipped")
 		return
+	# A ghost already walking about is re-pointed rather than refused. It is the
+	# same press, it costs nothing, and it is what makes the direction a control
+	# instead of a single decision taken at the worst possible moment - you cast
+	# it while being shot at, and thirty seconds later you know far better where
+	# you want it than you did then.
+	if ult.gadget.kind == GadgetData.Kind.PROJECTION:
+		var out := Net.projection_for(get_multiplayer_authority())
+		if out and out.has_method(&"order_to"):
+			var sent := _projection_heading()
+			# It answers false while it is coming apart, which is the half second
+			# where the body is still in the level but is an animation rather
+			# than a decoy. Taking the press anyway would eat it and print a
+			# message about a ghost that is already gone.
+			if out.order_to(sent.x, sent.y):
+				_say_loot("projection sent %s" % _heading_name(sent))
+				return
+
 	if ult.charge < 1.0:
 		_say_loot("ultimate at %d%%" % roundi(ult.charge * 100.0))
 		return
@@ -1746,7 +1763,8 @@ func _use_ultimate() -> void:
 		GadgetData.Kind.PROJECTION:
 			_cast_projection(ult.gadget)
 			projection_left = ult.gadget.active_time
-			_say_loot("PROJECTION away - it draws them off, it makes no sound")
+			_say_loot("PROJECTION %s - Q again to send it somewhere else"
+				% _heading_name(_projection_heading()))
 			# Deliberately no sound, here of all places. Every other ultimate
 			# announces itself and should; this one is bought entirely to be
 			# quiet, and a click on the frame it is cast would tell anybody
@@ -1784,33 +1802,49 @@ func _cast_projection(gadget: GadgetData) -> void:
 		"stowed": stowed,
 		"crouch": crouch,
 		"speed_scale": carrying * injury_speed_multiplier(),
-		"orders": _projection_orders(gadget),
+		"heading": _projection_heading().x,
+		"climb": _projection_heading().y,
 	}
 	Net.cast_projection(gadget.resource_path, global_position, look,
 		get_multiplayer_authority())
 
 
-## Where the crosshair is pointing, as somewhere to send the ghost.
+## Which way you are pointing, reduced to a general direction to send the ghost.
 ##
-## The one piece of control you get over it, and it costs no new key: it walks
-## off towards wherever you were already aiming. That matters most in the
-## situation the gadget exists for - pinned down with somebody working their way
-## towards you - because "go *that* way" is the whole difference between a decoy
-## and a coin flip. Point it at the man who has you and it walks into his
-## sightline; point it down the corridor you are not going to use and it takes
-## whoever finds it with it.
+## x is -1 left or 1 right; y is -1 up, 1 down, or 0 for level, and only decides
+## whether a cable in reach is worth taking on the way.
 ##
-## Read through PlayerInput.get_aim_point, the same call the grenade arc uses, so
-## a thumb aims it exactly the way a mouse does and neither needed teaching.
-## Clamped to the gadget's own radius: it is a decoy, not a scout, and one sent
-## to the far side of the map is one nobody will ever walk past.
-func _projection_orders(gadget: GadgetData) -> Vector2:
-	var wanted := PlayerInput.get_aim_point(global_position, _aim_reach)
-	var offset := wanted - global_position
-	var reach := maxf(gadget.radius, 200.0)
-	if offset.length() > reach:
-		offset = offset.normalized() * reach
-	return global_position + offset
+## A direction rather than a spot on the map, and that is the whole design of the
+## control. Placing a point accurately is a thing you do when nobody is shooting
+## at you; this is a gadget for the moment somebody is, and "that way" is one
+## press with no aiming budget at all. It is also identical on both ends - the
+## crosshair is driven by the mouse on a desktop and by the aim drag on glass,
+## so `aim_direction` already means the same thing on a phone and neither had to
+## be taught anything.
+##
+## The vertical band is deliberately wide. Level is anything within about 30
+## degrees of flat, so pointing roughly along the ground never accidentally reads
+## as "climb" - you have to actually mean it.
+func _projection_heading() -> Vector2i:
+	var dir := aim_direction
+	if dir.is_zero_approx():
+		dir = Vector2(facing, 0.0)
+	var up_down := 0
+	if dir.y < -0.5:
+		up_down = -1
+	elif dir.y > 0.5:
+		up_down = 1
+	return Vector2i(1 if dir.x >= 0.0 else -1, up_down)
+
+
+## What to call a heading, for the message that confirms the press.
+func _heading_name(sent: Vector2i) -> String:
+	var side := "right" if sent.x > 0 else "left"
+	if sent.y < 0:
+		return "up and %s" % side
+	if sent.y > 0:
+		return "down and %s" % side
+	return side
 
 
 ## The bow, while it is out: hold the trigger to pull it back, let go to shoot.
