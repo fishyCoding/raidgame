@@ -243,7 +243,7 @@ func _blind() -> void:
 		strength *= 0.35
 	if strength <= 0.04:
 		return
-	me.flashed(strength, data.duration)
+	me.flashed(strength, data.duration, global_position)
 
 
 func _flash() -> void:

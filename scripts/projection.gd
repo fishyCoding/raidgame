@@ -54,13 +54,17 @@ const STOW_TIME := 0.16
 const STOW_LEAN := 24.0
 const STOW_SHORTEN := 0.68
 
-## How long after being spotted before it reacts. A ghost that broke cover on the
-## frame a rifle scope crossed it would move like nothing alive; this is roughly
-## a person noticing.
-const REACTION := 0.38
+## How long it holds still once it knows it has been seen.
+##
+## This is the peek, and it is the whole gadget. A decoy that breaks the instant
+## it is spotted is a shape somebody glimpsed; a decoy that stands there for the
+## better part of a second, facing you, is a *player* you have found - long
+## enough to raise a gun at, commit to, and start walking towards. What it buys
+## its caster is the second and third of those.
+const PEEK_TIME := 0.75
 
-## How long it keeps its head down after the last time anybody had eyes on it.
-const STAY_HIDDEN := 3.4
+## How long it runs for after a peek before it goes looking to be seen again.
+const BREAK_TIME := 2.6
 
 ## How often the "is anybody looking at me" sweep runs. Once a frame is a raycast
 ## per player per frame for a body that lives fourteen seconds, and the answer
@@ -77,11 +81,14 @@ const WATCH_RANGE := 1500.0
 ## difference between the two searches is how badly it wants one.
 const COVER_STEPS := [160.0, 280.0, 420.0, 560.0, 720.0]
 
-## How close a rival has to be before it starts moving like somebody who knows
-## they are there: crouched, and not out in the open. Being seen is handled
-## separately - this is the half-second before that, which is the half-second a
-## real player spends deciding not to be seen at all.
-const SNEAK_RANGE := 720.0
+## How far from its caster it wants to be, and how hard it works at it.
+##
+## The point of the thing is that somebody follows it *somewhere else*. A decoy
+## that baits an enemy into the room its caster is standing in has done the
+## opposite of its job, so distance from the caster is the largest term in every
+## route it picks - larger than being seen, which is worth nothing if it is being
+## seen next to you.
+const AWAY_FROM_CASTER := 900.0
 
 ## How long after stepping off a cable before it will consider that same cable
 ## again. Long enough to have walked somewhere: without it a ghost that arrives
@@ -171,7 +178,8 @@ var size := Vector2(28.0, 48.0)
 ## How many rounds it takes, and how long it lasts. Set from the gadget.
 var max_hits := 3
 var life_left := 14.0
-## How far from where it was cast it is willing to wander.
+## How far from where it was cast it is willing to be sent. Only bounds the
+## caster's aimed order - once it is loose it goes wherever the bait takes it.
 var roam_range := 900.0
 
 ## Everything the caster's own top speed was multiplied by that this body cannot
@@ -185,24 +193,31 @@ var roam_range := 900.0
 ## without looking at it twice.
 var speed_scale := 1.0
 
-enum Mind { ROAM, HIDE }
+## What it is doing.
+##
+## ORDERS is where it starts if the caster pointed somewhere; everything else is
+## the bait loop, which it runs for the rest of its life: find somewhere an enemy
+## can see you, stand there until one does, hold their eye, run, repeat.
+##
+## This replaces an earlier version that hid when it was seen. Hiding is what a
+## real player does and it made a beautifully convincing ghost that nobody ever
+## looked at twice - it would break line of sight at exactly the moment it had
+## somebody's attention, which is the one moment the whole gadget is paid for.
+## A decoy is not trying to survive. It is trying to be followed.
+enum Mind { ORDERS, LURE, PEEK, BREAK }
 
-var _mind := Mind.ROAM
+var _mind := Mind.LURE
 ## Where it is trying to get to. INF means "nowhere in particular yet".
 var _target := Vector2.INF
 ## Seconds until it picks somewhere new, whether or not it arrived.
 var _rethink := 0.0
 ## Where the last person who could see it was standing.
 var _threat := Vector2.INF
-## Counts down from REACTION once it has been spotted. It does not move until
-## this reaches zero.
-var _reacting := 0.0
-## Counts down from STAY_HIDDEN once nobody can see it any more.
-var _settle := 0.0
-## Seconds of watching the threat before it turns and runs. A person looks first.
-var _glance := 0.0
-## Set while it is deliberately sitting still behind something.
-var _tucked := false
+## Counts down while it is holding somebody's eye, and again while it is running
+## away from them afterwards.
+var _hold := 0.0
+## Where the caster told it to go, in world space, or INF for "your own way".
+var _orders := Vector2.INF
 ## Rising while it is walking into something it cannot get past, so a ghost
 ## jammed in a corner eventually tries elsewhere instead of leaning on the wall
 ## for the rest of its life.
@@ -277,7 +292,10 @@ func _ready() -> void:
 
 	_apply_stance()
 	_shield_ramp(1000.0)
-	_pick_roam_target()
+	# Only if nobody told it where to go. setup() runs before this and may
+	# already have handed it a destination.
+	if _mind != Mind.ORDERS:
+		_pick_lure_target()
 
 
 ## Set by Net as it builds one, before it goes into the tree.
@@ -289,6 +307,17 @@ func setup(gadget: GadgetData, look: Dictionary) -> void:
 	# rather than read off their body, because the two are not the same thing:
 	# the point of a decoy is that it wears the kit you had when you cast it, and
 	# goes on wearing it after you have dropped your plates and run.
+	# Where the caster was pointing when they spent it, if anywhere. This is the
+	# only steering anybody gets: after it arrives it is on its own.
+	var sent: Variant = look.get("orders", null)
+	if sent != null and (sent as Vector2).is_finite():
+		_orders = sent
+		_mind = Mind.ORDERS
+		_target = _orders
+		# Long enough to walk a screen, short enough that a ghost wedged against
+		# a crate gives up and starts working instead of leaning on it.
+		_rethink = 8.0
+
 	facing = int(look.get("facing", 1))
 	aim_angle = float(look.get("aim_angle", 0.0))
 	stowed = bool(look.get("stowed", false))
@@ -439,7 +468,6 @@ func _apply_stance() -> void:
 func _watch(delta: float) -> void:
 	_watch_timer -= delta
 	if _watch_timer > 0.0:
-		_seen_countdown(delta)
 		return
 	_watch_timer = WATCH_INTERVAL
 
@@ -448,32 +476,24 @@ func _watch(delta: float) -> void:
 	_eyes = _watchers()
 	var watcher := _seen_from(_eyes, sight_centre())
 	if watcher.is_finite():
-		_threat = watcher
-		_settle = STAY_HIDDEN
-		if _mind == Mind.ROAM:
-			# Noticed, not yet moved. A person looks at what spotted them before
-			# they decide to run, and the pause is what makes it read as a
-			# decision rather than a trigger.
-			_reacting = REACTION
-			_glance = REACTION + 0.3
-			_mind = Mind.HIDE
-			_target = Vector2.INF
-	_seen_countdown(delta)
+		_spotted_by(watcher)
 
 
-func _seen_countdown(delta: float) -> void:
-	_reacting = maxf(_reacting - delta, 0.0)
-	_glance = maxf(_glance - delta, 0.0)
-	if _mind != Mind.HIDE:
-		return
-	_settle = maxf(_settle - delta, 0.0)
-	if _settle <= 0.0:
-		# Nobody has looked at it for a while. Out of cover, back to wandering -
-		# a decoy that finds one corner and stays in it stops drawing anybody.
-		_mind = Mind.ROAM
-		_tucked = false
-		_threat = Vector2.INF
-		_pick_roam_target()
+## Somebody has a clear line to it.
+##
+## Split out from the sweep above so the event has a name and can be raised
+## without one: the sweep can only find people who are actually there, and this
+## is also what a round arriving means (see hit()) and what a test needs to be
+## able to say out loud.
+func _spotted_by(watcher: Vector2) -> void:
+	_threat = watcher
+	# Found. Stop whatever it was doing - including the caster's orders, which
+	# have just been overtaken by the thing they were issued for - and hold.
+	if _mind == Mind.LURE or _mind == Mind.ORDERS:
+		_orders = Vector2.INF
+		_mind = Mind.PEEK
+		_hold = PEEK_TIME
+		_target = Vector2.INF
 
 
 ## Where every rival who is near enough to matter is standing, nearest first.
@@ -532,120 +552,168 @@ func _seen_from(eyes: Array[Vector2], point: Vector2) -> Vector2:
 func _think(delta: float) -> void:
 	_rethink -= delta
 	_cable_cooldown = maxf(_cable_cooldown - delta, 0.0)
+	_hold = maxf(_hold - delta, 0.0)
 
-	if _mind == Mind.HIDE:
-		if _reacting > 0.0:
-			# Caught. Frozen for a beat, and the beat is visible: it is still
-			# standing there in the open when the second round arrives.
+	match _mind:
+		Mind.PEEK:
+			# Standing in the open, facing whoever found it, not moving. This is
+			# the second it is buying its caster, and it has to look like a
+			# player who has seen you and is deciding what to do - which is
+			# exactly what a player who has seen you looks like.
 			velocity.x = move_toward(velocity.x, 0.0, GROUND_FRICTION * delta)
+			crouch = move_toward(crouch, 0.0, delta / CROUCH_TIME)
 			_face_the_threat()
+			if _hold <= 0.0:
+				_mind = Mind.BREAK
+				_hold = BREAK_TIME
+				_target = _bolt_from(_threat)
 			return
-		if not _target.is_finite():
-			_target = _find_cover()
-		if _target.is_finite() and absf(_target.x - global_position.x) <= ARRIVED:
-			# Behind something. Down, and still - which is both what a person does
-			# and what keeps it out of sight of anybody walking past.
-			_tucked = true
-			_target = Vector2.INF
-		if _tucked:
-			velocity.x = move_toward(velocity.x, 0.0, GROUND_FRICTION * delta)
-			crouch = move_toward(crouch, 1.0, delta / CROUCH_TIME)
-			_face_the_threat()
-			return
-	else:
-		var reached := absf(_target.x - global_position.x) <= ARRIVED
-		var arrived := _target.is_finite() and reached
-		if _rethink <= 0.0 or not _target.is_finite() or arrived:
-			_pick_roam_target()
+		Mind.BREAK:
+			# Off, at a run, away from the man who just looked at it. Whether he
+			# follows is his decision - all this can do is be worth following and
+			# then be somewhere else.
+			if _hold <= 0.0 or not _target.is_finite():
+				_mind = Mind.LURE
+				_target = Vector2.INF
+				_rethink = 0.0
+		Mind.ORDERS:
+			# Walking to wherever the caster pointed. Nothing interrupts this
+			# except arriving or being seen on the way - if you sent it somewhere
+			# you had a reason, and second-guessing you halfway there would make
+			# the aim pointless.
+			if not _orders.is_finite():
+				_mind = Mind.LURE
+			elif _arrived() or _rethink <= 0.0:
+				_orders = Vector2.INF
+				_mind = Mind.LURE
+				_target = Vector2.INF
+				_rethink = 0.0
+			else:
+				_target = _orders
+		Mind.LURE:
+			if _rethink <= 0.0 or not _target.is_finite() or _arrived():
+				_pick_lure_target()
 
-	# Down, when there is somebody near enough to walk into. Not because
-	# crouching hides it - it does not, there is no grass here - but because it
-	# is what a person does when they know roughly where the other man is and
-	# have not been seen yet: smaller target, slower, and committed to not being
-	# the one who starts the fight. Standing tall and jogging past a doorway with
-	# somebody behind it is the thing that reads as "that is not a player".
-	#
-	# Only while wandering. Once it has actually been spotted the crouch is
-	# exactly the wrong idea - it is running for cover now, and crouch-walking
-	# there at four tenths speed while somebody shoots at it is not caution, it
-	# is standing still slowly.
-	var careful := _mind == Mind.ROAM and _sneaking()
-	crouch = move_toward(crouch, 1.0 if careful else 0.0, delta / CROUCH_TIME)
+	# Never crouched while luring. An earlier version crouch-walked whenever a
+	# rival was near, on the theory that it moved like somebody being careful -
+	# which it did, and which made it small, slow and easy to miss. It is not
+	# trying to get away with anything. It wants to be the most obvious thing in
+	# the room.
+	crouch = move_toward(crouch, 0.0, delta / CROUCH_TIME)
 	_steer(delta)
 
 
-## Whether there is a rival close enough to be worth moving quietly for.
+## Whether it has got where it was going.
 ##
-## Deliberately not "can anybody see me" - that question is answered by _watch,
-## and by the time it says yes it is too late to be sneaking. This is the state
-## before it: somebody is inside SNEAK_RANGE and does not have a line yet.
-func _sneaking() -> bool:
-	if _eyes.is_empty():
+## Both axes, and that is not fussiness. Measured on x alone - which it was - the
+## far end of a zipline counts as "arrived" the moment it is chosen, because a
+## cable runs almost straight up and its top is directly above its bottom. The
+## target was therefore thrown away on the frame after it was picked, and the
+## only cables it ever rode were the ones it happened to already be standing on.
+func _arrived() -> bool:
+	if not _target.is_finite():
 		return false
-	var here := global_position
-	for eye in _eyes:
-		if eye.distance_to(here) < SNEAK_RANGE:
-			return true
-	return false
+	if absf(_target.x - global_position.x) > ARRIVED:
+		return false
+	return absf(_target.y - global_position.y) <= WORTH_A_CABLE
 
 
-## Somewhere else to be, chosen rather than rolled.
+## Somewhere to run when it has been seen: away from the watcher, and further
+## away from its caster than it already is.
 ##
-## The first version picked a direction and a distance out of the RNG, which
-## produced a body that paced. It went nowhere in particular, changed its mind on
-## a timer, and - the part that actually gave it away - was as happy to walk into
-## the middle of an open yard with somebody standing in it as anywhere else. A
-## person does not do that. A person going somewhere picks the side of the map
-## the other man is not on, and takes the route where there is something between
-## them.
+## Both terms matter and the second is the one that is easy to forget. Running
+## from the man who spotted it, on its own, is as likely to take it back past its
+## caster as anywhere else - and a decoy that leads a firefight home has cost its
+## owner the raid rather than saved it.
+func _bolt_from(watcher: Vector2) -> Vector2:
+	var home := _caster_at()
+	var away := signf(global_position.x - watcher.x)
+	if is_zero_approx(away):
+		away = 1.0
+	# If running from him would take it towards the caster, run the other way and
+	# accept being chased past him - the caster is what it is protecting.
+	if home.is_finite() and signf(home.x - global_position.x) == away:
+		var room := absf(home.x - global_position.x)
+		if room < AWAY_FROM_CASTER:
+			away = -away
+	return Vector2(global_position.x + away * 620.0, global_position.y)
+
+
+## Where its caster is standing now, or INF if they are gone.
 ##
-## So candidates are scored instead. Distance is the smallest term in it; what
-## dominates is whether anybody could watch it walk there, and whether it is
-## going somewhere new. Ties are broken by the roll, so two runs of the same
-## situation do not produce the same walk.
-func _pick_roam_target() -> void:
-	_rethink = _rng.randf_range(2.6, 5.4)
-	_tucked = false
+## Asked live rather than remembered from the cast. The whole job is to be
+## somewhere its owner is not, and its owner is running - a decoy that measured
+## its distance from a spot they left ten seconds ago would happily bait somebody
+## into the room they are hiding in now.
+func _caster_at() -> Vector2:
+	var body := Net.player_for(get_multiplayer_authority())
+	if body == null or not is_instance_valid(body):
+		return Vector2.INF
+	return body.global_position
+
+
+## Somewhere to stand where somebody might see it, chosen rather than rolled.
+##
+## Scored on three things, in this order of weight:
+##
+## 1. **Distance from the caster.** Largest term by a wide margin. Everything
+##    else this body does is worthless if it does it next door to the person it
+##    is covering for.
+## 2. **Whether a rival can see the spot.** This is the inversion of what this
+##    function used to do - it used to score cover, and produced a ghost that was
+##    superb at not being noticed. A decoy nobody notices is a decoy that did
+##    nothing.
+## 3. **Not doubling back**, so it reads as somebody going somewhere.
+##
+## If nobody is on the map to be seen by, the visibility term drops out and it
+## simply travels - which is right: with no audience there is nothing to play to,
+## and putting distance between itself and its caster is still worth doing.
+func _pick_lure_target() -> void:
+	_rethink = _rng.randf_range(2.2, 4.2)
 
 	var cable := _a_cable_worth_taking()
 	if cable.is_finite():
 		_target = cable
 		return
 
+	var home := _caster_at()
+	var here := global_position.x
+	var back := signf(velocity.x)
 	var best := Vector2.INF
 	var best_score := -INF
-	var back := signf(velocity.x)
+
 	for way in [-1.0, 1.0]:
 		for step in COVER_STEPS:
-			var spot := Vector2(global_position.x + way * step, global_position.y)
-			# It was cast somewhere for a reason. Wandering off the edge of the
-			# fight makes it a decoy nobody is ever going to see.
-			if absf(spot.x - _cast_from.x) > roam_range:
-				continue
-			var score := _rng.randf() * 40.0
-			# Out of sight is worth more than anything else on offer. This is
-			# most of what "stealthily" means for a body with no crouch-walking
-			# to hide behind: it is not that it sneaks, it is that it picks
-			# routes where being seen is not on the table.
+			var spot := Vector2(here + way * step, global_position.y)
+			var score := _rng.randf() * 30.0
+
+			# Away from whoever cast it. Scored on the *gain*, so a ghost already
+			# far away is not dragged further and further off the map, but one
+			# still standing next to its caster will take almost any route out.
+			if home.is_finite():
+				var was := absf(here - home.x)
+				var now := absf(spot.x - home.x)
+				score += clampf((now - was) / 200.0, -3.0, 3.0) * 90.0
+				if now < AWAY_FROM_CASTER * 0.5:
+					score -= 160.0
+
+			# Somewhere it can be seen from. The eye height offset matters: a
+			# spot tested at floor level is behind every railing on the map.
 			if not _seen_from(_eyes, spot + Vector2(0.0, _shape.position.y)).is_finite():
-				score += 220.0
-			# Somewhere it can actually be bothered to walk to. Very close is not
-			# a journey and very far is a long time in the open.
-			score += 90.0 - absf(step - 430.0) * 0.16
-			# Carrying on beats turning round. A body that reverses every few
-			# seconds is a body doing a patrol animation, not going anywhere.
+				score -= 150.0
+			else:
+				score += 150.0
+
 			if not is_zero_approx(back) and signf(way) == back:
-				score += 45.0
+				score += 40.0
+
 			if score > best_score:
 				best_score = score
 				best = spot
 
-	# Boxed in on both sides and pinned to the spot it was cast on. Take the
-	# nearest step anyway rather than standing still, which is the one thing a
-	# decoy must never do.
 	if not best.is_finite():
 		var way := 1.0 if _rng.randf() < 0.5 else -1.0
-		best = Vector2(global_position.x + way * COVER_STEPS[0], global_position.y)
+		best = Vector2(here + way * COVER_STEPS[0], global_position.y)
 	_target = best
 
 
@@ -686,41 +754,6 @@ func _cable_here() -> Zipline:
 	return cable
 
 
-## Somewhere the person who just spotted it cannot see.
-##
-## Sampled rather than searched. Candidate spots are stepped out along the floor
-## either side, each one tested with the one question that matters - can the
-## threat draw a straight line to it - and the nearest that fails is the answer.
-## It is not a path, and it does not have to be: the walk there is the same dumb
-## walk it does anywhere, and a ghost that gets stuck on the way is a ghost
-## somebody watched get stuck, which is exactly as convincing.
-func _find_cover() -> Vector2:
-	if not _threat.is_finite():
-		return Vector2.INF
-	var space := get_world_2d().direct_space_state
-	var away := signf(global_position.x - _threat.x)
-	if is_zero_approx(away):
-		away = 1.0
-	var lift := _shape.position.y
-
-	# Away from the threat first, then back past it. Running away is right almost
-	# always, but a doorway behind you is still a doorway.
-	for way in [away, -away]:
-		for step in COVER_STEPS:
-			var spot := Vector2(global_position.x + way * step, global_position.y)
-			if absf(spot.x - _cast_from.x) > roam_range * 1.4:
-				continue
-			var probe := spot + Vector2(0.0, lift)
-			var query := PhysicsRayQueryParameters2D.create(_threat, probe)
-			query.collision_mask = Layers.WORLD
-			if not space.intersect_ray(query).is_empty():
-				return spot
-	# Nothing solid anywhere. Run, then - being further away is worth something
-	# even when being hidden is not on offer.
-	var last: float = COVER_STEPS[COVER_STEPS.size() - 1]
-	return Vector2(global_position.x + away * last, global_position.y)
-
-
 ## Turns a target into a heading, a jump and a cable.
 func _steer(delta: float) -> void:
 	if not _target.is_finite():
@@ -749,7 +782,7 @@ func _steer(delta: float) -> void:
 			# a while, it is a wall, not a crate.
 			velocity.y = _jump_velocity
 			_stuck += delta * 3.0
-		elif ledge and _mind == Mind.ROAM:
+		elif ledge and _mind != Mind.BREAK:
 			# Roaming, a drop is not worth taking. Turn around and go the other
 			# way, which is also how it stops walking off every catwalk it meets.
 			_target = Vector2(global_position.x - way * 400.0, global_position.y)
@@ -777,10 +810,12 @@ func _steer(delta: float) -> void:
 
 
 ## Where the arm points. Down range of wherever it is walking, wandering a little
-## the way a person's does, and briefly at whatever just spotted it.
+## the way a person's does - and levelled at whoever it is running from, because
+## a body sprinting away with its gun trained back over its shoulder is a body
+## you follow rather than one you let go.
 func _aim_along(delta: float, way: float) -> void:
 	var wanted := 0.0 if way > 0.0 else PI
-	if _glance > 0.0 and _threat.is_finite():
+	if _mind == Mind.BREAK and _threat.is_finite():
 		wanted = sight_centre().angle_to_point(_threat)
 	else:
 		wanted += sin(Time.get_ticks_msec() * 0.0011) * 0.22
@@ -910,18 +945,15 @@ func hit(at: Vector2, direction: Vector2) -> void:
 	# direction of travel is a good enough answer to "which way do I not want to
 	# be standing".
 	_threat = at - direction.normalized() * 600.0
-	_settle = STAY_HIDDEN
-	if _mind == Mind.ROAM:
-		_mind = Mind.HIDE
-		_target = Vector2.INF
-		# No pause this time. It has already been found - the beat it takes to
-		# notice a scope crossing it is not one it gets after the first round.
-		_reacting = 0.0
-		_glance = 0.0
-	else:
-		# Already hiding and hit anyway: where it went is not good enough.
-		_tucked = false
-		_target = Vector2.INF
+	_orders = Vector2.INF
+	# Straight to the run, with no peek. It has already been found and shot at,
+	# and standing there holding somebody's eye is a thing you do to be noticed -
+	# a man who is already being fired on and stays put is not baiting anybody,
+	# he is being killed. Running is also what buys the third round the time to
+	# arrive somewhere its caster is not.
+	_mind = Mind.BREAK
+	_hold = BREAK_TIME
+	_target = _bolt_from(_threat)
 
 	# Whoever fired gets their hitmarker. A decoy you could tell from a person by
 	# the absence of a tick on your own screen would be no decoy at all - and it

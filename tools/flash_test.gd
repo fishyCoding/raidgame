@@ -223,6 +223,26 @@ func _check_covers_hud(main: Node, player: Node2D) -> void:
 	player.flashed(1.0, 2.0)
 	_check("with the player deciding how white", player.flash_amount() > 0.9)
 
+	# The part that matters, and the part the first version got wrong: some of
+	# the screen has to be *gone*, not dimmed. A translucent wash over everything
+	# is not being blinded, it is being mildly inconvenienced, and you could
+	# still read the map through it.
+	var span := hud.size.length() * 0.5
+	var full: float = hud.flash_core_radius()
+	print("  a point-blank flash blanks a %.0f px circle of a %.0f px half-screen"
+		% [full, span])
+	_check("a flash in your face takes the whole screen", full >= span)
+
+	# And a partial one still has to take *something* completely, or the falloff
+	# has quietly turned every non-perfect throw back into a wash.
+	player.flash_left = 0.0
+	player.flash_strength = 0.0
+	player.flashed(0.35, 2.0)
+	var part: float = hud.flash_core_radius()
+	print("  a third-strength one blanks %.0f px" % part)
+	_check("and a glancing one still blanks part of it", part > 60.0)
+	_check("but not all of it", part < span)
+
 
 ## The ghost cuts in and out on the way out rather than fading.
 func _check_stutter(player: Node2D) -> void:

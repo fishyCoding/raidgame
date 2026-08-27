@@ -11,6 +11,20 @@ extends SceneTree
 
 const GADGET := "res://resources/gadgets/projection.tres"
 
+## Counted rather than asserted. A bare `assert()` inside a function called from
+## _run unwinds only that function, so the runner walks straight on to the next
+## section and prints PASS at the end - this file reported a clean run twice
+## while checks inside it were failing. Same argument order as `assert()` so the
+## call sites read the same; the difference is that every one of them runs, and
+## the verdict at the bottom is the truth.
+var _ok := true
+
+
+func _check_that(ok: bool, what: String) -> void:
+	if not ok:
+		_ok = false
+		print("  FAIL  %s" % what)
+
 
 func _initialize() -> void:
 	_run()
@@ -38,7 +52,10 @@ func _run() -> void:
 	await physics_frame
 
 	var player: Node2D = net.local_player
-	assert(player != null, "the test needs a character to cast from")
+	_check_that(player != null, "the test needs a character to cast from")
+	if player == null:
+		quit(1)
+		return
 
 	print("-- the legend --")
 	_check_legend(main)
@@ -62,20 +79,23 @@ func _run() -> void:
 	# physics tick and turns to face it, so "does it come out wearing what the
 	# caster wore" is a question with about a sixtieth of a second to ask it in.
 	var ghost: Node2D = _the_ghost()
-	assert(ghost != null, "Q with a charged Projection has to put a ghost in the world")
+	_check_that(ghost != null, "Q with a charged Projection has to put a ghost in the world")
+	if ghost == null:
+		quit(1)
+		return
 
 	print("  ghost %s at %s, caster at %s" % [
 		ghost.name, str(ghost.global_position), str(cast_at)])
-	assert(ghost.global_position.distance_to(cast_at) < 1.0,
+	_check_that(ghost.global_position.distance_to(cast_at) < 1.0,
 		"it steps out of the caster, not beside them")
 
 	print("  it wears what you wore: facing=%d armored=%s stowed=%s crouch=%.2f" % [
 		ghost.facing, ghost.armored, ghost.stowed, ghost.crouch])
-	assert(ghost.facing == player.facing, "it faces the way the caster did")
-	assert(ghost.stowed == player.stowed, "and carries the gun the same way")
-	assert(ghost.get_node_or_null(^"Body/ShieldOutline") != null,
+	_check_that(ghost.facing == player.facing, "it faces the way the caster did")
+	_check_that(ghost.stowed == player.stowed, "and carries the gun the same way")
+	_check_that(ghost.get_node_or_null(^"Body/ShieldOutline") != null,
 		"the plates have to be drawable on it, or armour is invisible on a ghost")
-	assert(ghost.get_node_or_null(^"AimPivot/Arm") != null,
+	_check_that(ghost.get_node_or_null(^"AimPivot/Arm") != null,
 		"and so does the gun arm, or a ghost is unarmed at a glance")
 
 	# Plates up whatever the caster had on, and up straight away rather than
@@ -86,19 +106,19 @@ func _run() -> void:
 	await physics_frame
 	print("  plates: armored=%s shield=%.2f (caster armored=%s)" % [
 		ghost.armored, ghost.shield, player.armored])
-	assert(ghost.armored, "a ghost always comes out with its plates up")
-	assert(ghost.shield >= 1.0, "and up already, not ramping")
-	assert(ghost.get_node("Body/ShieldOutline")._drawn > 0.0,
+	_check_that(ghost.armored, "a ghost always comes out with its plates up")
+	_check_that(ghost.shield >= 1.0, "and up already, not ramping")
+	_check_that(ghost.get_node("Body/ShieldOutline")._drawn > 0.0,
 		"and the outline has to actually be drawing, or the plates are invisible")
 	# Not exactly zero: a physics frame has passed and the meter has already
 	# started refilling. Spent is what matters, not empty.
-	assert(item.charge < 0.05, "and the charge is spent")
+	_check_that(item.charge < 0.05, "and the charge is spent")
 
 	print("\n-- it cannot shoot --")
 	print("  Weapon node: %s   has try_fire: %s" % [
 		ghost.get_node_or_null(^"Weapon"), ghost.has_method(&"try_fire")])
-	assert(ghost.get_node_or_null(^"Weapon") == null, "a ghost carries no weapon node")
-	assert(not ghost.has_method(&"try_fire"), "and nothing that could pull a trigger")
+	_check_that(ghost.get_node_or_null(^"Weapon") == null, "a ghost carries no weapon node")
+	_check_that(not ghost.has_method(&"try_fire"), "and nothing that could pull a trigger")
 
 	print("\n-- it makes no sound --")
 	_check_silence()
@@ -111,9 +131,9 @@ func _run() -> void:
 		if not is_instance_valid(ghost):
 			break
 		walked = maxf(walked, from.distance_to(ghost.global_position))
-	assert(is_instance_valid(ghost), "it should still be up three seconds in")
+	_check_that(is_instance_valid(ghost), "it should still be up three seconds in")
 	print("  wandered %.0f px from where it was cast in 3s" % walked)
-	assert(walked > 60.0, "a ghost that stands where you left it fools nobody")
+	_check_that(walked > 60.0, "a ghost that stands where you left it fools nobody")
 	# The checks below take longer than a ghost is supposed to live. Wound the
 	# clock forward rather than casting a fresh one each time, so what is being
 	# exercised is one body over its whole life.
@@ -129,30 +149,32 @@ func _run() -> void:
 	await _check_cable_memory(ghost)
 
 	print("\n-- three rounds and it is gone --")
-	assert(is_instance_valid(ghost), "still up before anybody shoots it")
-	assert(ghost.max_hits == 3, "the gadget says three")
+	_check_that(is_instance_valid(ghost), "still up before anybody shoots it")
+	_check_that(ghost.max_hits == 3, "the gadget says three")
 	for shot in ghost.max_hits:
 		ghost.take_damage(40.0, ghost.sight_centre(), Vector2.RIGHT)
 		await physics_frame
 		print("  hit %d: hits=%d glitch=%.2f still here=%s" % [
 			shot + 1, ghost.hits, ghost.glitch, is_instance_valid(ghost)])
-		assert(ghost.hits == shot + 1, "every round has to count")
-		assert(ghost.glitch > 0.0, "and every round has to tear the picture")
+		_check_that(ghost.hits == shot + 1, "every round has to count")
+		_check_that(ghost.glitch > 0.0, "and every round has to tear the picture")
 		if shot == 0:
-			# Mind.HIDE is 1. Named by value because naming the class would drag
-			# Projection - and therefore Net - into this tool's compile.
-			print("    ...and it breaks for cover: mind=%d threat=%s" % [
-				ghost._mind, str(ghost._threat)])
-			assert(ghost._mind == 1, "one round in and it should be running")
-			assert(ghost._threat.is_finite(),
+			# Mind.BREAK is 3 (ORDERS, LURE, PEEK, BREAK). Named by value because
+			# naming the class would drag Projection - and therefore Net - into
+			# this tool's compile.
+			print("    ...and it runs: mind=%d threat=%s target=%s" % [
+				ghost._mind, str(ghost._threat), str(ghost._target)])
+			_check_that(ghost._mind == 3, "one round in and it should be running")
+			_check_that(ghost._threat.is_finite(),
 				"and it should have worked out roughly where the round came from")
+			_check_that(ghost._target.is_finite(), "with somewhere to run to")
 		if shot < ghost.max_hits - 1:
-			assert(not ghost.gone, "it does not give up before the third")
+			_check_that(not ghost.gone, "it does not give up before the third")
 
-	assert(ghost.gone, "the third round finishes it")
+	_check_that(ghost.gone, "the third round finishes it")
 	# It does not vanish on the frame it dies - it comes apart over half a
 	# second, which is the whole point of the animation.
-	assert(is_instance_valid(ghost), "the glitch has to be watchable, not instant")
+	_check_that(is_instance_valid(ghost), "the glitch has to be watchable, not instant")
 	# Long enough for the death animation however long that is, rather than a
 	# frame count tuned to whatever it was the day this was written. It was 40
 	# frames, the animation went from 0.5s to 0.78s to make room for the stutter,
@@ -162,10 +184,16 @@ func _run() -> void:
 		if not is_instance_valid(ghost):
 			break
 	print("  gone after the tear finished: %s" % not is_instance_valid(ghost))
-	assert(not is_instance_valid(ghost), "and then it is gone")
+	_check_that(not is_instance_valid(ghost), "and then it is gone")
 
-	print("\n-- it hides when it is seen --")
-	_check_cover(main, player)
+	print("\n-- it lures rather than hides --")
+	_check_bait(main, player)
+
+	print("\n-- and it plays to people, not to guards --")
+	_check_ignores_guards(main, player)
+
+	print("\n-- you can tell it where to go --")
+	await _check_orders(main, player)
 
 	print("\n-- the bow shows you where the arrow goes --")
 	await _check_bow(player)
@@ -173,8 +201,8 @@ func _run() -> void:
 	print("\n-- throwing with a thumb --")
 	await _check_touch_throw(main, player)
 
-	print("\nPASS")
-	quit()
+	print("\n%s" % ("PASS" if _ok else "FAIL"))
+	quit(0 if _ok else 1)
 
 
 ## A ghost must not be quicker than the person it is pretending to be.
@@ -195,8 +223,10 @@ func _check_speed(ghost: Node2D, player: Node2D) -> void:
 
 	# Somewhere flat and clear, walking one way, so it reaches its cap.
 	ghost.global_position = player.global_position
-	ghost._mind = 0
-	ghost._tucked = false
+	# Mind.LURE. It used to be 0, which was ROAM and is now ORDERS - and
+	# ORDERS with no orders on it drops straight back to LURE and repicks,
+	# throwing away the target this check just set.
+	ghost._mind = 1
 	ghost.crouch = 0.0
 	ghost._target = ghost.global_position + Vector2(1400.0, 0.0)
 	ghost._rethink = 99.0
@@ -211,9 +241,9 @@ func _check_speed(ghost: Node2D, player: Node2D) -> void:
 		top = maxf(top, absf(ghost.velocity.x))
 	print("  ghost topped out at %.0f px/s, the caster's plated cap is %.0f" % [
 		top, caster_cap])
-	assert(top <= caster_cap + 2.0,
+	_check_that(top <= caster_cap + 2.0,
 		"a ghost must never outrun the person it is copying")
-	assert(top > caster_cap * 0.9,
+	_check_that(top > caster_cap * 0.9,
 		"nor crawl - it has to look like somebody actually going somewhere")
 
 
@@ -229,16 +259,16 @@ func _check_cable_memory(ghost: Node2D) -> void:
 	ghost.global_position = cable.world_bottom()
 	ghost._target = cable.world_top()
 	ghost._grab(cable)
-	assert(ghost.riding, "it should be on the rope")
+	_check_that(ghost.riding, "it should be on the rope")
 	ghost._let_go(false)
 	print("  stepped off %s, cooldown %.1fs" % [cable.name, ghost._cable_cooldown])
-	assert(ghost._cable_cooldown > 0.0, "stepping off has to start the cooldown")
-	assert(ghost._last_cable == cable, "and remember which rope it was")
+	_check_that(ghost._cable_cooldown > 0.0, "stepping off has to start the cooldown")
+	_check_that(ghost._last_cable == cable, "and remember which rope it was")
 
 	# Standing right on it, wanting to go somewhere it could take you: still no.
 	ghost._target = cable.world_top()
 	print("  standing on it, asked for a cable: %s" % ghost._cable_here())
-	assert(ghost._cable_here() == null,
+	_check_that(ghost._cable_here() == null,
 		"the rope it just rode must be off limits, or it rides it forever")
 
 	var grabbed_again := false
@@ -250,7 +280,7 @@ func _check_cable_memory(ghost: Node2D) -> void:
 			grabbed_again = true
 			break
 	print("  got back on within a second: %s" % grabbed_again)
-	assert(not grabbed_again, "and it must not climb straight back on")
+	_check_that(not grabbed_again, "and it must not climb straight back on")
 	if is_instance_valid(ghost):
 		ghost._cable_cooldown = 0.0
 		ghost._last_cable = null
@@ -268,14 +298,14 @@ func _check_bow(player: Node2D) -> void:
 
 	player._use_ultimate()
 	await physics_frame
-	assert(player.bow_out, "Q with a charged bow brings it out")
+	_check_that(player.bow_out, "Q with a charged bow brings it out")
 
 	var line: Node2D = player.get_node("Overlay/AimLine")
 	print("  bow out: arc=%s points=%d sweep=%.0f" % [
 		line.showing_arc, line.arc_points.size(), line.arc_radius])
-	assert(line.showing_arc, "the flight has to be drawn before you commit to it")
-	assert(line.arc_points.size() > 2, "and be an actual flight, not two points")
-	assert(line.arc_radius > 1.0,
+	_check_that(line.showing_arc, "the flight has to be drawn before you commit to it")
+	_check_that(line.arc_points.size() > 2, "and be an actual flight, not two points")
+	_check_that(line.arc_radius > 1.0,
 		"with the sweep it will paint, or you cannot aim it at a room")
 
 	# Half-drawn against fully drawn. Compared on the first step of the flight
@@ -296,9 +326,9 @@ func _check_bow(player: Node2D) -> void:
 
 	print("  quarter draw: %.1f px in the first step, sweeps %.0f" % [slow, small_sweep])
 	print("  full draw:    %.1f px in the first step, sweeps %.0f" % [fast, big_sweep])
-	assert(fast > slow * 1.5,
+	_check_that(fast > slow * 1.5,
 		"pulling it back further has to visibly throw the arrow harder")
-	assert(big_sweep > small_sweep * 1.5, "and paint a wider sweep")
+	_check_that(big_sweep > small_sweep * 1.5, "and paint a wider sweep")
 
 	# Putting it away takes the line with it, or the level keeps a blue arc
 	# drawn across it for the rest of the raid.
@@ -306,8 +336,8 @@ func _check_bow(player: Node2D) -> void:
 	player.bow_drawn = 0.0
 	player._hide_arrow_flight()
 	print("  bow away: arc=%s radius=%.0f" % [line.showing_arc, line.arc_radius])
-	assert(not line.showing_arc, "putting the bow away clears the flight line")
-	assert(line.arc_radius == 0.0, "and the sweep circle with it")
+	_check_that(not line.showing_arc, "putting the bow away clears the flight line")
+	_check_that(line.arc_radius == 0.0, "and the sweep circle with it")
 
 
 ## The phone's grenade: tap the pill to arm it, drag to place it, THROW to
@@ -399,24 +429,24 @@ func _check_touch_throw(main: Node, player: Node2D) -> void:
 	input.control_scheme = was
 	await process_frame
 
-	assert(seen["armed"], "the pill arms it rather than throwing it")
-	assert(seen["winding"], "and the player starts winding up")
-	assert(seen["arc"], "placing has to show the arc, same as a mouse does")
-	assert(seen["target"], "and hand the player the spot")
-	assert(seen["survives_lift"], "lifting a thumb must not throw the grenade")
-	assert(seen["threw"], "THROW has to actually throw it")
-	assert(seen["finished"], "and end the wind-up")
-	assert(seen["aimed"], "and throw it at the spot, not at the crosshair")
-	assert(seen["rearmed"], "a second grenade arms the same way")
-	assert(seen["cancelled"], "CANCEL has to put the grenade back")
-	assert(seen["let_go"], "and let go of the target")
+	_check_that(seen["armed"], "the pill arms it rather than throwing it")
+	_check_that(seen["winding"], "and the player starts winding up")
+	_check_that(seen["arc"], "placing has to show the arc, same as a mouse does")
+	_check_that(seen["target"], "and hand the player the spot")
+	_check_that(seen["survives_lift"], "lifting a thumb must not throw the grenade")
+	_check_that(seen["threw"], "THROW has to actually throw it")
+	_check_that(seen["finished"], "and end the wind-up")
+	_check_that(seen["aimed"], "and throw it at the spot, not at the crosshair")
+	_check_that(seen["rearmed"], "a second grenade arms the same way")
+	_check_that(seen["cancelled"], "CANCEL has to put the grenade back")
+	_check_that(seen["let_go"], "and let go of the target")
 
 
 ## Every keyboard action in the map has to be printed somewhere on the legend.
 func _check_legend(main: Node) -> void:
 	var label: Label = main.get_node("HUD/Controls")
 	var shown: String = label.text
-	assert(not shown.is_empty(), "the legend must not be blank on a desktop build")
+	_check_that(not shown.is_empty(), "the legend must not be blank on a desktop build")
 
 	var missing: PackedStringArray = []
 	for action in InputMap.get_actions():
@@ -438,7 +468,7 @@ func _check_legend(main: Node) -> void:
 	print("  %d lines, %d chars" % [shown.split("\n").size(), shown.length()])
 	for line in shown.split("\n"):
 		print("    %s" % line)
-	assert(missing.is_empty(), "keys bound but not shown: %s" % ", ".join(missing))
+	_check_that(missing.is_empty(), "keys bound but not shown: %s" % ", ".join(missing))
 
 
 ## The one sound a ghost could plausibly make is a rope, because that is the one
@@ -454,14 +484,14 @@ func _check_silence() -> void:
 	var code := "\n".join(stripped)
 	for forbidden in ["Audio.", "_audio", "AudioStreamPlayer", "play("]:
 		print("  mentions %-18s %s" % [forbidden, code.find(forbidden) >= 0])
-		assert(code.find(forbidden) < 0,
+		_check_that(code.find(forbidden) < 0,
 			"a projection that can reach %s is a projection you can hear" % forbidden)
 
 
 ## It gets on a cable, it goes up it, and the rope stays silent while it does.
 func _check_zipline(ghost: Node2D, audio: Node) -> void:
 	var cables: Array = get_nodes_in_group(&"zipline")
-	assert(not cables.is_empty(), "the level has to have a cable to test with")
+	_check_that(not cables.is_empty(), "the level has to have a cable to test with")
 	# The longest one, so there is room to travel before either end arrives.
 	var cable: Node2D = cables[0]
 	for line in cables:
@@ -471,7 +501,9 @@ func _check_zipline(ghost: Node2D, audio: Node) -> void:
 	ghost.global_position = cable.world_bottom()
 	ghost.velocity = Vector2.ZERO
 	ghost._target = cable.world_top()
-	ghost._mind = 0
+	ghost._mind = 1
+	# Long enough that the lure loop does not repick over the top of it.
+	ghost._rethink = 99.0
 
 	var rode := false
 	var climbed := 0.0
@@ -485,35 +517,132 @@ func _check_zipline(ghost: Node2D, audio: Node) -> void:
 			climbed = maxf(climbed, started - ghost.global_position.y)
 			# The rope is the loudest thing it could be doing. Nobody may be
 			# holding the sound, and it must not be playing on its account.
-			assert(audio._zip_owner != ghost.get_instance_id(),
+			_check_that(audio._zip_owner != ghost.get_instance_id(),
 				"a ghost on a rope must never claim the zipline sound")
 	print("  got on a cable: %s, climbed %.0f px, gun slung: %s" % [
 		rode, climbed, ghost.stow > 0.0 or not ghost.riding])
-	assert(rode, "a ghost has to be able to take a zipline")
-	assert(climbed > 20.0, "and actually travel along it")
-	assert(not audio._zip.playing, "and the rope stays silent under it")
+	_check_that(rode, "a ghost has to be able to take a zipline")
+	_check_that(climbed > 20.0, "and actually travel along it")
+	_check_that(not audio._zip.playing, "and the rope stays silent under it")
 
 
-## Being seen sends it looking for somewhere the watcher cannot draw a line to.
+## Being seen makes it hold, then run - it does not go and hide.
 ##
-## Exercised directly rather than through a second player, because solo there is
-## nobody else to be seen by - a ghost never hides from its own caster, which is
-## deliberate and is why the state has to be poked rather than provoked here.
-func _check_cover(main: Node, player: Node2D) -> void:
+## Exercised by poking the state rather than by staging two players, because solo
+## there is nobody else to be seen by: a ghost never lures its own caster, which
+## is deliberate and is the reason the sweep skips bodies sharing its authority.
+func _check_bait(main: Node, player: Node2D) -> void:
 	var ghost: Node2D = (load("res://scenes/projection.tscn") as PackedScene).instantiate()
 	ghost.name = "Ghost_probe"
 	main.get_node("Players").add_child(ghost)
 	ghost.global_position = player.global_position
-	ghost._threat = player.global_position + Vector2(600.0, 0.0)
 
-	var spot: Vector2 = ghost._find_cover()
-	print("  threat at +600px, cover chosen at %s (%.0f px away, %s the threat)" % [
-		str(spot), absf(spot.x - ghost.global_position.x),
-		"away from" if spot.x < ghost.global_position.x else "toward"])
-	assert(spot.is_finite(), "being seen has to produce somewhere to go")
-	assert(not spot.is_equal_approx(ghost.global_position),
-		"and somewhere is not where it is already standing")
+	# Mind: 0 ORDERS, 1 LURE, 2 PEEK, 3 BREAK.
+	var watcher: Vector2 = player.global_position + Vector2(600.0, 0.0)
+	ghost._mind = 1
+	# Raised directly rather than by staging a watcher: _watch rebuilds its own
+	# list of eyes from Net.players() every sweep, so anything planted in _eyes
+	# is gone by the time it looks - and solo there is nobody on that list but
+	# the caster, who a ghost deliberately never plays to.
+	ghost._spotted_by(watcher)
+	print("  spotted from +600px: mind=%d hold=%.2f" % [ghost._mind, ghost._hold])
+	_check_that(ghost._mind == 2, "being seen has to make it stop and hold, not hide")
+	_check_that(ghost._hold > 0.0, "for a beat somebody can react to")
+
+	# The peek runs out into a run, away from the man who looked at it.
+	ghost._threat = watcher
+	ghost._hold = 0.0
+	ghost._think(0.016)
+	print("  peek over: mind=%d target=%s (watcher at %.0f, ghost at %.0f)" % [
+		ghost._mind, str(ghost._target), watcher.x, ghost.global_position.x])
+	_check_that(ghost._mind == 3, "and then it should break")
+	_check_that(ghost._target.is_finite(), "with somewhere to go")
+	_check_that(ghost._target.x < ghost.global_position.x,
+		"away from the watcher, who is to the right of it")
+
+	# And the routes it picks favour being seen over being hidden, which is the
+	# whole reversal: this used to score cover.
+	ghost._mind = 1
+	ghost._eyes = [watcher] as Array[Vector2]
+	var seen := 0
+	for i in 12:
+		ghost._pick_lure_target()
+		if ghost._seen_from(ghost._eyes, ghost._target).is_finite():
+			seen += 1
+	print("  %d of 12 chosen spots are in the watcher's view" % seen)
+	_check_that(seen > 0, "a decoy that always picks cover is a decoy nobody follows")
 	ghost.queue_free()
+
+
+## Guards are not who it is playing to.
+##
+## The sweep walks Net.players() and nothing else, so a yard full of security is
+## invisible to it - which is the whole reason it does not spend its life peeking
+## at a patrol that was never going to chase it anywhere useful.
+func _check_ignores_guards(main: Node, player: Node2D) -> void:
+	var guards: Array = main.get_node("Enemies").get_children()
+	_check_that(not guards.is_empty(), "the level has to have guards to ignore")
+
+	var ghost: Node2D = (load("res://scenes/projection.tscn") as PackedScene).instantiate()
+	ghost.name = "Ghost_guardprobe"
+	main.get_node("Players").add_child(ghost)
+	# Standing on top of a guard, which is as seen as it is possible to be.
+	ghost.global_position = guards[0].global_position
+	var eyes: Array = ghost._watchers()
+	print("  %d guards on the map, %d of them count as watchers" % [
+		guards.size(), eyes.size()])
+	_check_that(eyes.is_empty(), "a guard must never be something it plays to")
+	ghost.queue_free()
+
+
+## The caster can point it somewhere, and it goes there.
+func _check_orders(main: Node, player: Node2D) -> void:
+	var input: Node = root.get_node("PlayerInput")
+	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
+	var item: Object = maker.from_gadget(load(GADGET))
+	item.charge = 1.0
+	player.inventory.set_ultimate(item)
+
+	# Somewhere it can actually walk to. Pointed blindly 520 px left, this landed
+	# on the far side of a wall at this spawn, and the ghost spent the whole check
+	# jumping at it - which reads as "orders are ignored" and is really "you asked
+	# for somewhere unreachable".
+	var space := player.get_world_2d().direct_space_state
+	var eye: Vector2 = player.sight_centre()
+	var sent: Vector2 = player.global_position + Vector2(-520.0, 0.0)
+	for way in [-1.0, 1.0]:
+		var spot := eye + Vector2(way * 520.0, 0.0)
+		var query := PhysicsRayQueryParameters2D.create(eye, spot)
+		query.collision_mask = 1
+		if space.intersect_ray(query).is_empty():
+			sent = player.global_position + Vector2(way * 520.0, 0.0)
+			break
+
+	# Aiming is read through PlayerInput.get_aim_point, the same call the grenade
+	# arc uses, so a placed touch point stands in for a mouse here.
+	input.touch_aim_point = sent
+	player._use_ultimate()
+	input.touch_aim_point = Vector2.INF
+
+	var ghost: Node2D = _the_ghost()
+	_check_that(ghost != null, "the cast has to produce a ghost")
+	print("  told to go to %s: mind=%d orders=%s" % [
+		str(sent), ghost._mind, str(ghost._orders)])
+	_check_that(ghost._mind == 0, "a cast with an aim point starts under orders")
+	_check_that(ghost._orders.is_finite(), "and remembers where it was sent")
+	_check_that(ghost._orders.distance_to(sent) < 2.0, "which is where you pointed")
+
+	var start: float = ghost.global_position.x
+	for i in 90:
+		await physics_frame
+		if not is_instance_valid(ghost):
+			break
+	var closed: float = absf(start - sent.x) - absf(ghost.global_position.x - sent.x)
+	print("  closed %.0f px on it in 1.5s (mind now %d)" % [
+		closed, ghost._mind if is_instance_valid(ghost) else -1])
+	_check_that(closed > 40.0, "and it has to actually set off that way")
+	if is_instance_valid(ghost):
+		ghost.queue_free()
 
 
 ## Runs physics frames until a condition holds, or gives up. Returns either way -
@@ -525,7 +654,13 @@ func _wait_for(done: Callable, frames: int) -> void:
 		await physics_frame
 
 
+## This peer's own ghost, by name rather than by group.
+##
+## The group holds every projection in the level, including the throwaway probes
+## the checks below build - and queue_free() is deferred, so a probe freed a line
+## earlier is still in the group when the next section looks. Picking one out of
+## the group therefore returned a probe with no orders on it, and "you can tell
+## it where to go" failed against a body nobody had told anything.
 func _the_ghost() -> Node2D:
-	for node in get_nodes_in_group(&"projection"):
-		return node as Node2D
-	return null
+	var net: Node = root.get_node("Net")
+	return net.projection_for(net.peer_id()) as Node2D

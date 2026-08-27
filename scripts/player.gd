@@ -496,6 +496,14 @@ var overload_left := 0.0
 var flash_left := 0.0
 var flash_span := 1.0
 var flash_strength := 0.0
+## Where the flash went off, in world space. INF means "nowhere in particular",
+## which the HUD reads as the middle of the screen.
+##
+## Kept because being blinded is directional and should be: the bloom sits over
+## the part of the screen the light actually came from, so turning away from a
+## flash leaves you something to see with. A white-out centred on the middle of
+## the screen every time would be the same effect whatever you did about it.
+var flash_from := Vector2.INF
 
 ## Seconds of Projection left, for the readout and nothing else. The ghost runs
 ## its own clock on whichever machine owns it - this is a copy of that clock kept
@@ -828,6 +836,9 @@ func _physics_process(delta: float) -> void:
 	# rest of the run.
 	if is_local():
 		flash_left = maxf(flash_left - delta, 0.0)
+		if flash_left <= 0.0:
+			flash_strength = 0.0
+			flash_from = Vector2.INF
 	if not is_local():
 		_update_replica(delta)
 		return
@@ -1735,7 +1746,7 @@ func _use_ultimate() -> void:
 		GadgetData.Kind.PROJECTION:
 			_cast_projection(ult.gadget)
 			projection_left = ult.gadget.active_time
-			_say_loot("PROJECTION - it walks, it cannot shoot, it makes no sound")
+			_say_loot("PROJECTION away - it draws them off, it makes no sound")
 			# Deliberately no sound, here of all places. Every other ultimate
 			# announces itself and should; this one is bought entirely to be
 			# quiet, and a click on the frame it is cast would tell anybody
@@ -1773,9 +1784,33 @@ func _cast_projection(gadget: GadgetData) -> void:
 		"stowed": stowed,
 		"crouch": crouch,
 		"speed_scale": carrying * injury_speed_multiplier(),
+		"orders": _projection_orders(gadget),
 	}
 	Net.cast_projection(gadget.resource_path, global_position, look,
 		get_multiplayer_authority())
+
+
+## Where the crosshair is pointing, as somewhere to send the ghost.
+##
+## The one piece of control you get over it, and it costs no new key: it walks
+## off towards wherever you were already aiming. That matters most in the
+## situation the gadget exists for - pinned down with somebody working their way
+## towards you - because "go *that* way" is the whole difference between a decoy
+## and a coin flip. Point it at the man who has you and it walks into his
+## sightline; point it down the corridor you are not going to use and it takes
+## whoever finds it with it.
+##
+## Read through PlayerInput.get_aim_point, the same call the grenade arc uses, so
+## a thumb aims it exactly the way a mouse does and neither needed teaching.
+## Clamped to the gadget's own radius: it is a decoy, not a scout, and one sent
+## to the far side of the map is one nobody will ever walk past.
+func _projection_orders(gadget: GadgetData) -> Vector2:
+	var wanted := PlayerInput.get_aim_point(global_position, _aim_reach)
+	var offset := wanted - global_position
+	var reach := maxf(gadget.radius, 200.0)
+	if offset.length() > reach:
+		offset = offset.normalized() * reach
+	return global_position + offset
 
 
 ## The bow, while it is out: hold the trigger to pull it back, let go to shoot.
@@ -2560,15 +2595,20 @@ func mark_scanned() -> void:
 ##
 ## Down does not protect you and neither does being mid-air. The only thing that
 ## does is not having seen it, which Grenade._blind has already decided.
-func flashed(strength: float, span: float) -> void:
+func flashed(strength: float, span: float, from := Vector2.INF) -> void:
 	if not is_alive:
 		return
 	# The worse of the two, rather than the newer. A second flash landing while
 	# the first is still burning must never *improve* your situation, which
 	# taking the new value outright would do.
+	var worse := clampf(strength, 0.0, 1.0) > flash_strength
 	flash_strength = maxf(flash_strength, clampf(strength, 0.0, 1.0))
 	flash_span = maxf(span, 0.05)
 	flash_left = maxf(flash_left, flash_span)
+	# The bloom follows whichever one is actually blinding you. A second, weaker
+	# flash must not drag the bright patch off the first one and onto itself.
+	if worse or not flash_from.is_finite():
+		flash_from = from
 
 
 ## How much of the screen is white right now, 0 to 1.

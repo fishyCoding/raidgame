@@ -149,6 +149,36 @@ func _draw() -> void:
 		origin.y + PANEL_SIZE.y + 22.0 if PlayerInput.is_touch() else origin.y - 30.0))
 
 
+## How far past the edge of the screen a full-strength flash blooms. Over 1 on
+## purpose: at full strength there must be no corner left to read anything out
+## of, and a core that stopped exactly at the diagonal would leave the four
+## corners faintly legible.
+const FLASH_CORE_REACH := 1.2
+
+## How far the soft halo runs past the solid core, as a fraction of the screen's
+## half-diagonal. A hard-edged white circle reads as a decal stuck on the lens;
+## the gradient is what makes it light.
+const FLASH_HALO := 0.55
+
+## Rings the halo is built from. Enough that the gradient is smooth, few enough
+## that it is twenty draw calls and not two hundred.
+const FLASH_RINGS := 22
+
+
+## The size of the part of the screen a flash has taken away completely.
+##
+## Public and separate from the drawing because it is the thing worth asserting:
+## "did anything actually become unreadable" is the whole question, and it is not
+## one a headless run can answer by looking at a canvas.
+func flash_core_radius() -> float:
+	if _player == null:
+		return 0.0
+	var bloom: float = _player.flash_amount()
+	if bloom <= 0.003:
+		return 0.0
+	return size.length() * 0.5 * bloom * FLASH_CORE_REACH
+
+
 ## The white-out from a flash grenade, over everything.
 ##
 ## Drawn last from every branch of _draw rather than first, and that is the whole
@@ -157,20 +187,71 @@ func _draw() -> void:
 ## meter off a screen that is otherwise useless - which turns the gadget into a
 ## brief cosmetic annoyance instead of a thing that costs you the fight.
 ##
-## Not quite pure white at full strength. A screen that is exactly #FFFFFF reads
-## as the game having crashed; a hair of warmth in it reads as light.
+## A **solid** core, not a wash. The first version of this was one translucent
+## rectangle at the flash's strength, which meant you were never actually blind:
+## a full-strength hit was a 94% white screen you could still read the map
+## through, and anything past point-blank was a haze. Being partly blinded is not
+## a weaker version of being blinded, it is a different and much worse gadget.
+## So the strength decides *how much of the screen* goes, and what goes is gone -
+## opaque, with a gradient around it and a wash over whatever is left.
+##
+## Centred on the flash rather than on the screen, so it takes the part of your
+## view the light came from and leaves you the rest. That is what makes turning
+## away from one worth doing.
+##
+## Not quite pure white. A screen that is exactly #FFFFFF reads as the game
+## having crashed; a hair of warmth in it reads as light.
 func _draw_flash() -> void:
 	if _player == null:
 		return
-	var amount: float = _player.flash_amount()
-	if amount <= 0.003:
+	var bloom: float = _player.flash_amount()
+	if bloom <= 0.003:
 		return
-	draw_rect(Rect2(Vector2.ZERO, size), Color(1.0, 0.99, 0.95, amount))
+
+	# Everything not inside the bloom is still washed out - you are not reading
+	# fine detail off any of this screen - but it is the core that blinds.
+	draw_rect(Rect2(Vector2.ZERO, size), Color(1.0, 0.98, 0.93, bloom * 0.45))
+
+	var centre := _flash_centre()
+	var core := flash_core_radius()
+	var halo := core + size.length() * 0.5 * FLASH_HALO * bloom
+
+	# Outside in, so the middle accumulates towards solid rather than the edge
+	# being painted over the part that is supposed to be opaque.
+	for i in FLASH_RINGS:
+		var t := 1.0 - float(i) / float(FLASH_RINGS)
+		var edge := pow(1.0 - t, 1.8)
+		draw_circle(centre, lerpf(core, halo, t),
+			Color(1.0, 0.98, 0.93, edge * 0.5))
+	if core > 1.0:
+		draw_circle(centre, core, Color(1.0, 0.99, 0.95, 1.0))
+
 	# The last of it goes warm rather than simply thinning out, so recovering
 	# from a flash looks like an eye adjusting instead of an overlay fading.
-	if amount < 0.5:
+	if bloom < 0.5:
 		draw_rect(Rect2(Vector2.ZERO, size),
-			Color(1.0, 0.86, 0.62, amount * 0.35))
+			Color(1.0, 0.86, 0.62, bloom * 0.35))
+
+
+## Where on the screen the light came from.
+##
+## Clamped inside the frame rather than allowed to run off it: a flash that went
+## off behind you is still one you saw, and the bloom belongs on the edge it came
+## from instead of somewhere you cannot see it. Falls back to the middle when
+## there is no camera or no recorded origin, which is what a flash with no
+## direction to it should look like anyway.
+func _flash_centre() -> Vector2:
+	var from: Vector2 = _player.flash_from
+	if not from.is_finite():
+		return size * 0.5
+	var camera := get_viewport().get_camera_2d()
+	if camera == null or camera.zoom.x <= 0.0 or camera.zoom.y <= 0.0:
+		return size * 0.5
+	var at := (from - camera.get_screen_center_position()) * camera.zoom + size * 0.5
+	var margin := size * 0.15
+	return Vector2(
+		clampf(at.x, margin.x, size.x - margin.x),
+		clampf(at.y, margin.y, size.y - margin.y))
 
 
 ## Player health, bottom centre, plus the aim state so it is obvious at a glance
