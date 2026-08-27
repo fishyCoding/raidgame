@@ -35,6 +35,9 @@ const STICK_KNOB := 40.0
 ## drifts, and a character that strolls off on its own is worse than one that
 ## needs a deliberate push.
 const STICK_DEAD := 0.16
+
+## How far down the stick has to be pushed before it counts as crouching.
+const CROUCH_PUSH := 0.62
 ## How far outside the drawn ring still counts as grabbing it. Thumbs are wide
 ## and the ring is a picture, not a target.
 const STICK_GRAB := 1.55
@@ -84,12 +87,11 @@ const BUTTONS := [
 	# Everything the shooting and moving hands do now sits on the right, under
 	# one thumb, with the left kept for the stick and the hook.
 	#
-	# FIRE aims as well as shoots. They were two buttons and a thumb can only be
-	# on one of them, so ADS was a latch you had to remember the state of - and
-	# forgetting it is a fight lost. Holding this holds both, which is what
-	# pulling a trigger on a phone should mean.
+	# Holding the trigger brings the sights up too - see the aim line in
+	# _process - so shooting from the hip is not a thing you can do by accident.
+	# ADS is still its own button for aiming without firing.
 	{"action": &"fire", "label": "FIRE", "at": Vector2(-150.0, -300.0), "r": 92.0,
-		"mode": "fire", "also": &"aim", "riding": true},
+		"mode": "fire", "riding": true},
 	# Tapped, not pressed. The player cuts a jump short when you let go of it
 	# (Player.jump_cut), which is right for a key and wrong for glass: a thumb is
 	# off the button before the character has left the floor, so every jump on a
@@ -101,15 +103,22 @@ const BUTTONS := [
 	# phone has no room for a control that is wrong most of the time.
 	{"action": &"jump", "label": "JUMP", "at": Vector2(-330.0, -420.0), "r": 66.0,
 		"mode": "tap", "zip": true},
-	{"action": &"crouch", "label": "DUCK", "at": Vector2(-320.0, -230.0), "r": 62.0,
+	{"action": &"aim", "label": "ADS", "at": Vector2(-320.0, -230.0), "r": 62.0,
 		"mode": "toggle"},
-	{"action": &"interact", "label": "USE", "at": Vector2(-500.0, -340.0), "r": 60.0,
-		"mode": "press"},
+	# There is no DUCK button. Crouch is the stick pushed straight down - see
+	# _process - because a posture is a direction you are leaning, and making a
+	# thumb leave the stick to change it meant it never got changed in a fight.
+	# There is no USE button. Interact does three things and each has its own
+	# control now: catching a rope is the JUMP button switching to ZIP, stepping
+	# off one is LET GO in the riding cluster, and going through a body is the
+	# LOOT button, which appears when there is a body worth opening. A fourth
+	# button that duplicated all three was a permanent occupant of the best
+	# real estate on the screen for the sake of nothing it could do alone.
 	# Pressed, not latched, even though the shield *is* a latch in the game.
 	# The latching lives in Player._update_shield, which flips on the press edge -
 	# so a pad button that held the action down would flip it once and then never
 	# again. One tap, one edge, one toggle.
-	{"action": &"shield", "label": "PLATES", "at": Vector2(-490.0, -180.0), "r": 58.0,
+	{"action": &"shield", "label": "PLATES", "at": Vector2(-490.0, -260.0), "r": 62.0,
 		"mode": "press"},
 	# The one thing left on the steering hand. It is a movement verb in the sense
 	# that matters - it is how you cross a room - but it is aimed with the stick,
@@ -208,7 +217,7 @@ const PILL_SPLIT := 60.0
 
 ## Everything the pills cover, for anything that wants the whole set.
 static func all_pills() -> Array:
-	return PILLS_LEFT + PILLS_RIGHT
+	return PILLS_LEFT + PILLS_RIGHT + PILLS_BOTTOM
 
 
 ## Which pointer is driving what. -2 means nobody; a touch index otherwise, and
@@ -327,9 +336,17 @@ func _process(delta: float) -> void:
 	if not _riding:
 		_set_action(&"move_down", _move_vec.y > 0.55)
 
-	# The two latches, plus the one that is not a latch: holding the trigger aims
-	# as well as shoots, so the sights come up without spending a second thumb.
-	_set_action(&"crouch", _latched.get(&"crouch", false))
+	# Straight down on the stick is the crouch.
+	#
+	# Straighter than the drop-through above, on purpose. Walking with a bit of
+	# down in the stick must not put you on your knees, so this wants the push to
+	# be mostly vertical, where dropping through a one-way platform only wants it
+	# to be downward at all.
+	_set_action(&"crouch", (not _riding and _move_vec.y > CROUCH_PUSH
+		and absf(_move_vec.x) < _move_vec.y * 0.6))
+
+	# Holding the trigger aims as well as shoots, so the sights come up without
+	# spending a second thumb - and the ADS latch aims without firing.
 	_set_action(&"aim", _latched.get(&"aim", false) or _holding(&"fire"))
 	queue_redraw()
 
@@ -671,7 +688,7 @@ func _pointer(id: int, at: Vector2, down: bool) -> bool:
 			"swap":
 				_hold(id, _other_hand())
 			"fire":
-				_hold(id, button.action, button.get("also", &""))
+				_hold(id, button.action)
 				_take_aim(id, at)
 			_:
 				_hold(id, button.action)
@@ -759,15 +776,11 @@ func _lift(id: int) -> bool:
 	return ours
 
 
-## `also` lets one button press two actions - the trigger holds fire and aim
-## together, because on glass they are one gesture.
-func _hold(id: int, action: StringName, also := &"") -> void:
-	var actions: Array = [action]
-	if also != &"":
-		actions.append(also)
-	_pressed[id] = actions
-	for one in actions:
-		_set_action(one, true)
+func _hold(id: int, action: StringName) -> void:
+	# A list, because releasing walks it. One entry today; the shape is what
+	# stops a second action on a button turning into a leak.
+	_pressed[id] = [action]
+	_set_action(action, true)
 
 
 ## Pressed and released through the real input map, so everything downstream -
@@ -869,6 +882,13 @@ func _live_buttons() -> Array:
 			out.append(zipping)
 			continue
 		out.append(button)
+
+	# Only when there is a body worth opening - but then always, because it is
+	# now the only way to go through one. The USE button used to be a second
+	# route to it; with that gone, this appearing when the prompt does is what
+	# stands between a player and a corpse they cannot search.
+	if _over_loot():
+		out.append(LOOT_BUTTON)
 	return out
 
 

@@ -74,7 +74,11 @@ func _run() -> void:
 		reachable[entry.action] = true
 	for entry in _pad.all_pills():
 		reachable[entry.action] = true
-	for action in ["fire", "jump", "grapple", "interact", "aim", "crouch", "shield",
+	# Interact and crouch are deliberately not in this list. Interact has no
+	# control of its own any more: the jump button becomes ZIP beside a cable and
+	# the LOOT button appears over a body, both checked below. Crouch is the
+	# stick pushed straight down, also below.
+	for action in ["fire", "jump", "grapple", "aim", "shield",
 			"reload", "heal", "ultimate", "throw_1", "throw_2", "inventory", "map"]:
 		_check("%s has a button" % action, reachable.has(StringName(action)))
 	# move_left/right/down come off the stick rather than a button.
@@ -254,20 +258,31 @@ func _run() -> void:
 	while not player.is_on_floor():
 		await physics_frame
 
-	# --- crouch latches, it is not held --------------------------------------
+	# --- crouch is the stick, pushed straight down ---------------------------
 	#
-	# A posture you have to keep a thumb on is a posture you cannot hold while
-	# doing anything else, and on a phone every held button costs a finger.
-	var duck := _button_at(&"crouch")
-	_touch(3, duck, true)
-	_touch(3, duck, false)
+	# There is no DUCK button. A posture you have to keep a thumb on a button for
+	# is one you cannot hold while doing anything else, and on a phone every held
+	# button costs a finger you were using to steer or shoot.
+	var stick: Vector2 = _pad._move_home()
+	_touch(3, stick, true)
+	_touch(3, stick + Vector2(0.0, _pad.STICK_RADIUS), false)
+	_pad._move_id = 3
+	_pad._move_vec = Vector2(0.0, 1.0)
 	await _wait(30)
-	_check("crouch latches on after the thumb leaves", Input.is_action_pressed(&"crouch"))
+	_check("pushing the stick straight down crouches", Input.is_action_pressed(&"crouch"))
 	_check("and the character actually crouched", player.crouch > 0.5)
-	_touch(3, duck, true)
-	_touch(3, duck, false)
+
+	# And a diagonal walk does not. Walking with a bit of down in the stick must
+	# not put you on your knees, which is the whole reason this is stricter than
+	# the drop-through on the same gesture.
+	_pad._move_vec = Vector2(0.9, 0.4)
 	await _wait(20)
-	_check("and pressing again stands back up", not Input.is_action_pressed(&"crouch"))
+	_check("but walking with some down in it does not",
+		not Input.is_action_pressed(&"crouch"))
+
+	_pad._move_vec = Vector2.ZERO
+	_pad._move_id = -2
+	await _wait(20)
 
 	# --- so does ADS, for aiming without shooting ----------------------------
 	var ads := _button_at(&"aim")
