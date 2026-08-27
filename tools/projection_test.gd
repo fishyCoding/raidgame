@@ -584,8 +584,16 @@ func _check_legend(main: Node) -> void:
 		# The key itself has to be on screen. Checking for the printed key rather
 		# than the action name is the point: the legend is a list of keys, and a
 		# key that is bound but not printed is exactly the failure this guards.
-		var text := OS.get_keycode_string((InputMap.action_get_events(action)[0]
-			as InputEventKey).physical_keycode)
+		# The first *key* binding, not the first binding. An action can be on a
+		# mouse button and a key at once - aim is on both - and taking element
+		# zero and calling it a key gets a null the moment that happens.
+		var code := KEY_NONE
+		for event in InputMap.action_get_events(action):
+			var key := event as InputEventKey
+			if key:
+				code = key.physical_keycode
+				break
+		var text := OS.get_keycode_string(code)
 		if not shown.findn(text) >= 0:
 			missing.append("%s (%s)" % [action, text])
 	print("  %d lines, %d chars" % [shown.split("\n").size(), shown.length()])
