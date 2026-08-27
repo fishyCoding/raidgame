@@ -206,7 +206,7 @@ func _run() -> void:
 	await _check_routes_by_cable(main, player)
 
 	print("\n-- the drawn route is the walked route --")
-	_check_route_preview(main, player)
+	await _check_route_preview(main, player)
 
 	print("\n-- and keeps going after a ride --")
 	_check_keeps_going_after_a_ride(main, player)
@@ -941,6 +941,12 @@ func _check_route_preview(main: Node, player: Node2D) -> void:
 	main.get_node("Players").add_child(ghost)
 	ghost.global_position = cable.world_bottom()
 	var _sent: bool = ghost.order_to(cable.world_top() + Vector2(200.0, 0.0))
+	# Given a few frames to think. The route is worked out on the body's own
+	# think, from where it is standing and once it is standing on something -
+	# asked on the frame the order arrives it has not been anywhere yet and has
+	# no floor under it, so the honest answer then is "no rope at all".
+	for i in 8:
+		await physics_frame
 	var walked: Object = ghost._leg_cable
 	print("  the line goes via %s, the body chose %s" % [
 		cable.name, walked.name if walked else "nothing"])

@@ -16,10 +16,10 @@ extends SceneTree
 ## every frame, they make the run several times longer, and a decoy does not
 ## react to them anyway - so all they contribute is noise and time.
 
-## Slack added to every journey's own distance-based budget, in physics frames.
-## Four seconds, which covers walking to a rope, the ride itself, and the walk
-## off the far end.
-const JOURNEY_SLACK := 240
+## How long each journey is given, in physics frames. The decoy's own errand is
+## eighteen seconds and it stands down at the end of it, so anything past that is
+## measuring a body that has already stopped trying.
+const JOURNEY_FRAMES := 1140
 
 ## How close counts as arrived. Generous horizontally - it is bait, not a taxi,
 ## and standing a body-width away from a clicked point is a success - but tight
@@ -32,6 +32,25 @@ const ARRIVE_Y := 100.0
 ## dead ends, and a decoy that refuses an impossible errand and goes back to
 ## baiting is behaving correctly. Set where it is so a real regression moves it.
 const WANT_RATE := 0.75
+
+## How many journeys to walk. Enough that one unlucky pair does not move the
+## rate by ten points, which nine did.
+const WANT_JOURNEYS := 24
+
+## The longest route worth demanding, measured along the route itself.
+##
+## An errand lasts eighteen seconds and the body walks at about 187 px/s, so
+## three thousand pixels of ground is the theoretical ceiling - but a route costs
+## noticeably more time than its length suggests. Climbing, waiting out a rope
+## ride, and the pause after stepping off one all buy no horizontal distance, and
+## measured across this soak they cost something like half as much again.
+##
+## Set from that rather than from a round number, because the alternative is
+## demanding journeys the gadget cannot physically finish and calling the
+## stopwatch a pathfinding fault. Routes longer than this do still get walked in
+## the game - the decoy just stands down partway, which is what it is supposed to
+## do when an errand outlasts it.
+const REACHABLE := 1900.0
 
 var _ok := true
 
@@ -84,14 +103,14 @@ func _run() -> void:
 	var arrived := 0
 	var failures: Array = []
 	for run in runs:
-		# Budgeted on the distance rather than a flat count: a 1400 px walk with a
-		# rope in the middle legitimately takes twice as long as a 300 px one.
-		# Distance at the pace it actually walks, plus slack for ropes and
-		# obstacles - but never more than the errand itself is allowed to last,
-		# because past that the body correctly gives up and goes back to
-		# baiting. Waiting longer than the game does would be measuring
-		# something the player never sees.
-		var budget := mini(int(run.span / 160.0 * 60.0) + JOURNEY_SLACK, 1140)
+		# The errand's own length, for every journey. It used to be budgeted on
+		# the distance at walking pace, which quietly cut long journeys short:
+		# almost every failure came back "still walking" with errand time to
+		# spare, meaning the body was fine and the stopwatch was wrong. Rope
+		# rides, drops and the pause after stepping off all cost seconds that a
+		# distance-over-speed sum does not know about. The game gives it
+		# ORDERS_TIME and then gives up; so does this.
+		var budget := JOURNEY_FRAMES
 		var result := await _journey(ghost, run.from, run.to, budget)
 		if result.arrived:
 			arrived += 1
@@ -159,18 +178,30 @@ func _near_any(places: Array[Vector2], spot: Vector2, gap: float) -> bool:
 ## and a couple of long hauls - the kinds of errand a player actually sends one
 ## on, rather than whichever pair happened to be nearest.
 func _journeys(spots: Array[Vector2]) -> Array:
+	var map: GDScript = load("res://scripts/decoy_map.gd")
 	var runs: Array = []
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260827
-	for i in 18:
+	for i in 90:
+		if runs.size() >= WANT_JOURNEYS:
+			break
 		var from: Vector2 = spots[rng.randi_range(0, spots.size() - 1)]
 		var to: Vector2 = spots[rng.randi_range(0, spots.size() - 1)]
-		var span := from.distance_to(to)
-		# Far enough to be a journey, near enough to be one the gadget could
-		# actually complete. A decoy lives fourteen seconds and walks at about
-		# 160 px/s, so anything past ~1500 px is further than it can go before it
-		# expires - demanding those would be testing the clock, not the routing.
-		if span < 200.0 or span > 1500.0:
+		if from.distance_to(to) < 200.0:
+			continue
+		# Measured along the route, not across the room. A pair 1400 px apart
+		# whose only way round is a 4000 px detour is not a pathfinding failure
+		# when the body runs out of errand halfway - it is an errand nobody could
+		# finish, and counting it says nothing about whether the route was
+		# followed. Crow-flies distance was the old filter and it let a fistful
+		# of those in, which is why the rate looked worse than the walking was.
+		var legs: Array = map.route(self, from, to)
+		if legs.is_empty():
+			continue
+		var span := 0.0
+		for leg in legs:
+			span += (leg.from as Vector2).distance_to(leg.to as Vector2)
+		if span > REACHABLE:
 			continue
 		runs.append({"from": from, "to": to, "span": span})
 	return runs
@@ -183,17 +214,39 @@ func _journey(ghost: Node2D, from: Vector2, to: Vector2, frames: int) -> Diction
 	ghost.life_left = 90.0
 	ghost.hits = 0
 	ghost._stand_down()
+	# A clean body. Cable memory in particular lasts nine seconds and journeys
+	# take up to nineteen, so without this the second journey of every pair
+	# starts forbidden from touching the rope it needs and the run measures the
+	# test's own bookkeeping rather than the routing.
+	# Off any rope first. `riding` survives being repositioned, and a body that
+	# is still holding the previous journey's cable gets dragged along it from
+	# wherever you put it - which showed up as a 659 px walk along one floor
+	# finishing two thousand pixels away and three floors down.
+	ghost._zipline = null
+	ghost.riding = false
+	ghost._last_cable = null
+	ghost._cable_cooldown = 0.0
+	ghost._refusals = 0
+	ghost._detour_left = 0.0
+	ghost._settle_left = 0.0
+	ghost._legs = []
+	ghost._replan = 0.0
+	ghost._leg_cable = null
+	ghost._leg_end = Vector2.INF
+	ghost._target = Vector2.INF
 	await physics_frame
 	var _sent: bool = ghost.order_to(to)
 
-	# What the planner thinks it will do, so a failure can be pinned on the
-	# plan or on the walking rather than guessed at.
-	var route: Object = (load("res://scripts/decoy_route.gd") as GDScript).new()
-	var legs: Array = route.plan(self, ghost.global_position, to)
+	# What the map planned, so a failure can be pinned on the route or on the
+	# walking rather than guessed at. This is the very plan the body is holding,
+	# read back off it, not a second opinion that might not match.
+	var legs: Array = ghost._legs
 	var planned_rides := 0
+	var shape: Array = []
 	for leg in legs:
-		if leg.cable:
+		if leg.kind == "cable":
 			planned_rides += 1
+		shape.append(leg.kind)
 
 	var closest := INF
 	var rode := false
@@ -222,7 +275,15 @@ func _journey(ghost: Node2D, from: Vector2, to: Vector2, frames: int) -> Diction
 		why += ", wrong floor by %.0f px" % absf(ghost.global_position.y - to.y)
 	if not rode and absf(from.y - to.y) > 140.0:
 		why += ", never took a rope"
-	why += "  [plan %d ride(s), chose %s, rode %s]" % [
-		planned_rides, picked, rode]
+	# Where along the plan it stalled is the single most useful number here: a
+	# body that never finished leg 0 has a walking problem, and one that died on
+	# the last leg has a route that was nearly right.
+	# Read at the end, so this is the plan it held when it ran out of time.
+	var last: Array = []
+	for leg in ghost._legs:
+		last.append(leg.kind)
+	why += "  [%d legs left: %s]" % [last.size(),
+		", ".join(PackedStringArray(last)) if not last.is_empty() else "no route"]
+	why += "  rode %s" % rode
 	return {"from": from, "to": to, "arrived": false, "closest": closest,
 		"why": why, "plan": planned_rides, "picked": picked, "rode": rode}

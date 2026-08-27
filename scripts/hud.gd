@@ -24,6 +24,10 @@ const ROUTE_LINE := Color(0.95, 0.26, 0.24)
 ## are one piece of code. See decoy_route.gd.
 const ROUTE := preload("res://scripts/decoy_route.gd")
 
+## The same surveyed map the decoy walks by, so the line and the walk are the
+## same answer to the same question rather than two guesses that agree by luck.
+const MAP := preload("res://scripts/decoy_map.gd")
+
 ## How far the weapon panel steps back while fully aimed. Not all the way to
 ## invisible: ammo still matters mid-fight.
 const PANEL_FADE_AIMED := 0.25
@@ -595,16 +599,19 @@ func _draw_projection_aim() -> void:
 func _draw_projection_route(to: Vector2) -> void:
 	var out := Net.projection_for(Net.peer_id())
 	var from: Vector2 = _player.global_position
-	var skip: Zipline = null
 	if out and not bool(out.get("gone")):
 		from = out.global_position
-		skip = out.get("_last_cable") as Zipline
-		if float(out.get("_cable_cooldown")) <= 0.0:
-			skip = null
+
+	var legs: Array = MAP.route(get_tree(), from, to)
+	if legs.is_empty():
+		# The map says there is no way from here to there. Better to say so at
+		# the far end than to draw a hopeful line to a place it cannot reach.
+		_draw_route_stop(to)
+		return
 
 	var space := _player.get_world_2d().direct_space_state
-	for leg in ROUTE.plan(get_tree(), from, to, skip):
-		if leg.cable:
+	for leg in legs:
+		if leg.kind == "cable":
 			# A rope genuinely is a straight line through the air, so this one
 			# is drawn straight - and drawn heavier, because it is the part of
 			# the plan worth reading. Everything else is "and then it walks".
@@ -612,17 +619,17 @@ func _draw_projection_route(to: Vector2) -> void:
 			_draw_route_knot(leg.from)
 			_draw_route_knot(leg.to)
 			continue
+		if leg.kind != "walk":
+			# A step up or a drop off a lip: a couple of frames of air, drawn as
+			# the corner it is so the line reads as one continuous journey.
+			_draw_route_leg([leg.from, leg.to] as PackedVector2Array, 2.0, 0.7)
+			continue
 
-		# A walk is not. Followed over the ground it would be walked on, so the
-		# line bends over the floor instead of cutting through the room - a
-		# straight line here is a promise of a walk nothing can take.
+		# A walk is not straight. Followed over the ground it would be walked on,
+		# so the line bends over the floor instead of cutting through the room -
+		# a straight line here is a promise of a walk nothing can take.
 		var walk: Dictionary = ROUTE.trace_walk(space, leg.from, leg.to)
 		_draw_route_leg(walk.line, 2.0, 0.5)
-		if walk.blocked:
-			# It does not get there. Say so where it stops rather than drawing
-			# the rest of a journey that will not happen.
-			_draw_route_stop((walk.line as PackedVector2Array)[-1])
-			return
 
 
 ## One run of the route, in screen space. Silently drops any leg the camera

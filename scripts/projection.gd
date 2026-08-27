@@ -42,6 +42,10 @@ const GROUP := &"projection"
 ## route as a line while the caster is choosing one - see decoy_route.gd.
 const ROUTE := preload("res://scripts/decoy_route.gd")
 
+## The surveyed level and the route search over it. Where it goes is decided
+## here, once per order, instead of being guessed at a lip one frame at a time.
+const MAP := preload("res://scripts/decoy_map.gd")
+
 ## Run, taken from Player so the gait reads as the same person.
 const MAX_SPEED := 260.0
 
@@ -136,10 +140,19 @@ const ARRIVED_Y := 90.0
 ## disqualify a rope, but the floor above does.
 const FLOOR_REACH := 130.0
 
-## How far ahead it feels for a wall, and for the floor falling away.
+## How far ahead it feels for a wall.
 const WALL_PROBE := 20.0
-const LEDGE_PROBE := 26.0
-const LEDGE_DROP := 16.0
+
+## How far past its leading edge it looks for floor, and how far down it looks
+## before calling the absence of floor a fall rather than a step.
+##
+## The depth is the part that matters. At sixteen pixels a step down of any size
+## read as a cliff, so the body refused stairs, kerbs and crate tops - all the
+## small drops a route is made of - and paced at the top of them instead. At
+## ninety it only refuses an edge with nothing catchable underneath, which is the
+## only kind worth refusing.
+const LEDGE_PROBE := 16.0
+const LEDGE_DROP := 90.0
 
 ## How long after stepping off a cable before it will drive itself sideways
 ## again. Just long enough to land: a body that steers while airborne cannot see
@@ -153,6 +166,31 @@ const SETTLE_TIME := 0.45
 ## as long as it took to give up. That is the single most obvious thing a player
 ## reported about this gadget, and it is not a tuning problem, it is a missing
 ## cooldown and a missing question: *can* it get over that.
+## How often the route is worked out again. Cheap - a search over a few dozen
+## runs - so this is about the body not twitching between two equal routes
+## rather than about the cost of asking.
+const REPLAN_TIME := 0.5
+
+## How far from a planned lip still counts as being at it. Wide enough to cover
+## the gap between where the survey says the floor ends and where the body's own
+## width says it does.
+const DROP_NEAR := 170.0
+
+## How far past a lip to aim when the route wants a drop that lands straight
+## below it. Comfortably more than a body's width, so the direction is never in
+## doubt at the edge itself.
+const OFF_THE_EDGE := 80.0
+
+## How many obstacles it will back away from before deciding the errand is not
+## on. Higher than it was, because each refusal now buys a fresh route rather
+## than another run at the same wall.
+const GIVE_UP_AFTER := 5
+
+## How long after stepping off a rope before it may take one again. Long enough
+## that it cannot re-catch the one it is standing on, short enough that a fall
+## does not strand it under the rope it needs.
+const REGRAB_GUARD := 0.8
+
 const JUMP_COOLDOWN := 0.55
 
 ## How high it will try to climb. Taken from the planner so the red line drawn
@@ -308,9 +346,23 @@ var _hold := 0.0
 ## exists to let you choose. Getting there is this body's problem, cables
 ## included; see _next_leg.
 var destination := Vector2.INF
-## The cable it is currently walking to in order to change floors, if any.
+## The route from where it is standing to where it was sent, leg by leg. A leg is
+## a walk, a drop, or a cable ride - see DecoyMap.route.
+##
+## Worked out again every so often rather than once at the start. Following a
+## thirteen leg plan by index only survives while nothing goes wrong, and things
+## go wrong constantly - a fall lands it a floor below leg four, and it spends
+## the rest of the errand walking to a lip that is now above its head. Re-asking
+## from where it actually is makes every mishap self correcting: the answer is
+## always a route from here, so there is no stale plan left to drift off.
+var _legs: Array = []
+## Counts down to the next re-ask.
+var _replan := 0.0
+## Stops it catching hold of a rope again on the frame after letting go.
+var _regrab := 0.0
+## The cable of the current leg, if the current leg is a ride, and the end of it
+## the route wants it to reach.
 var _leg_cable: Zipline = null
-## The end of `_leg_cable` it is walking to in order to get on.
 var _leg_end := Vector2.INF
 ## Somewhere to get to first, because the direct way is blocked. See _turn_back.
 var _detour := Vector2.INF
@@ -697,6 +749,8 @@ func _seen_from(eyes: Array[Vector2], point: Vector2) -> Vector2:
 func _think(delta: float) -> void:
 	_rethink -= delta
 	_cable_cooldown = maxf(_cable_cooldown - delta, 0.0)
+	_replan = maxf(_replan - delta, 0.0)
+	_regrab = maxf(_regrab - delta, 0.0)
 	_hold = maxf(_hold - delta, 0.0)
 
 	match _mind:
@@ -793,7 +847,12 @@ func order_to(spot: Vector2) -> bool:
 	_mind = Mind.ORDERS
 	_orders_left = ORDERS_TIME
 	_leg_cable = null
-	_leg_end = Vector2.INF
+	# The whole journey, worked out once. An empty answer means the map says
+	# there is no way from here to there - in which case it walks at the spot
+	# anyway and gives up when the errand runs out, which is a better answer
+	# than standing still and a much better one than pretending.
+	_legs = []
+	_replan = 0.0
 	_refusals = 0
 	# A fresh order is a clean slate, cable grudge included. CABLE_MEMORY
 	# stops it riding one rope up and down in front of everybody while it is
@@ -818,7 +877,8 @@ func order_to(spot: Vector2) -> bool:
 func _stand_down() -> void:
 	destination = Vector2.INF
 	_leg_cable = null
-	_leg_end = Vector2.INF
+	_legs = []
+	_replan = 0.0
 	_detour = Vector2.INF
 	_detour_left = 0.0
 	_orders_left = 0.0
@@ -843,52 +903,108 @@ func _stand_down() -> void:
 ## like from the outside.
 func _next_leg() -> Vector2:
 	if not destination.is_finite():
+		_leg_cable = null
 		return Vector2.INF
-	# Backing out of something it could not get past, for a moment.
+	# The plan, re-asked from here when it is stale. Only on solid ground and
+	# only when not on a rope: asked in mid air the map cannot say which floor
+	# it is on, and would answer "nowhere", throwing away a route that is fine.
+	#
+	# Worked out before the detour below, not after. With the detour first, a
+	# body that kept meeting obstacles kept pushing its detour forward, never
+	# reached this line, and walked on with no plan at all - which made every
+	# edge an edge to refuse, which produced another detour. It paced a hundred
+	# pixels of floor until it died, having had a perfectly good route until the
+	# first obstacle.
+	if _replan <= 0.0 and is_on_floor() and not riding:
+		_replan = REPLAN_TIME
+		_legs = MAP.route(get_tree(), global_position, destination)
+
+	# Backing out of something it could not get past, for a moment. Only where
+	# it is walking, not what it knows - the plan above stands.
 	if _detour_left > 0.0 and _detour.is_finite():
+		_leg_cable = null
+		_leg_end = Vector2.INF
 		return _detour
-	# Same floor, near enough: just go.
-	if absf(destination.y - global_position.y) <= FLOOR_REACH:
+
+	# No route: the map says there is no way from here to there. Walk at it and
+	# let the errand expire, which at least takes it somewhere.
+	if _legs.is_empty():
 		_leg_cable = null
 		return destination
 
-	if _leg_cable and not is_instance_valid(_leg_cable):
-		_leg_cable = null
-	if _leg_cable == null:
-		_leg_cable = _cable_towards(destination.y)
-	if _leg_cable == null or not _leg_end.is_finite():
-		# Nothing worth riding from here. Walk at it anyway - the floor it is on
-		# may well join up somewhere, and standing still is never the better
-		# answer.
-		_leg_cable = null
-		return destination
-	return _leg_end
+	# Standing on the end of the first leg already - take the next one.
+	while _legs.size() > 1 and _arrived_at(_legs[0].to):
+		_legs.remove_at(0)
 
+	var leg: Dictionary = _legs[0]
+	# A drop whose landing spot is straight down gives the body nothing to walk
+	# at. Aimed past the lip instead, on the side the map says leaves the floor,
+	# so "fall off here" is expressed as somewhere to walk to.
+	if leg.kind == "drop" and not is_zero_approx(float(leg.get("way", 0.0))):
+		var lip: Vector2 = leg.from
+		var land: Vector2 = leg.to
+		if absf(land.x - global_position.x) < OFF_THE_EDGE:
+			_leg_cable = null
+			_leg_end = Vector2.INF
+			return Vector2(lip.x + float(leg.way) * OFF_THE_EDGE, land.y)
 
-## The cable that gets it closest to a height, for the least walking.
-##
-## Delegated to DecoyRoute, which is also what draws the red line over the level
-## while the caster is choosing where to send it. One set of rules, so the line
-## and the walk cannot disagree - a preview promising a rope the body then
-## ignores is worse than no preview at all.
-func _cable_towards(goal_y: float) -> Zipline:
-	var skip: Array = []
-	if _last_cable and _cable_cooldown > 0.0:
-		skip.append(_last_cable)
-	var line := ROUTE.best_cable(get_tree(), global_position, goal_y, skip)
+	# The rope it is heading for, read one leg ahead as well as from this one.
+	# The walk that ends at a rope's near end is still a walk, so waiting for the
+	# ride leg to become current means the body has to land within a few dozen
+	# pixels of the end before it will even consider catching hold. Held early,
+	# the rope's own `in_reach` is what decides the moment - which is the same
+	# rule the player's own grab uses.
+	_leg_cable = null
 	_leg_end = Vector2.INF
-	if line:
-		_leg_end = (ROUTE.ends_of(line, global_position) as Array)[0]
-	return line
+	for i in mini(2, _legs.size()):
+		var ahead: Dictionary = _legs[i]
+		if ahead.kind == "cable":
+			_leg_cable = ahead.cable as Zipline
+			_leg_end = ahead.to
+			break
+	return leg.to
 
 
-## A cable's two ends, near first. A thin passthrough, so anything asking this
-## body the question gets the same answer the planner would give.
-func _ends_of(line: Zipline) -> Array:
-	return ROUTE.ends_of(line, global_position)
+## Whether the route wants it to walk right up to this edge.
+##
+## Asked by nearness rather than by "is the current leg a drop", because those
+## two disagree in exactly the place that matters. The map records a run of floor
+## reaching to its last good sample, but a body twenty-eight pixels wide runs out
+## of floor before the sampler does - so it meets the edge while the plan still
+## says "walk to the lip". Refusing there is a loop: walk at the lip, refuse,
+## turn back, walk at the lip again. That loop was most of the soak's failures -
+## bodies pacing a hundred pixels of floor for a whole errand with a correct
+## route in hand.
+##
+## Ropes count as well as drops, and for the same reason. A cable's lower end
+## sits at the lip of the platform it serves, so the walk that ends at it ends at
+## an edge - and a body that refuses edges turns round two steps short of the
+## rope every time. Riding up and then immediately walking back off the platform
+## it was delivered to was this, not the ride.
+func _edge_is_planned(way: float) -> bool:
+	for i in mini(2, _legs.size()):
+		var leg: Dictionary = _legs[i]
+		if leg.kind != "drop" and leg.kind != "cable":
+			continue
+		# In front of it, or as good as underfoot. A planned edge behind it is
+		# one it has already used.
+		var lip: Vector2 = leg.from
+		var along: float = (lip.x - global_position.x) * way
+		if along < -DROP_NEAR or along > DROP_NEAR:
+			continue
+		return true
+	return false
 
 
-## Somewhere to run when it has been seen: away from the watcher, and further## Somewhere to run when it has been seen: away from the watcher, and further
+## What the current leg is: "walk", "drop", or "cable". Steering asks, because a
+## lip it is meant to walk off and a lip it must not are the same lip.
+func _leg_kind() -> String:
+	if _legs.is_empty():
+		return "walk"
+	return _legs[0].kind
+
+
+## Somewhere to run when it has been seen: away from the watcher, and further
 ## away from its caster than it already is.
 ##
 ## Both terms matter and the second is the one that is easy to forget. Running
@@ -1057,7 +1173,18 @@ func _steer(delta: float) -> void:
 	# Checked before the opportunistic grab below, because the one it chose is
 	# the one that goes where it is going.
 	if _leg_cable and is_instance_valid(_leg_cable):
-		if _leg_cable.in_reach(global_position):
+		# Not the rope it let go of half a second ago. The plan is re-asked from
+		# where the body stands, and while it is still standing at the end of the
+		# rope it stepped off, the answer is "take that rope" - so without a
+		# guard it gets straight back on.
+		#
+		# Deliberately its own short timer rather than CABLE_MEMORY. That grudge
+		# is nine seconds long and exists for a decoy baiting on its own, so it
+		# does not ride one rope up and down in front of an audience. Applied to
+		# a route it is simply wrong: a body that falls off a platform needs the
+		# rope it just used to get back up, and forbidding it for nine seconds
+		# left it pacing underneath until the errand expired.
+		if _regrab <= 0.0 and _leg_cable.in_reach(global_position):
 			_grab(_leg_cable)
 			return
 	elif _mind != Mind.ORDERS and absf(_target.y - global_position.y) > WORTH_A_CABLE:
@@ -1106,10 +1233,13 @@ func _steer(delta: float) -> void:
 		elif ledge:
 			# A drop. Three different right answers, and picking the wrong one is
 			# what produced the pacing:
-			if _mind == Mind.ORDERS and destination.y > global_position.y + FLOOR_REACH:
-				# Sent somewhere below. The edge is the way down, so take it -
-				# nothing here hurts a body that falls, and refusing meant
-				# walking to the lip, backing off, walking to the lip again.
+			if _mind == Mind.ORDERS and _edge_is_planned(way):
+				# The route says this edge is the way down, so take it. Nothing
+				# here hurts a body that falls. This used to be guessed from
+				# whether the destination was lower, which is right at the lip
+				# you meant and wrong at every other lip on the way - the body
+				# would step off the first edge it met and land a floor below
+				# its route. Now only a lip the map chose is walked off.
 				pass
 			elif _mind == Mind.BREAK and _can_land_across(way):
 				_hop()
@@ -1206,12 +1336,23 @@ func _turn_back(way: float) -> void:
 		# another lap of it. The counter is cleared by any real headway; see
 		# _watch_for_headway.
 		_refusals += 1
-		if _refusals >= 2:
+		if _refusals >= GIVE_UP_AFTER:
 			_stand_down()
 			return
 		_detour = spot
 		_detour_left = TURN_COMMIT
 		_leg_cable = null
+		_leg_end = Vector2.INF
+		# Ask the map again once the detour is done. A refusal means the body's
+		# own eyes disagree with the route it was given, and the map knows about
+		# walls - so the honest response is a different route, not another
+		# attempt at the same one. It used to give up on the second refusal
+		# because there was nothing better to do with the information.
+		#
+		# The plan it is holding is left alone in the meantime. Throwing it away
+		# here blinds the very checks that decide whether the next edge is one
+		# the route wanted, and a blind body refuses everything.
+		_replan = TURN_COMMIT
 	_target = spot
 	_commit = TURN_COMMIT
 	_rethink = maxf(_rethink, TURN_COMMIT)
@@ -1284,7 +1425,14 @@ func _grab(cable: Zipline) -> void:
 	# actually going, which is the whole reason it got on - and that is the
 	# destination when it has one, not the leg, because the leg is the cable
 	# itself and measuring against it would answer nothing.
-	var goal := destination if destination.is_finite() else _target
+	# Toward the end the route asked for, when there is a route. Comparing the
+	# final destination's height instead - which is what this did - picks the
+	# wrong end of every rope on a journey that goes up before it comes down.
+	# Standing at the bottom of a rope it was meant to ride up, it would decide
+	# the bottom was nearer its goal, let go on the frame it grabbed, and catch
+	# hold again immediately: a body frozen on the spot for a whole errand.
+	var goal := _leg_end if _leg_end.is_finite() else (
+		destination if destination.is_finite() else _target)
 	var to_top := INF
 	var to_bottom := 0.0
 	if goal.is_finite():
@@ -1330,6 +1478,19 @@ func _ride(delta: float) -> bool:
 	# so testing that means the body is already level with it the instant it
 	# grabs hold, and it steps straight back off. Thirty-four pixels of climb out
 	# of seven hundred, which reads as the rope not working at all.
+	# Where this ride is supposed to end: the route's own answer when it has one,
+	# and the destination only when it is riding on its own initiative. Stepping
+	# off level with the final destination is right for a single rope and wrong
+	# for every rope on a longer journey - the route often climbs past the
+	# destination's height on purpose, and getting off there drops the body onto
+	# a floor the plan never wanted it on.
+	# Only when it is riding on its own initiative. A ride the route asked for
+	# runs to the end of the rope, because the route chose that end: getting off
+	# forty pixels early puts it short of the platform the rope serves, which is
+	# often past a lip it then refuses - so it walks away from the very ledge it
+	# was delivered to and the journey unravels from there.
+	if _leg_end.is_finite():
+		return true
 	var goal := destination if destination.is_finite() else _target
 	if goal.is_finite() and absf(global_position.y - goal.y) < 40.0:
 		_let_go(true)
@@ -1340,6 +1501,7 @@ func _let_go(hop: bool) -> void:
 	# Remembered, and off limits for a while. See CABLE_MEMORY and _cable_here.
 	_last_cable = _zipline
 	_cable_cooldown = CABLE_MEMORY
+	_regrab = REGRAB_GUARD
 	_zipline = null
 	riding = false
 	velocity.x = 0.0
