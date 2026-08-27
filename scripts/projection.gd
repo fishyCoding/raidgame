@@ -105,8 +105,19 @@ const AWAY_FROM_CASTER := 900.0
 ## down in front of everybody.
 const CABLE_MEMORY := 9.0
 
-## How close to a target counts as arrived.
+## How close to a target counts as arrived, across and vertically.
+##
+## The vertical figure used to be WORTH_A_CABLE, which is 140 - more than a
+## storey - so a ghost sent upstairs counted as arrived while it was still
+## standing on the floor below, dropped its orders and wandered off. Arriving is
+## a tighter question than "is this worth a cable".
 const ARRIVED := 48.0
+const ARRIVED_Y := 90.0
+
+## How far off this body's own height an end of a cable can be and still count as
+## something it could walk to. About a storey, so a ramp or a step up does not
+## disqualify a rope, but the floor above does.
+const FLOOR_REACH := 130.0
 
 ## How far ahead it feels for a wall, and for the floor falling away.
 const WALL_PROBE := 20.0
@@ -274,6 +285,8 @@ var _hold := 0.0
 var destination := Vector2.INF
 ## The cable it is currently walking to in order to change floors, if any.
 var _leg_cable: Zipline = null
+## The end of `_leg_cable` it is walking to in order to get on.
+var _leg_end := Vector2.INF
 ## Somewhere to get to first, because the direct way is blocked. See _turn_back.
 var _detour := Vector2.INF
 var _detour_left := 0.0
@@ -687,7 +700,7 @@ func _arrived_at(spot: Vector2) -> bool:
 		return false
 	if absf(spot.x - global_position.x) > ARRIVED:
 		return false
-	return absf(spot.y - global_position.y) <= WORTH_A_CABLE
+	return absf(spot.y - global_position.y) <= ARRIVED_Y
 
 
 ## Send it somewhere. INF lets it go back to its own devices.
@@ -710,6 +723,15 @@ func order_to(spot: Vector2) -> bool:
 	_mind = Mind.ORDERS
 	_orders_left = ORDERS_TIME
 	_leg_cable = null
+	_leg_end = Vector2.INF
+	# A fresh order is a clean slate, cable grudge included. CABLE_MEMORY
+	# stops it riding one rope up and down in front of everybody while it is
+	# baiting on its own; under orders it is the wrong rule entirely, because
+	# the rope it just used is very often the only way back to where it has
+	# now been asked to go. Refusing it means standing at the bottom for nine
+	# seconds, which reads as the routing being broken.
+	_last_cable = null
+	_cable_cooldown = 0.0
 	_commit = 0.0
 	_stuck = 0.0
 	_was_at = INF
@@ -725,6 +747,7 @@ func order_to(spot: Vector2) -> bool:
 func _stand_down() -> void:
 	destination = Vector2.INF
 	_leg_cable = null
+	_leg_end = Vector2.INF
 	_detour = Vector2.INF
 	_detour_left = 0.0
 	_orders_left = 0.0
@@ -754,7 +777,7 @@ func _next_leg() -> Vector2:
 	if _detour_left > 0.0 and _detour.is_finite():
 		return _detour
 	# Same floor, near enough: just go.
-	if absf(destination.y - global_position.y) <= WORTH_A_CABLE:
+	if absf(destination.y - global_position.y) <= FLOOR_REACH:
 		_leg_cable = null
 		return destination
 
@@ -762,55 +785,83 @@ func _next_leg() -> Vector2:
 		_leg_cable = null
 	if _leg_cable == null:
 		_leg_cable = _cable_towards(destination.y)
-	if _leg_cable == null:
-		# Nothing to ride. Walk at it anyway - the floor it is on may well join
-		# up somewhere, and standing still is never the better answer.
+	if _leg_cable == null or not _leg_end.is_finite():
+		# Nothing worth riding from here. Walk at it anyway - the floor it is on
+		# may well join up somewhere, and standing still is never the better
+		# answer.
+		_leg_cable = null
 		return destination
-	return _end_of(_leg_cable, false)
+	return _leg_end
 
 
 ## The cable that gets it closest to a height, for the least walking.
 ##
-## Scored on what riding it actually buys - how much of the climb it removes -
-## against how far it has to walk to reach it, so a rope on the far side of the
-## yard loses to a shorter one nearby that does most of the job.
+## Three rules, and the first two were both missing, which is most of why the
+## routing was bad:
+##
+## 1. **The end it gets on at has to be on this floor.** Ends were picked by
+##    straight-line distance before, so the "near" end of a cable running through
+##    the ceiling directly overhead measured as twenty pixels away - and the
+##    ghost would set off towards a point it had no way of reaching, stand under
+##    it, and give up. Which end is on your floor is a question about height, not
+##    about distance.
+## 2. **Walking cost is horizontal.** It walks; it does not fly. A rope a hundred
+##    pixels away and two floors up is not a hundred pixels away.
+## 3. Riding it has to actually buy height towards where it is going.
+##
+## Only one hop is chosen at a time and that is deliberate: after a ride it works
+## the next leg out from where it has ended up, so two- and three-cable journeys
+## fall out of the same rule without any of the machinery a real path search
+## would need. Fourteen seconds is not long enough to plan further than the next
+## rope anyway.
 func _cable_towards(goal_y: float) -> Zipline:
 	var here := global_position
 	var climb := absf(here.y - goal_y)
 	var best: Zipline = null
 	var best_score := -INF
+	_leg_end = Vector2.INF
+
 	for node in get_tree().get_nodes_in_group(&"zipline"):
 		var line := node as Zipline
 		if line == null:
 			continue
 		if line == _last_cable and _cable_cooldown > 0.0:
 			continue
-		var near := _end_of(line, false)
-		var far := _end_of(line, true)
-		# Does the far end actually get it closer to the floor it wants?
+
+		var ends := _ends_of(line)
+		var near: Vector2 = ends[0]
+		var far: Vector2 = ends[1]
+		# Has to start somewhere it can walk to.
+		if absf(near.y - here.y) > FLOOR_REACH:
+			continue
+		# Has to finish nearer the floor it wants than it is now.
 		var gain := climb - absf(far.y - goal_y)
 		if gain < WORTH_A_CABLE:
 			continue
-		var walk := here.distance_to(near)
+		var walk := absf(near.x - here.x)
 		if walk > CABLE_SEARCH:
 			continue
-		var score := gain - walk * 0.6
+
+		var score := gain - walk * 0.8
 		if score > best_score:
 			best_score = score
 			best = line
+			_leg_end = near
 	return best
 
 
-## One end of a cable: the one nearer this body, or the one further from it.
-func _end_of(line: Zipline, far_end: bool) -> Vector2:
+## A cable's two ends, ordered: the one on this body's floor first.
+##
+## By height rather than by distance. The end you can walk to is the one at your
+## own level, and a rope passing through the floor above has its far end closer
+## to you in a straight line than its near end is - which is exactly the case
+## that used to send the ghost to stand underneath a cable it could not reach.
+func _ends_of(line: Zipline) -> Array:
 	var top := line.world_top()
 	var bottom := line.world_bottom()
-	var near := bottom
-	var far := top
-	if global_position.distance_to(top) < global_position.distance_to(bottom):
-		near = top
-		far = bottom
-	return far if far_end else near
+	if absf(top.y - global_position.y) < absf(bottom.y - global_position.y):
+		return [top, bottom]
+	return [bottom, top]
 
 
 ## Somewhere to run when it has been seen: away from the watcher, and further## Somewhere to run when it has been seen: away from the watcher, and further
@@ -1200,6 +1251,7 @@ func _let_go(hop: bool) -> void:
 	# ended up - which is usually "now just walk there" - and otherwise the floor
 	# it has arrived on is a new place with new sightlines, so it picks again.
 	_leg_cable = null
+	_leg_end = Vector2.INF
 	_target = Vector2.INF
 	_rethink = 0.0
 	if _mind == Mind.ORDERS:

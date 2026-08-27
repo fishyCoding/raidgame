@@ -199,6 +199,9 @@ func _run() -> void:
 	print("\n-- you click where it should go --")
 	await _check_orders(main, player)
 
+	print("\n-- a click in the air lands on the floor --")
+	_check_snaps_to_ground(player)
+
 	print("\n-- and it takes a rope to get to another floor --")
 	await _check_routes_by_cable(main, player)
 
@@ -680,11 +683,43 @@ func _check_orders(main: Node, player: Node2D) -> void:
 		"putting the camera back")
 
 
+## A click in mid-air is dropped to the floor under it.
+##
+## The normal case, not the exception: you are picking a *room* on a pulled-back
+## view and the middle of a room is empty space. A projection walks, so a point
+## in the air is not somewhere it can be sent at all.
+func _check_snaps_to_ground(player: Node2D) -> void:
+	var space := player.get_world_2d().direct_space_state
+	# Somewhere with floor under it: straight up from the character, which is
+	# standing on some, then well above.
+	var high: Vector2 = player.global_position - Vector2(0.0, 300.0)
+	var on_ground: Vector2 = player._ground_at(high)
+	print("  a click %.0f px up came back at %.0f px up" % [
+		player.global_position.y - high.y,
+		player.global_position.y - on_ground.y])
+	_check_that(on_ground.y > high.y, "a point in the air is dropped downwards")
+
+	# And what it lands on is actually solid.
+	var probe := PhysicsRayQueryParameters2D.create(
+		on_ground, on_ground + Vector2(0.0, 90.0))
+	probe.collision_mask = 3
+	_check_that(not space.intersect_ray(probe).is_empty(),
+		"onto something it can stand on")
+
+	# A point already on the floor is left where it is, near enough.
+	var standing: Vector2 = player._ground_at(player.global_position)
+	print("  a click at the character's own feet moved %.0f px" % 
+		standing.distance_to(player.global_position))
+	_check_that(standing.distance_to(player.global_position) < 60.0,
+		"and a point already on the ground barely moves")
+
+
 ## A destination on another floor has to be reached by rope, not stared at.
 ##
-## The complaint was that ziplines were not factored in at all: it would only
-## ever grab one that happened to be within arm's reach as it walked past, so a
-## decoy sent upstairs walked to the wall underneath and stood there.
+## The complaint was that the routing was bad: ends were picked by straight-line
+## distance, so a cable running through the ceiling directly overhead measured as
+## the nearest thing there was, and the ghost set off for a point it had no way
+## of walking to, stood under it, and gave up.
 func _check_routes_by_cable(main: Node, player: Node2D) -> void:
 	var cables: Array = get_nodes_in_group(&"zipline")
 	_check_that(not cables.is_empty(), "the level has cables to route through")
@@ -698,36 +733,67 @@ func _check_routes_by_cable(main: Node, player: Node2D) -> void:
 	var ghost: Node2D = (load("res://scenes/projection.tscn") as PackedScene).instantiate()
 	ghost.name = "Ghost_routeprobe"
 	main.get_node("Players").add_child(ghost)
-	# Standing at the bottom of a long cable, sent to the top of it.
-	ghost.global_position = cable.world_bottom()
-	var up: Vector2 = cable.world_top()
-	var sent: bool = ghost.order_to(up)
-	_check_that(sent, "it takes the order")
 
-	print("  at the foot of %s, sent %.0f px up" % [
-		cable.name, absf(up.y - ghost.global_position.y)])
-	var chosen: Object = ghost._leg_cable
-	print("  chose a cable for the leg: %s" % (chosen.name if chosen else "none"))
-	_check_that(chosen != null, "a destination on another floor picks a cable to ride")
+	# --- the end it gets on at has to be one it can walk to ------------------
+	# Stood at the foot of the cable, both ends are candidates by distance and
+	# only one of them is by height. This is the check that used to fail.
+	ghost.global_position = cable.world_bottom()
+	var ends: Array = ghost._ends_of(cable)
+	print("  at the foot of %s: near end is %.0f px up, far end %.0f px up" % [
+		cable.name,
+		ghost.global_position.y - (ends[0] as Vector2).y,
+		ghost.global_position.y - (ends[1] as Vector2).y])
+	_check_that((ends[0] as Vector2).distance_to(cable.world_bottom()) < 1.0,
+		"the end on this floor is the near one, whatever the straight line says")
+
+	# --- and it rides it, all the way ---------------------------------------
+	var up: Vector2 = cable.world_top()
+	_check_that(ghost.order_to(up), "it takes the order")
+	print("  sent %.0f px up, chose %s to ride" % [
+		absf(up.y - ghost.global_position.y),
+		ghost._leg_cable.name if ghost._leg_cable else "nothing"])
+	_check_that(ghost._leg_cable != null, "and picks a cable to do it with")
 
 	var rode := false
 	var climbed := 0.0
 	var from_y: float = ghost.global_position.y
-	for i in 150:
+	for i in 210:
 		await physics_frame
 		if not is_instance_valid(ghost):
 			break
 		if ghost.riding:
 			rode = true
 		climbed = maxf(climbed, from_y - ghost.global_position.y)
-	print("  got on a rope: %s, and climbed %.0f px" % [rode, climbed])
+	print("  rode it: %s, climbed %.0f of %.0f px" % [
+		rode, climbed, absf(up.y - from_y)])
 	_check_that(rode, "and actually rides it")
-	_check_that(climbed > 100.0, "gaining the height it was sent to")
+	_check_that(climbed > absf(up.y - from_y) * 0.7,
+		"gaining most of the height it was sent to")
+
+	# --- a destination that is not itself a cable end ------------------------
+	# The real case: you click a spot on an upper floor, and getting there is a
+	# walk, then a rope, then another walk. Riding to the top and stopping is not
+	# arriving.
+	ghost.global_position = cable.world_bottom()
+	ghost.life_left = 90.0
+	var along: Vector2 = cable.world_top() + Vector2(200.0, 0.0)
+	_check_that(ghost.order_to(along), "sent to a spot on the upper floor")
+	var best := INF
+	for i in 240:
+		await physics_frame
+		if not is_instance_valid(ghost):
+			break
+		best = minf(best, absf(ghost.global_position.y - along.y))
+	print("  sent to a spot %.0f px along the top floor, got within %.0f px of its height"
+		% [200.0, best])
+	_check_that(best < 140.0,
+		"a destination off the end of the rope still has to be reached")
+
 	if is_instance_valid(ghost):
 		ghost.queue_free()
 
 
-## It should not spend its life bouncing off walls.## It should not spend its life bouncing off walls.
+## It should not spend its life bouncing off walls.## It should not spend its life bouncing off walls.## It should not spend its life bouncing off walls.
 ##
 ## The reported symptom was "jumps around a lot and runs into walls", which was
 ## two missing things rather than one: no cooldown between jumps, and no question

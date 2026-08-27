@@ -324,6 +324,10 @@ const THROW_TIME_NEAR := 0.42
 const THROW_TIME_FAR := 1.15
 ## How far ahead the arc is simulated, in steps of a physics frame.
 const ARC_STEPS := 90
+## How far above and below a clicked point to look for a floor. Generous: two
+## storeys of this level, so a click into the open middle of a room still
+## finds the ground under it.
+const GROUND_HUNT := 900.0
 ## What the bow's flight line is drawn in. The same blue as a recon sweep and
 ## a recon ping, because a blue circle on the ground already means "this is
 ## about to be scanned" and the preview is a promise of exactly that.
@@ -1833,7 +1837,7 @@ func _update_projection_aim() -> void:
 		_cancel_projection_aim()
 		return
 
-	projection_mark = get_global_mouse_position()
+	projection_mark = _ground_at(get_global_mouse_position())
 
 	# Q again, or the right button, backs out. Both, because one of them is
 	# always the one you reach for and which it is depends on the player.
@@ -1846,10 +1850,44 @@ func _update_projection_aim() -> void:
 		_send_projection(projection_mark)
 
 
+## The nearest standing room to a point.
+##
+## A projection walks. It has no jetpack and no wings, so a point in mid-air is
+## not somewhere it can be sent - and clicking mid-air is the normal case, not
+## the exception: you are picking a *room* on a pulled-back view, and the middle
+## of a room is empty space. Dropped straight down to the floor under the cursor,
+## which is the floor of the room you were pointing at.
+##
+## Looks up as well, and only after looking down, so a click into the underside
+## of a catwalk lands on the catwalk rather than falling to the yard below it.
+## The mark is snapped as you move, not on the click, so what you see under the
+## cursor is exactly where it will stand.
+func _ground_at(spot: Vector2) -> Vector2:
+	var space := get_world_2d().direct_space_state
+	var mask := Layers.WORLD | Layers.ONE_WAY
+
+	var down := PhysicsRayQueryParameters2D.create(spot, spot + Vector2(0.0, GROUND_HUNT))
+	down.collision_mask = mask
+	var hit := space.intersect_ray(down)
+	if hit:
+		return (hit.position as Vector2) - Vector2(0.0, size.y * 0.5)
+
+	var up := PhysicsRayQueryParameters2D.create(spot, spot - Vector2(0.0, GROUND_HUNT))
+	up.collision_mask = mask
+	hit = space.intersect_ray(up)
+	if hit:
+		return (hit.position as Vector2) + Vector2(0.0, size.y * 0.5)
+
+	# Nothing above or below within reach - open sky, or the middle of the map's
+	# one big drop. Leave it where it was pointed; the ghost will walk at it and
+	# work out for itself that it cannot get there.
+	return spot
+
+
 ## Opens the placing view. Costs nothing: the charge is spent by the click.
 func _begin_projection_aim() -> void:
 	projection_aiming = true
-	projection_mark = get_global_mouse_position()
+	projection_mark = _ground_at(get_global_mouse_position())
 	_say_loot("click where it should go - Q or right click to call it off")
 
 
