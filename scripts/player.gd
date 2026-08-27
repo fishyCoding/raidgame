@@ -505,6 +505,15 @@ var flash_strength := 0.0
 ## the screen every time would be the same effect whatever you did about it.
 var flash_from := Vector2.INF
 
+## True while the projection is being aimed: the camera is pulled back, the
+## pointer is free, and the trigger belongs to the marker rather than the gun.
+##
+## Not a charge that has been spent - entering this costs nothing and leaving it
+## costs nothing. The charge goes when you actually click somewhere.
+var projection_aiming := false
+## Where the pointer is asking for while aiming, in world space.
+var projection_mark := Vector2.INF
+
 ## Seconds of Projection left, for the readout and nothing else. The ghost runs
 ## its own clock on whichever machine owns it - this is a copy of that clock kept
 ## here so the HUD has a number to draw without reaching across the level for a
@@ -1447,7 +1456,18 @@ func get_zoom_factor() -> float:
 ## itself against the screen wants this rather than get_zoom_factor(): the factor
 ## alone is only the part that moves when you aim.
 func get_camera_zoom() -> float:
-	return base_zoom * get_zoom_factor()
+	return base_zoom * get_zoom_factor() * projection_view_scale()
+
+
+## How far the camera is pulled back while a projection is being aimed.
+##
+## Half the zoom is twice the world on screen, which is the whole reason the
+## control works: sending a decoy is a decision about the level - which floor,
+## which side of the yard, which corridor somebody will walk down - and none of
+## that is visible at the framing you fight at. It is not a map screen either;
+## the raid is still running around you while you decide.
+func projection_view_scale() -> float:
+	return 0.5 if projection_aiming else 1.0
 
 
 ## Aiming is a crosshair orbiting you, steered by how far the mouse moved -
@@ -1673,6 +1693,12 @@ func _update_weapon() -> void:
 			_say_loot("debug: %s charged" % inventory.ultimate.gadget.short_name)
 		inventory.ultimate.charge = 1.0
 
+	# Placing a projection owns the trigger, the pointer and Q. Handled before
+	# anything else in here so none of the three leak through to the gun.
+	if projection_aiming:
+		_update_projection_aim()
+		return
+
 	if PlayerInput.is_ultimate_just_pressed():
 		if bow_out:
 			bow_out = false
@@ -1726,22 +1752,19 @@ func _use_ultimate() -> void:
 	if ult == null:
 		_say_loot("no ultimate equipped")
 		return
-	# A ghost already walking about is re-pointed rather than refused. It is the
-	# same press, it costs nothing, and it is what makes the direction a control
-	# instead of a single decision taken at the worst possible moment - you cast
-	# it while being shot at, and thirty seconds later you know far better where
-	# you want it than you did then.
+	# Q does not cast a projection. It opens the view you cast one from: the
+	# camera pulls back and you click the place you want it to walk to. The
+	# charge is checked at the click rather than here, so backing out of the
+	# view costs nothing - and so re-pointing a ghost that is already out works
+	# through the same two presses on an empty meter.
 	if ult.gadget.kind == GadgetData.Kind.PROJECTION:
 		var out := Net.projection_for(get_multiplayer_authority())
-		if out and out.has_method(&"order_to"):
-			var sent := _projection_heading()
-			# It answers false while it is coming apart, which is the half second
-			# where the body is still in the level but is an animation rather
-			# than a decoy. Taking the press anyway would eat it and print a
-			# message about a ghost that is already gone.
-			if out.order_to(sent.x, sent.y):
-				_say_loot("projection sent %s" % _heading_name(sent))
-				return
+		var already := out != null and not bool(out.get("gone"))
+		if already or ult.charge >= 1.0:
+			_begin_projection_aim()
+		else:
+			_say_loot("ultimate at %d%%" % roundi(ult.charge * 100.0))
+		return
 
 	if ult.charge < 1.0:
 		_say_loot("ultimate at %d%%" % roundi(ult.charge * 100.0))
@@ -1760,17 +1783,6 @@ func _use_ultimate() -> void:
 			bow_out = true
 			bow_drawn = 0.0
 			_say_loot("bow out - hold fire to draw, release to loose")
-		GadgetData.Kind.PROJECTION:
-			_cast_projection(ult.gadget)
-			projection_left = ult.gadget.active_time
-			_say_loot("PROJECTION %s - Q again to send it somewhere else"
-				% _heading_name(_projection_heading()))
-			# Deliberately no sound, here of all places. Every other ultimate
-			# announces itself and should; this one is bought entirely to be
-			# quiet, and a click on the frame it is cast would tell anybody
-			# within earshot which of the two men they are now looking at is
-			# the one worth shooting.
-			return
 	if _audio:
 		_audio.reload_finished(global_position)
 
@@ -1794,7 +1806,7 @@ func _use_ultimate() -> void:
 ## without ever having to look at it properly. So the two multipliers this body
 ## knows and that one cannot are sent with the cast. The plates it wears are its
 ## own business: see Projection.setup.
-func _cast_projection(gadget: GadgetData) -> void:
+func _cast_projection(gadget: GadgetData, spot: Vector2) -> void:
 	var carrying := weapon.data.get_move_multiplier() if weapon.data else 1.0
 	var look := {
 		"facing": facing,
@@ -1802,49 +1814,76 @@ func _cast_projection(gadget: GadgetData) -> void:
 		"stowed": stowed,
 		"crouch": crouch,
 		"speed_scale": carrying * injury_speed_multiplier(),
-		"heading": _projection_heading().x,
-		"climb": _projection_heading().y,
+		"send_x": spot.x,
+		"send_y": spot.y,
 	}
 	Net.cast_projection(gadget.resource_path, global_position, look,
 		get_multiplayer_authority())
 
 
-## Which way you are pointing, reduced to a general direction to send the ghost.
+## Placing a projection: the level is pulled back, the pointer is live, and a
+## click sends it.
 ##
-## x is -1 left or 1 right; y is -1 up, 1 down, or 0 for level, and only decides
-## whether a cable in reach is worth taking on the way.
-##
-## A direction rather than a spot on the map, and that is the whole design of the
-## control. Placing a point accurately is a thing you do when nobody is shooting
-## at you; this is a gadget for the moment somebody is, and "that way" is one
-## press with no aiming budget at all. It is also identical on both ends - the
-## crosshair is driven by the mouse on a desktop and by the aim drag on glass,
-## so `aim_direction` already means the same thing on a phone and neither had to
-## be taught anything.
-##
-## The vertical band is deliberately wide. Level is anything within about 30
-## degrees of flat, so pointing roughly along the ground never accidentally reads
-## as "climb" - you have to actually mean it.
-func _projection_heading() -> Vector2i:
-	var dir := aim_direction
-	if dir.is_zero_approx():
-		dir = Vector2(facing, 0.0)
-	var up_down := 0
-	if dir.y < -0.5:
-		up_down = -1
-	elif dir.y > 0.5:
-		up_down = 1
-	return Vector2i(1 if dir.x >= 0.0 else -1, up_down)
+## Runs instead of the weapon, not alongside it. The trigger cannot be allowed
+## through - a control that both places a decoy and empties your magazine into
+## the floor is worse than no control - and neither can Q, which is the way out
+## rather than a second cast.
+func _update_projection_aim() -> void:
+	if inventory_open or not is_alive or is_downed:
+		_cancel_projection_aim()
+		return
+
+	projection_mark = get_global_mouse_position()
+
+	# Q again, or the right button, backs out. Both, because one of them is
+	# always the one you reach for and which it is depends on the player.
+	if PlayerInput.is_ultimate_just_pressed() or Input.is_action_just_pressed(&"aim"):
+		_cancel_projection_aim()
+		_say_loot("projection call off")
+		return
+
+	if PlayerInput.is_fire_just_pressed() or PlayerInput.take_touch_projection_send():
+		_send_projection(projection_mark)
 
 
-## What to call a heading, for the message that confirms the press.
-func _heading_name(sent: Vector2i) -> String:
-	var side := "right" if sent.x > 0 else "left"
-	if sent.y < 0:
-		return "up and %s" % side
-	if sent.y > 0:
-		return "down and %s" % side
-	return side
+## Opens the placing view. Costs nothing: the charge is spent by the click.
+func _begin_projection_aim() -> void:
+	projection_aiming = true
+	projection_mark = get_global_mouse_position()
+	_say_loot("click where it should go - Q or right click to call it off")
+
+
+func _cancel_projection_aim() -> void:
+	projection_aiming = false
+	projection_mark = Vector2.INF
+
+
+## Sends it, either by casting a new one or by re-tasking the one already out.
+func _send_projection(spot: Vector2) -> void:
+	var ult := inventory.ultimate if inventory else null
+	if ult == null:
+		_cancel_projection_aim()
+		return
+
+	# One already walking about is re-pointed for free. It is the same click and
+	# the same decision, and charging for it would mean the first place you sent
+	# it is the only place it can ever go.
+	var out := Net.projection_for(get_multiplayer_authority())
+	if out and out.has_method(&"order_to") and out.order_to(spot):
+		_cancel_projection_aim()
+		_say_loot("projection redirected")
+		return
+
+	if ult.charge < 1.0:
+		_cancel_projection_aim()
+		_say_loot("ultimate at %d%%" % roundi(ult.charge * 100.0))
+		return
+
+	ult.charge = 0.0
+	_cast_projection(ult.gadget, spot)
+	projection_left = ult.gadget.active_time
+	_cancel_projection_aim()
+	_say_loot("PROJECTION away - Q again to send it somewhere else")
 
 
 ## The bow, while it is out: hold the trigger to pull it back, let go to shoot.
@@ -2331,7 +2370,12 @@ func _update_shake(delta: float) -> void:
 
 	# Offset is spoken for by shake, so the aim lean rides on position instead.
 	_camera.position = _camera.position.lerp(_get_lead_offset(), 1.0 - exp(-10.0 * delta))
-	_camera.zoom = _base_zoom * get_zoom_factor()
+	# Eased rather than snapped: a camera that jumps two zoom levels in one
+	# frame loses you where you were, and finding yourself again is exactly
+	# the cost this control is trying not to charge.
+	var wanted := _base_zoom * get_zoom_factor() * projection_view_scale()
+	_camera.zoom = _camera.zoom.lerp(wanted,
+		clampf(get_physics_process_delta_time() * 9.0, 0.0, 1.0))
 	_fit_vision_to_view()
 
 

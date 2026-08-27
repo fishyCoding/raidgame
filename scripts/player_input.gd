@@ -24,6 +24,10 @@ const STICK_DEADZONE := 0.25
 ## is placed, not pointed. Vector2.INF means "not set, use the cursor".
 var touch_aim_point := Vector2.INF
 
+## Set true for one frame by the SEND button on the touch projection pad, which
+## is that scheme's answer to clicking the level.
+var touch_projection_send := false
+
 ## Set true for one frame by the CANCEL button on the touch throw pad.
 ##
 ## A throw on glass has to be abandonable, and it cannot be abandoned the way a
@@ -248,6 +252,12 @@ func wants_cursor() -> bool:
 	var alive: Variant = player.get(&"is_alive")
 	if typeof(alive) == TYPE_BOOL and not alive:
 		return true
+	# Placing a projection is done by clicking the level, so the pointer has to
+	# come back for it. Asked of the character rather than held here because it
+	# is the character's state - see Player.projection_aiming.
+	var aiming: Variant = player.get(&"projection_aiming")
+	if typeof(aiming) == TYPE_BOOL and aiming:
+		return true
 	for group in CURSOR_GROUPS:
 		for node in get_tree().get_nodes_in_group(group):
 			var control := node as CanvasItem
@@ -437,6 +447,16 @@ func is_throw_just_pressed(slot: int) -> bool:
 ## True while that throw key is held - grenades are wound up, not tapped.
 func is_throw_held(slot: int) -> bool:
 	return Input.is_action_pressed("throw_%d" % (slot + 1))
+
+
+## True on the frame a thumb confirms where a projection should go. Consumed on
+## read, like every other one-frame touch flag. A mouse has no need of it: the
+## click on the level *is* the confirmation.
+func take_touch_projection_send() -> bool:
+	if touch_projection_send:
+		touch_projection_send = false
+		return true
+	return false
 
 
 ## True on the frame a wound-up throw is thrown away rather than thrown.

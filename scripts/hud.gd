@@ -244,10 +244,9 @@ func _flash_centre() -> Vector2:
 	var from: Vector2 = _player.flash_from
 	if not from.is_finite():
 		return size * 0.5
-	var camera := get_viewport().get_camera_2d()
-	if camera == null or camera.zoom.x <= 0.0 or camera.zoom.y <= 0.0:
+	var at := _to_screen(from)
+	if not at.is_finite():
 		return size * 0.5
-	var at := (from - camera.get_screen_center_position()) * camera.zoom + size * 0.5
 	var margin := size * 0.15
 	return Vector2(
 		clampf(at.x, margin.x, size.x - margin.x),
@@ -271,6 +270,8 @@ func _draw_health() -> void:
 		_draw_overload()
 	if _player.projection_left > 0.0:
 		_draw_projection()
+	if _player.projection_aiming:
+		_draw_projection_aim()
 	_draw_gadgets()
 	if _player.bow_out:
 		_draw_bow_meter(bar.position + Vector2(0.0, -52.0), bar.size.x)
@@ -534,6 +535,51 @@ func _draw_overload() -> void:
 	var bar := Rect2(box.position + Vector2(14.0, 42.0), Vector2(box.size.x - 28.0, 6.0))
 	draw_rect(bar, Color(0.16, 0.18, 0.22))
 	draw_rect(Rect2(bar.position, Vector2(bar.size.x * fraction, bar.size.y)), OVERLOAD)
+
+
+## The placing view: where the click will send it, and what it is deciding
+## between.
+##
+## Drawn on the HUD rather than in the world so it survives the concealment
+## system - the point you are choosing is frequently a room you cannot currently
+## see, which is most of the reason for choosing it, and a marker that vanished
+## behind cover would be useless exactly when it matters.
+func _draw_projection_aim() -> void:
+	var spot: Vector2 = _player.projection_mark
+	if not spot.is_finite():
+		return
+	var at := _to_screen(spot)
+	if not at.is_finite():
+		return
+
+	# A line from the character to the mark, so the distance reads as a journey
+	# rather than as a coordinate. Faint, and behind the marker.
+	var from := _to_screen(_player.global_position)
+	if from.is_finite():
+		draw_line(from, at, Color(PROJECTION, 0.28), 2.0, true)
+
+	var beat := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+	draw_arc(at, lerpf(16.0, 22.0, beat), 0.0, TAU, 32, PROJECTION, 2.0, true)
+	draw_arc(at, 30.0, 0.0, TAU, 40, Color(PROJECTION, 0.35), 1.5, true)
+	draw_line(at - Vector2(40.0, 0.0), at + Vector2(40.0, 0.0),
+		Color(PROJECTION, 0.5), 1.5, true)
+	draw_line(at - Vector2(0.0, 40.0), at + Vector2(0.0, 40.0),
+		Color(PROJECTION, 0.5), 1.5, true)
+
+	var hint := "click to send it here"
+	if PlayerInput.is_touch():
+		hint = "drag to place it, SEND to commit"
+	draw_string(_font, Vector2(0.0, size.y * 0.16), hint,
+		HORIZONTAL_ALIGNMENT_CENTER, size.x, 18, Color(PROJECTION, 0.85))
+
+
+## World space to screen space, through whichever camera is live. INF when there
+## is no camera to ask, which is every headless run.
+func _to_screen(world: Vector2) -> Vector2:
+	var camera := get_viewport().get_camera_2d()
+	if camera == null or camera.zoom.x <= 0.0 or camera.zoom.y <= 0.0:
+		return Vector2.INF
+	return (world - camera.get_screen_center_position()) * camera.zoom + size * 0.5
 
 
 ## The ghost, while it is out.

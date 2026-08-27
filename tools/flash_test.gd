@@ -250,7 +250,10 @@ func _check_stutter(player: Node2D) -> void:
 	var item: Object = maker.from_gadget(load(PROJECTION))
 	item.charge = 1.0
 	player.inventory.set_ultimate(item)
+	# Q opens the placing view; the click is what casts. Both halves, because
+	# what this check is about is the body's death animation, not the control.
 	player._use_ultimate()
+	player._send_projection(player.global_position + Vector2(-300.0, 0.0))
 
 	var ghost: Node2D = null
 	for node in get_nodes_in_group(&"projection"):

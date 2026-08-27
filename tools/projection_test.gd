@@ -73,9 +73,13 @@ func _run() -> void:
 	player.armored = true
 	player.facing = -1
 	var cast_at: Vector2 = player.global_position
+	# Q opens the placing view; the click is what casts. Both halves here, since
+	# everything below is about the body that results rather than about the
+	# control - which _check_orders covers on its own.
 	player._use_ultimate()
+	player._send_projection(cast_at + Vector2(-400.0, 0.0))
 
-	# Grabbed before a single frame runs. A ghost picks a heading in its first
+	# Grabbed before a single frame runs. A ghost picks a leg in its first
 	# physics tick and turns to face it, so "does it come out wearing what the
 	# caster wore" is a question with about a sixtieth of a second to ask it in.
 	var ghost: Node2D = _the_ghost()
@@ -192,8 +196,11 @@ func _run() -> void:
 	print("\n-- and it plays to people, not to guards --")
 	_check_ignores_guards(main, player)
 
-	print("\n-- you can tell it which way to go --")
+	print("\n-- you click where it should go --")
 	await _check_orders(main, player)
+
+	print("\n-- and it takes a rope to get to another floor --")
+	await _check_routes_by_cable(main, player)
 
 	print("\n-- and it does not bounce off walls --")
 	await _check_not_jumpy(main, player)
@@ -598,18 +605,27 @@ func _check_ignores_guards(main: Node, player: Node2D) -> void:
 	ghost.queue_free()
 
 
-## The caster can point it, and it goes that way - on either control scheme.
+## Q opens a pulled-back view, and a click on the level sends it there.
 func _check_orders(main: Node, player: Node2D) -> void:
 	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
 	var item: Object = maker.from_gadget(load(GADGET))
 	item.charge = 1.0
 	player.inventory.set_ultimate(item)
 
-	# A direction the level actually lets it walk. Pointed blindly left, most
-	# spawns put a wall there, the ghost correctly stood down, and the check
-	# passed on its escape clause every single run - so "does it walk the
-	# heading" was never once measured. Same shape of hole as a check that
-	# always skips.
+	# Q opens the view rather than casting. Nothing is spent by looking.
+	player._use_ultimate()
+	print("  Q: aiming=%s zoom scale=%.2f charge=%.2f" % [
+		player.projection_aiming, player.projection_view_scale(), item.charge])
+	_check_that(player.projection_aiming, "Q opens the placing view")
+	_check_that(is_equal_approx(player.projection_view_scale(), 0.5),
+		"and pulls the camera back to twice the world")
+	_check_that(item.charge >= 1.0, "without spending anything yet")
+
+	var input: Node = root.get_node("PlayerInput")
+	_check_that(input.wants_cursor(), "with the pointer free to click with")
+
+	# Somewhere it can actually walk to, so this measures the walk rather than
+	# the level. Chosen the same way the other checks choose a direction.
 	var space := player.get_world_2d().direct_space_state
 	var eye: Vector2 = player.sight_centre()
 	var open := -1.0
@@ -619,22 +635,20 @@ func _check_orders(main: Node, player: Node2D) -> void:
 		if space.intersect_ray(query).is_empty():
 			open = way
 			break
+	var spot: Vector2 = player.global_position + Vector2(open * 420.0, 0.0)
 
-	# Pointing is read off aim_direction, which the mouse drives on a desktop and
-	# the aim drag drives on glass - so setting it here is what both ends do.
-	player.aim_direction = Vector2(open, 0.0)
-	player.aim_angle = 0.0 if open > 0.0 else PI
-	player._use_ultimate()
-
+	player._send_projection(spot)
 	var ghost: Node2D = _the_ghost()
-	_check_that(ghost != null, "the cast has to produce a ghost")
+	_check_that(ghost != null, "clicking casts one")
 	if ghost == null:
 		return
-	print("  pointed %s: heading=%d climb=%d mind=%d" % [
-		"right" if open > 0.0 else "left", ghost.heading, ghost.climb, ghost._mind])
-	_check_that(ghost.heading == int(open), "it goes the way you pointed")
-	_check_that(ghost.climb == 0, "and level, since the aim was flat")
+	print("  clicked %s: destination=%s mind=%d aiming=%s charge=%.2f" % [
+		str(spot), str(ghost.destination), ghost._mind, player.projection_aiming,
+		item.charge])
+	_check_that(not player.projection_aiming, "and closes the view")
+	_check_that(ghost.destination.distance_to(spot) < 2.0, "sending it where you clicked")
 	_check_that(ghost._mind == 0, "under orders rather than off baiting")
+	_check_that(item.charge < 0.05, "and spends the charge at the click, not at the press")
 
 	var start_x: float = ghost.global_position.x
 	for i in 90:
@@ -642,41 +656,78 @@ func _check_orders(main: Node, player: Node2D) -> void:
 		if not is_instance_valid(ghost):
 			break
 	var moved: float = (ghost.global_position.x - start_x) * open
-	print("  travelled %.0f px the way it was pointed in 1.5s" % moved)
-	# A heading, not a destination, so what matters is that it made ground that
-	# way. Pointed down a direction the level actually opens onto, standing down
-	# is no longer an acceptable answer - which is the point of choosing the
-	# direction above rather than guessing one.
-	_check_that(moved > 60.0, "and has to actually set off that way")
+	print("  travelled %.0f px towards it in 1.5s" % moved)
+	_check_that(moved > 60.0, "and it has to actually set off")
 
-	# Re-pointing costs nothing and works on a ghost already out. This is the
-	# control the caster actually uses - the cast happens under fire, the aiming
-	# happens afterwards.
-	player.aim_direction = Vector2(-open, 0.0)
-	player.aim_angle = PI if open > 0.0 else 0.0
+	# Re-pointing a ghost already out costs nothing and goes through the same two
+	# presses, which is the press people actually want: the cast happens while
+	# you are being shot at.
+	player._use_ultimate()
+	_check_that(player.projection_aiming, "Q with one already out opens the view again")
+	var elsewhere: Vector2 = player.global_position + Vector2(-open * 300.0, 0.0)
 	var charge_before: float = item.charge
-	player._use_ultimate()
-	print("  re-pointed the other way: heading=%d (charge %.2f -> %.2f)" % [
-		ghost.heading, charge_before, item.charge])
-	_check_that(ghost.heading == int(-open), "a second press turns it round")
-	_check_that(item.charge <= charge_before + 0.01,
-		"and does not cost another charge")
+	player._send_projection(elsewhere)
+	print("  re-sent: destination=%s (charge %.2f -> %.2f)" % [
+		str(ghost.destination), charge_before, item.charge])
+	_check_that(ghost.destination.distance_to(elsewhere) < 2.0, "a second click moves it")
+	_check_that(item.charge <= charge_before + 0.01, "and does not cost another charge")
 
-	# Up and down only decide whether a cable is worth taking, so the band for
-	# "level" is wide - roughly flat must never read as a climb.
-	player.aim_direction = Vector2(0.9, -0.2).normalized()
+	# Backing out costs nothing either.
 	player._use_ultimate()
-	_check_that(ghost.climb == 0, "a slightly raised crosshair is still level")
-	player.aim_direction = Vector2(0.3, -0.95).normalized()
-	player._use_ultimate()
-	print("  pointed steeply up: climb=%d" % ghost.climb)
-	_check_that(ghost.climb == -1, "but a steep one means climb")
+	player._cancel_projection_aim()
+	_check_that(not player.projection_aiming, "and the view can be closed again")
+	_check_that(is_equal_approx(player.projection_view_scale(), 1.0),
+		"putting the camera back")
 
+
+## A destination on another floor has to be reached by rope, not stared at.
+##
+## The complaint was that ziplines were not factored in at all: it would only
+## ever grab one that happened to be within arm's reach as it walked past, so a
+## decoy sent upstairs walked to the wall underneath and stood there.
+func _check_routes_by_cable(main: Node, player: Node2D) -> void:
+	var cables: Array = get_nodes_in_group(&"zipline")
+	_check_that(not cables.is_empty(), "the level has cables to route through")
+	if cables.is_empty():
+		return
+	var cable: Node2D = cables[0]
+	for line in cables:
+		if line.cable_length() > cable.cable_length():
+			cable = line
+
+	var ghost: Node2D = (load("res://scenes/projection.tscn") as PackedScene).instantiate()
+	ghost.name = "Ghost_routeprobe"
+	main.get_node("Players").add_child(ghost)
+	# Standing at the bottom of a long cable, sent to the top of it.
+	ghost.global_position = cable.world_bottom()
+	var up: Vector2 = cable.world_top()
+	var sent: bool = ghost.order_to(up)
+	_check_that(sent, "it takes the order")
+
+	print("  at the foot of %s, sent %.0f px up" % [
+		cable.name, absf(up.y - ghost.global_position.y)])
+	var chosen: Object = ghost._leg_cable
+	print("  chose a cable for the leg: %s" % (chosen.name if chosen else "none"))
+	_check_that(chosen != null, "a destination on another floor picks a cable to ride")
+
+	var rode := false
+	var climbed := 0.0
+	var from_y: float = ghost.global_position.y
+	for i in 150:
+		await physics_frame
+		if not is_instance_valid(ghost):
+			break
+		if ghost.riding:
+			rode = true
+		climbed = maxf(climbed, from_y - ghost.global_position.y)
+	print("  got on a rope: %s, and climbed %.0f px" % [rode, climbed])
+	_check_that(rode, "and actually rides it")
+	_check_that(climbed > 100.0, "gaining the height it was sent to")
 	if is_instance_valid(ghost):
 		ghost.queue_free()
 
 
-## It should not spend its life bouncing off walls.
+## It should not spend its life bouncing off walls.## It should not spend its life bouncing off walls.
 ##
 ## The reported symptom was "jumps around a lot and runs into walls", which was
 ## two missing things rather than one: no cooldown between jumps, and no question
@@ -704,7 +755,10 @@ func _check_not_jumpy(main: Node, player: Node2D) -> void:
 		ghost.queue_free()
 		return
 
-	ghost.order_to(into, 0)
+	# Sent straight through the wall, so it is walking at something it cannot
+	# pass - which is the case that used to make it hop on the spot.
+	var _sent: bool = ghost.order_to(
+		ghost.global_position + Vector2(into * 600.0, 0.0))
 	var jumps := 0
 	var airborne := false
 	for i in 180:

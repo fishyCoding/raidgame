@@ -177,6 +177,14 @@ const PLACE_BUTTONS := [
 ## throw's range: far enough to be a throw, near enough to be a doorway.
 const PLACE_DEFAULT_REACH := 340.0
 
+## The pair that end a projection's placing view. Same shape as the throw pad and
+## for the same reason: a thumb cannot both point at the level and press the
+## thing that commits, so the two have to be separate presses.
+const SEND_BUTTONS := [
+	{"id": "send", "label": "SEND", "at": Vector2(-190.0, -200.0), "r": 84.0},
+	{"id": "cancel", "label": "CANCEL", "at": Vector2(-190.0, -390.0), "r": 62.0},
+]
+
 const PILL_SIZE := Vector2(118.0, 56.0)
 const PILL_GAP := 8.0
 const PILL_SPLIT := 60.0
@@ -245,6 +253,16 @@ func _on_controls_changed(_touch: bool) -> void:
 func _process(delta: float) -> void:
 	_age_taps(delta)
 	_forget_spent_target()
+	# Placing a projection takes the pad over entirely, the same way placing a
+	# throw does. Checked before the visibility rules below because the pointer
+	# is deliberately free while it is up - wants_cursor() answers true - and the
+	# ordinary rule would take the pad away at exactly the wrong moment.
+	if _aiming_projection():
+		visible = PlayerInput.is_touch()
+		if visible:
+			_drive_projection()
+		queue_redraw()
+		return
 	var touch := PlayerInput.is_touch()
 	# "A / D move ... SPACE jump" is a lie on a phone, and it sits exactly where
 	# the pills go.
@@ -333,6 +351,70 @@ func _forget_spent_target() -> void:
 	var player := Net.local_player
 	if player == null or int(player.get(&"throw_slot")) < 0:
 		PlayerInput.touch_aim_point = Vector2.INF
+
+
+# --- placing a projection -----------------------------------------------------
+
+
+## Whether the character currently has the projection's placing view open.
+func _aiming_projection() -> bool:
+	var player := Net.local_player
+	if player == null:
+		return false
+	var aiming: Variant = player.get(&"projection_aiming")
+	return typeof(aiming) == TYPE_BOOL and aiming
+
+
+## A finger down while the projection is being placed. The two buttons win;
+## everywhere else on the screen moves the mark.
+func _projection_pointer(at: Vector2) -> bool:
+	for button in _send_rects():
+		if at.distance_to(button.at) <= button.r * 1.15:
+			if button.id == "send":
+				PlayerInput.touch_projection_send = true
+			else:
+				_cancel_projection()
+			return true
+	_mark_at(at)
+	return true
+
+
+## Nothing to drive but the mark, which the player reads straight off its own
+## `projection_mark` - so the pad's job here is only to keep writing it.
+func _drive_projection() -> void:
+	pass
+
+
+func _mark_at(at: Vector2) -> void:
+	var player := Net.local_player
+	if player:
+		player.projection_mark = _world_at(at)
+
+
+func _cancel_projection() -> void:
+	var player := Net.local_player
+	if player and player.has_method(&"_cancel_projection_aim"):
+		player._cancel_projection_aim()
+
+
+func _send_rects() -> Array:
+	var out: Array = []
+	for button in SEND_BUTTONS:
+		out.append({
+			"id": button.id, "label": button.label, "r": button.r,
+			"at": Vector2(size.x + button.at.x, size.y + button.at.y),
+		})
+	return out
+
+
+func _draw_projection_pad(font: Font) -> void:
+	for button in _send_rects():
+		var sending: bool = button.id == "send"
+		var tint := ACCENT if sending else RING
+		draw_circle(button.at, button.r, PANEL)
+		draw_arc(button.at, button.r, 0.0, TAU, 32, tint, 2.5, true)
+		draw_string(font, button.at + Vector2(-button.r, 5.0), button.label,
+			HORIZONTAL_ALIGNMENT_CENTER, button.r * 2.0, 17, tint)
 
 
 # --- placing a throw ----------------------------------------------------------
@@ -524,8 +606,10 @@ func _pointer(id: int, at: Vector2, down: bool) -> bool:
 	if not down:
 		return _lift(id)
 
-	# Placing a throw owns the whole screen. Checked before the close button
+	# Placing something owns the whole screen. Checked before the close button
 	# and before every pad control, because none of them exist right now.
+	if _aiming_projection():
+		return _projection_pointer(at)
 	if _placing != &"":
 		return _placing_pointer(id, at)
 
@@ -607,6 +691,10 @@ func _take_aim(id: int, at: Vector2) -> void:
 ## A finger sliding. The stick measures from its ring; the aim measures from
 ## wherever the finger was a moment ago.
 func _drag(id: int, at: Vector2) -> bool:
+	if _aiming_projection():
+		_mark_at(at)
+		return true
+
 	# Dragging while placing is either the stick or the target, and which one it
 	# is was decided when the finger went down.
 	if _placing != &"":
@@ -812,6 +900,10 @@ func _draw() -> void:
 		draw_rect(box, ACCENT if down else RING, false, 2.0)
 		draw_string(font, box.position + Vector2(0.0, 38.0), "CLOSE",
 			HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 18, ACCENT if down else LABEL)
+		return
+
+	if _aiming_projection():
+		_draw_projection_pad(font)
 		return
 
 	if _placing != &"":

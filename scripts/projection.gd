@@ -27,7 +27,8 @@ extends CharacterBody2D
 ## of sight at exactly the moment it had somebody's attention, which is the one
 ## moment the gadget is paid for.
 ##
-## Its caster can point it - see order_to. A direction, not a destination.
+## Its caster sends it somewhere by clicking the level - see order_to. Getting
+## there is this body's problem, cables included.
 ##
 ## Deliberately has no `class_name`. It reaches Net, and a global that reaches
 ## Net is a global a `--script` tool can poison for a whole process by so much as
@@ -135,10 +136,16 @@ const TURN_COMMIT := 1.8
 ## How long it has to make no headway before it stops believing in the route.
 const STUCK_TIME := 1.4
 
-## How long one press of "go that way" is worth. Long enough to cross most of the
-## yard, short enough that a ghost sent into a dead end is working for itself
-## again before it has wasted its whole life in there. Press again to renew it.
-const ORDERS_TIME := 7.0
+## How long it works towards where it was sent before going back to baiting on
+## its own. Long enough to cross most of the yard with a cable ride in the
+## middle, short enough that one sent into a dead end is working again rather
+## than wasting its whole life in there. Click again to renew it.
+const ORDERS_TIME := 11.0
+
+## How far it will walk to reach a cable that is on its way. Beyond this the
+## detour costs more than the climb is worth and it would rather take the long
+## way round on foot.
+const CABLE_SEARCH := 900.0
 
 ## Height difference that makes a cable worth taking rather than walking.
 const WORTH_A_CABLE := 140.0
@@ -257,18 +264,20 @@ var _threat := Vector2.INF
 ## away from them afterwards.
 var _hold := 0.0
 
-## The direction its caster last pointed it in: -1 left, 1 right, 0 for "your own
-## way". `climb` is the same idea vertically - -1 up, 1 down, 0 level - and only
-## decides whether a cable in reach is worth taking.
+## Where its caster clicked, in world space. INF is "your own devices".
 ##
-## A direction and not a destination, deliberately. A point on the map is a thing
-## you have to place accurately while somebody is shooting at you, and if you
-## miss by a room the ghost walks somewhere useless and stops. "That way" is one
-## press with no aiming budget, it is the same gesture on a mouse and a thumb,
-## and it stays meaningful however far it gets.
-var heading := 0
-var climb := 0
-## Seconds of walking the heading before it goes back to working for itself.
+## A place and not a heading. Pointing it "left" needed no aiming budget but also
+## carried no information - the useful thing to say to a decoy is *which floor*,
+## which is exactly what a heading cannot express and what the pulled-back view
+## exists to let you choose. Getting there is this body's problem, cables
+## included; see _next_leg.
+var destination := Vector2.INF
+## The cable it is currently walking to in order to change floors, if any.
+var _leg_cable: Zipline = null
+## Somewhere to get to first, because the direct way is blocked. See _turn_back.
+var _detour := Vector2.INF
+var _detour_left := 0.0
+## Seconds of working towards it before it goes back to baiting on its own.
 var _orders_left := 0.0
 ## Rising while it is making no headway, so a ghost jammed in a corner eventually
 ## tries elsewhere instead of leaning on the wall for the rest of its life.
@@ -365,8 +374,9 @@ func setup(gadget: GadgetData, look: Dictionary) -> void:
 	# rather than read off their body, because the two are not the same thing:
 	# the point of a decoy is that it wears the kit you had when you cast it, and
 	# goes on wearing it after you have dropped your plates and run.
-	# Which way the caster was pointing when they spent it.
-	var _sent := order_to(int(look.get("heading", 0)), int(look.get("climb", 0)))
+	# Where the caster clicked when they spent it.
+	var _sent := order_to(Vector2(
+		float(look.get("send_x", INF)), float(look.get("send_y", INF))))
 
 	facing = int(look.get("facing", 1))
 	aim_angle = float(look.get("aim_angle", 0.0))
@@ -540,7 +550,8 @@ func _spotted_by(watcher: Vector2) -> void:
 	# Found. Stop whatever it was doing - including the caster's orders, which
 	# have just been overtaken by the thing they were issued for - and hold.
 	if _mind == Mind.LURE or _mind == Mind.ORDERS:
-		heading = 0
+		destination = Vector2.INF
+		_leg_cable = null
 		_orders_left = 0.0
 		_mind = Mind.PEEK
 		_hold = PEEK_TIME
@@ -628,18 +639,20 @@ func _think(delta: float) -> void:
 				_target = Vector2.INF
 				_rethink = 0.0
 		Mind.ORDERS:
-			# Walking the way the caster pointed. The target is re-projected out
-			# in front of it every frame rather than fixed once, which is what
-			# makes this a heading instead of a destination: it cannot arrive,
-			# so it cannot stop early, and it keeps going that way until the
-			# clock runs out or somebody sees it.
+			# Working towards where it was sent. The leg is recomputed rather
+			# than fixed, so a cable it decides to take becomes the next thing it
+			# walks to and the destination is picked up again on the far side.
 			_orders_left -= delta
-			if heading == 0 or _orders_left <= 0.0:
+			_detour_left = maxf(_detour_left - delta, 0.0)
+			if not destination.is_finite() or _orders_left <= 0.0:
+				_stand_down()
+			elif _arrived_at(destination):
+				# There. Standing on the spot would be a decoy doing nothing, so
+				# it goes back to baiting - from where you put it, which is the
+				# whole point of having put it there.
 				_stand_down()
 			else:
-				_target = Vector2(
-					global_position.x + heading * 900.0,
-					global_position.y + climb * 320.0)
+				_target = _next_leg()
 		Mind.LURE:
 			_commit = maxf(_commit - delta, 0.0)
 			# A route it has just committed to is left alone, unless it has no
@@ -666,52 +679,141 @@ func _think(delta: float) -> void:
 ## target was therefore thrown away on the frame after it was picked, and the
 ## only cables it ever rode were the ones it happened to already be standing on.
 func _arrived() -> bool:
-	if not _target.is_finite():
-		return false
-	if absf(_target.x - global_position.x) > ARRIVED:
-		return false
-	return absf(_target.y - global_position.y) <= WORTH_A_CABLE
+	return _arrived_at(_target)
 
 
-## Point it somewhere. -1 left, 1 right, 0 to let it go back to its own devices;
-## `up_down` is -1 up, 1 down, 0 level.
+func _arrived_at(spot: Vector2) -> bool:
+	if not spot.is_finite():
+		return false
+	if absf(spot.x - global_position.x) > ARRIVED:
+		return false
+	return absf(spot.y - global_position.y) <= WORTH_A_CABLE
+
+
+## Send it somewhere. INF lets it go back to its own devices.
 ##
-## Public, and callable at any point in its life: the caster owns this body, so
-## re-pointing one that is already out is a local call on a node this machine is
+## Answers false if it is in no state to be sent anywhere - which is how the
+## caster's own click tells "re-point the one that is out" from "cast a new one".
+##
+## Public and callable at any point in its life: the caster owns this body, so
+## re-pointing one already out is a local call on a node this machine is
 ## authoritative for. Nothing goes over the wire and no RPC exists for it - the
-## walk that results replicates like any other movement, which is the whole
-## reason this is cheap enough to be a free, repeatable press.
-## Answers false if it is in no state to be pointed anywhere - which is how the
-## caster's own key tells "re-point the one that is out" from "cast a new one".
-func order_to(way: int, up_down: int) -> bool:
+## walk that results replicates like any other movement, which is what makes
+## re-pointing cheap enough to be free and repeatable.
+func order_to(spot: Vector2) -> bool:
 	if _dying > 0.0 or gone:
 		return false
-	heading = signi(way)
-	climb = signi(up_down)
-	if heading == 0:
+	destination = spot
+	if not destination.is_finite():
 		_stand_down()
 		return true
 	_mind = Mind.ORDERS
 	_orders_left = ORDERS_TIME
+	_leg_cable = null
 	_commit = 0.0
 	_stuck = 0.0
 	_was_at = INF
-	_target = Vector2(global_position.x + heading * 900.0,
-		global_position.y + climb * 320.0)
+	# Net calls setup() - and so this - *before* the node is in the tree, so
+	# there is no scene tree to search for cables in yet. The leg is worked out
+	# on the first physics frame instead; walking straight at the spot is the
+	# right thing to be doing until then anyway.
+	_target = _next_leg() if is_inside_tree() else spot
 	return true
 
 
 ## Back to working for itself.
 func _stand_down() -> void:
-	heading = 0
-	climb = 0
+	destination = Vector2.INF
+	_leg_cable = null
+	_detour = Vector2.INF
+	_detour_left = 0.0
 	_orders_left = 0.0
 	_mind = Mind.LURE
 	_target = Vector2.INF
 	_rethink = 0.0
 
 
-## Somewhere to run when it has been seen: away from the watcher, and further
+## The next thing to walk to on the way to where it was sent.
+##
+## Either the destination itself, or the near end of a cable that gets it onto
+## the right floor first. This is the whole of its route-finding and it is
+## deliberately one step deep: the level is a handful of floors joined by ropes,
+## so "walk there" and "walk to a rope, ride it, then walk there" covers almost
+## everything, and a real path search would be a lot of machinery for a body that
+## lives fourteen seconds.
+##
+## Without this the cables were decorative. It would only ever grab one that
+## happened to be within arm's reach as it walked past, so a decoy sent to the
+## floor above simply walked to the wall underneath the place you clicked and
+## stood there - which is what "it doesn't really factor the ziplines in" looks
+## like from the outside.
+func _next_leg() -> Vector2:
+	if not destination.is_finite():
+		return Vector2.INF
+	# Backing out of something it could not get past, for a moment.
+	if _detour_left > 0.0 and _detour.is_finite():
+		return _detour
+	# Same floor, near enough: just go.
+	if absf(destination.y - global_position.y) <= WORTH_A_CABLE:
+		_leg_cable = null
+		return destination
+
+	if _leg_cable and not is_instance_valid(_leg_cable):
+		_leg_cable = null
+	if _leg_cable == null:
+		_leg_cable = _cable_towards(destination.y)
+	if _leg_cable == null:
+		# Nothing to ride. Walk at it anyway - the floor it is on may well join
+		# up somewhere, and standing still is never the better answer.
+		return destination
+	return _end_of(_leg_cable, false)
+
+
+## The cable that gets it closest to a height, for the least walking.
+##
+## Scored on what riding it actually buys - how much of the climb it removes -
+## against how far it has to walk to reach it, so a rope on the far side of the
+## yard loses to a shorter one nearby that does most of the job.
+func _cable_towards(goal_y: float) -> Zipline:
+	var here := global_position
+	var climb := absf(here.y - goal_y)
+	var best: Zipline = null
+	var best_score := -INF
+	for node in get_tree().get_nodes_in_group(&"zipline"):
+		var line := node as Zipline
+		if line == null:
+			continue
+		if line == _last_cable and _cable_cooldown > 0.0:
+			continue
+		var near := _end_of(line, false)
+		var far := _end_of(line, true)
+		# Does the far end actually get it closer to the floor it wants?
+		var gain := climb - absf(far.y - goal_y)
+		if gain < WORTH_A_CABLE:
+			continue
+		var walk := here.distance_to(near)
+		if walk > CABLE_SEARCH:
+			continue
+		var score := gain - walk * 0.6
+		if score > best_score:
+			best_score = score
+			best = line
+	return best
+
+
+## One end of a cable: the one nearer this body, or the one further from it.
+func _end_of(line: Zipline, far_end: bool) -> Vector2:
+	var top := line.world_top()
+	var bottom := line.world_bottom()
+	var near := bottom
+	var far := top
+	if global_position.distance_to(top) < global_position.distance_to(bottom):
+		near = top
+		far = bottom
+	return far if far_end else near
+
+
+## Somewhere to run when it has been seen: away from the watcher, and further## Somewhere to run when it has been seen: away from the watcher, and further
 ## away from its caster than it already is.
 ##
 ## Both terms matter and the second is the one that is easy to forget. Running
@@ -859,10 +961,16 @@ func _steer(delta: float) -> void:
 		way = float(facing)
 	facing = 1 if way > 0.0 else -1
 
-	# A cable beats a ladder it does not have. If the target is well above or
-	# below and there is a rope within arm's reach - and it is not the rope it
-	# just got off - take it.
-	if absf(_target.y - global_position.y) > WORTH_A_CABLE:
+	# The cable this leg was walking to, once it is close enough to catch hold.
+	# Checked before the opportunistic grab below, because the one it chose is
+	# the one that goes where it is going.
+	if _leg_cable and is_instance_valid(_leg_cable):
+		if _leg_cable.in_reach(global_position):
+			_grab(_leg_cable)
+			return
+	elif absf(_target.y - global_position.y) > WORTH_A_CABLE:
+		# Not under orders, or no cable chosen: take a rope that happens to be
+		# in reach if the target is on another floor.
 		var cable := _cable_here()
 		if cable:
 			_grab(cable)
@@ -952,16 +1060,18 @@ func _can_land_across(way: float) -> bool:
 ## reasons it liked it the first time, and sends it straight back into the wall.
 func _turn_back(way: float) -> void:
 	velocity.x = 0.0
-	# Under orders there is nothing to turn back to. The heading re-projects the
-	# target in front of the body every frame, so a turn-back is overwritten
-	# before it can take a single step and it walks into the same wall until it
-	# dies - which is the original complaint arriving by a new route. A heading
-	# it cannot walk is a heading that is finished, so it goes back to working
-	# for itself and the caster can point it somewhere else.
+	var spot := Vector2(global_position.x - way * TURN_BACK, global_position.y)
+	# Under orders the leg is recomputed from the destination every frame, so a
+	# plain turn-back is overwritten before it can take a single step and the
+	# body walks into the same wall until it dies. So it is held as a detour
+	# instead, which _next_leg honours for a moment before going back to working
+	# towards where it was sent. Giving up outright on the first obstacle would
+	# be worse: most walls on this map have a way round.
 	if _mind == Mind.ORDERS:
-		_stand_down()
-		return
-	_target = Vector2(global_position.x - way * TURN_BACK, global_position.y)
+		_detour = spot
+		_detour_left = TURN_COMMIT
+		_leg_cable = null
+	_target = spot
 	_commit = TURN_COMMIT
 	_rethink = maxf(_rethink, TURN_COMMIT)
 	_stuck = 0.0
@@ -1023,13 +1133,16 @@ func _grab(cable: Zipline) -> void:
 	riding = true
 	global_position = cable.clamp_to_cable(global_position)
 	velocity = Vector2.ZERO
-	# Which way along it. Toward the end that gets it nearer to wherever it was
-	# going, which is the whole reason it got on.
+	# Which way along it. Toward the end that gets it nearer to wherever it is
+	# actually going, which is the whole reason it got on - and that is the
+	# destination when it has one, not the leg, because the leg is the cable
+	# itself and measuring against it would answer nothing.
+	var goal := destination if destination.is_finite() else _target
 	var to_top := INF
 	var to_bottom := 0.0
-	if _target.is_finite():
-		to_top = absf(_target.y - cable.world_top().y)
-		to_bottom = absf(_target.y - cable.world_bottom().y)
+	if goal.is_finite():
+		to_top = absf(goal.y - cable.world_top().y)
+		to_bottom = absf(goal.y - cable.world_bottom().y)
 	_ride_way = -1.0 if to_top < to_bottom else 1.0
 
 
@@ -1062,9 +1175,16 @@ func _ride(delta: float) -> bool:
 		return false
 
 	global_position = pinned
-	# Level with where it was going: step off here rather than riding to the end
+	# Level with where it is going: step off here rather than riding to the end
 	# of the rope, which is what a person does.
-	if _target.is_finite() and absf(global_position.y - _target.y) < 40.0:
+	#
+	# Measured against the destination, never against _target. Under orders
+	# _target is the cable's own near end - the thing it walked here to get on -
+	# so testing that means the body is already level with it the instant it
+	# grabs hold, and it steps straight back off. Thirty-four pixels of climb out
+	# of seven hundred, which reads as the rope not working at all.
+	var goal := destination if destination.is_finite() else _target
+	if goal.is_finite() and absf(global_position.y - goal.y) < 40.0:
 		_let_go(true)
 	return true
 
@@ -1076,10 +1196,14 @@ func _let_go(hop: bool) -> void:
 	_zipline = null
 	riding = false
 	velocity.y = -220.0 if hop else 0.0
-	# Wherever the rope let it out, that is a new place with new sightlines. The
-	# target it was walking to before it got on is on the floor it has just left.
+	# That leg is done. Under orders the next one is worked out from where it has
+	# ended up - which is usually "now just walk there" - and otherwise the floor
+	# it has arrived on is a new place with new sightlines, so it picks again.
+	_leg_cable = null
 	_target = Vector2.INF
 	_rethink = 0.0
+	if _mind == Mind.ORDERS:
+		_target = _next_leg()
 
 
 # --- being shot ---------------------------------------------------------------
@@ -1121,7 +1245,8 @@ func hit(at: Vector2, direction: Vector2) -> void:
 	# direction of travel is a good enough answer to "which way do I not want to
 	# be standing".
 	_threat = at - direction.normalized() * 600.0
-	heading = 0
+	destination = Vector2.INF
+	_leg_cable = null
 	_orders_left = 0.0
 	# Straight to the run, with no peek. It has already been found and shot at,
 	# and standing there holding somebody's eye is a thing you do to be noticed -
