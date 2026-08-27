@@ -1837,7 +1837,7 @@ func _update_projection_aim() -> void:
 		_cancel_projection_aim()
 		return
 
-	projection_mark = _ground_at(get_global_mouse_position())
+	projection_mark = _ground_at(_projection_pointer())
 
 	# Q again, or the right button, backs out. Both, because one of them is
 	# always the one you reach for and which it is depends on the player.
@@ -1887,13 +1887,36 @@ func _ground_at(spot: Vector2) -> Vector2:
 ## Opens the placing view. Costs nothing: the charge is spent by the click.
 func _begin_projection_aim() -> void:
 	projection_aiming = true
-	projection_mark = _ground_at(get_global_mouse_position())
-	_say_loot("click where it should go - Q or right click to call it off")
+	PlayerInput.touch_projection_point = Vector2.INF
+	projection_mark = _ground_at(_projection_pointer())
+	if PlayerInput.is_touch():
+		_say_loot("drag to choose the spot, then SEND")
+	else:
+		_say_loot("click where it should go - Q or right click to call it off")
+
+
+## Where the player is pointing while placing a decoy.
+##
+## A thumb when there is one, the cursor otherwise. Reading the mouse
+## unconditionally is what broke this on a phone: there is no cursor to move, so
+## the marker stayed wherever the pointer had last been left and the drag did
+## nothing - the pad was writing a mark that the very next physics frame threw
+## away.
+##
+## Before the first drag on touch, the character's own feet: somewhere real and
+## visible on the pulled-back view, rather than a corner of the world.
+func _projection_pointer() -> Vector2:
+	if PlayerInput.touch_projection_point.is_finite():
+		return PlayerInput.touch_projection_point
+	if PlayerInput.is_touch():
+		return global_position
+	return get_global_mouse_position()
 
 
 func _cancel_projection_aim() -> void:
 	projection_aiming = false
 	projection_mark = Vector2.INF
+	PlayerInput.touch_projection_point = Vector2.INF
 
 
 ## Sends it, either by casting a new one or by re-tasking the one already out.

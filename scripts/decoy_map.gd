@@ -21,7 +21,7 @@ extends RefCounted
 
 ## How finely the floor is sampled, in pixels. Fine enough to catch a crate-sized
 ## ledge, coarse enough that surveying the whole level is a few hundred rays.
-const STEP := 32.0
+const STEP := 24.0
 
 ## Floor samples within this of each other vertically are the same run. A gentle
 ## ramp stays one run; a step up becomes two.
@@ -31,7 +31,12 @@ const SAME_RUN := 22.0
 ## stretch of floor really continues into the next. Ankle and chest: a lip that
 ## only catches the ankles is a step it can walk up, but a slab across the chest
 ## is a wall, and floor found either side of a wall is not one run.
-const WALK_HEIGHTS := [18.0, 44.0]
+const WALK_HEIGHTS := [14.0, 30.0, 46.0]
+
+## How much clear air a surface needs above it before it counts as somewhere to
+## stand. About half a body: enough to throw out the insides of solid blocks
+## without throwing out genuinely low headroom a decoy could still walk under.
+const STAND_ROOM := 46.0
 
 ## How high a body can get itself, and how far it can cross. Runs closer than
 ## this are linked as a step rather than left disconnected.
@@ -70,7 +75,7 @@ static func run_at(tree: SceneTree, at: Vector2) -> int:
 			continue
 		# Below the feet, not above the head: the run you are on is the one you
 		# are standing on top of.
-		var gap: float = run.y - at.y
+		var gap: float = _height(run, at.x) - at.y
 		if gap < -60.0 or gap > 120.0:
 			continue
 		if absf(gap) < best_gap:
@@ -87,7 +92,8 @@ static func _nearest_run(at: Vector2) -> int:
 	var best_gap := INF
 	for i in _runs.size():
 		var run: Dictionary = _runs[i]
-		var on := Vector2(clampf(at.x, run.from, run.to), run.y)
+		var across := clampf(at.x, run.from, run.to)
+		var on := Vector2(across, _height(run, across))
 		var gap := at.distance_to(on)
 		if on.y < at.y:
 			gap += 400.0
@@ -219,7 +225,15 @@ static func _survey(tree: SceneTree) -> void:
 			if hit.is_empty():
 				break
 			var top: float = (hit.position as Vector2).y
-			found.append(top)
+			# Only if a body could stand on it. Descending through a thick slab
+			# turns up faces that are inside it - the underside of the floor you
+			# are standing on is a surface in every sense the raycast cares
+			# about, and none that a person does. Those became runs, routes were
+			# planned along them, and the preview line was drawn half a body
+			# below the floor it was describing. That is the "path goes right
+			# through the floor" report, and it is this.
+			if _headroom(space, Vector2(x, top)):
+				found.append(top)
 			# Down past this surface and out the underside of whatever it is.
 			y = top + 8.0
 			var through := PhysicsRayQueryParameters2D.create(
@@ -227,7 +241,12 @@ static func _survey(tree: SceneTree) -> void:
 			through.collision_mask = Layers.WORLD | Layers.ONE_WAY
 			through.hit_from_inside = true
 			var out := space.intersect_ray(through)
-			y = ((out.position as Vector2).y + 8.0) if out else (y + 40.0)
+			# Always further down than it started. A ray fired from inside a
+			# shape reports the point it started at, so without this the scan
+			# creeps eight pixels at a time through anything solid, finding a
+			# fresh "surface" at every step of the way.
+			y = maxf(((out.position as Vector2).y + 8.0) if out else (y + 40.0),
+				top + STAND_ROOM)
 		columns.append({"x": x, "tops": found})
 		x += STEP
 
@@ -246,13 +265,14 @@ static func _survey(tree: SceneTree) -> void:
 					continue
 				run.to = column.x
 				run.y = top
+				run.tops.append(top)
 				run.used = true
 				carried.append(run)
 				joined = true
 				break
 			if not joined:
 				carried.append({"from": column.x, "to": column.x, "y": top,
-					"used": true})
+					"used": true, "tops": [top]})
 		for run in open_runs:
 			if not run.used:
 				_keep(run)
@@ -264,6 +284,20 @@ static func _survey(tree: SceneTree) -> void:
 
 	_link_runs(space)
 	_link_cables(tree)
+
+
+## Whether there is room to stand on a surface, as opposed to it merely being a
+## face the physics engine can name.
+static func _headroom(space: PhysicsDirectSpaceState2D, on: Vector2) -> bool:
+	var probe := PhysicsRayQueryParameters2D.create(
+		on - Vector2(0.0, 6.0), on - Vector2(0.0, STAND_ROOM))
+	probe.collision_mask = Layers.WORLD
+	# Reported even when the probe begins inside something, which is the whole
+	# point: a face found part way down a solid block has its headroom checked
+	# from a spot buried in that same block, and a ray that ignores the shape it
+	# starts in comes back saying the air is clear.
+	probe.hit_from_inside = true
+	return space.intersect_ray(probe).is_empty()
 
 
 ## Whether a body can actually get from one floor sample to the next.
@@ -288,7 +322,77 @@ static func _walkable_between(space: PhysicsDirectSpaceState2D, from_x: float,
 ## Runs shorter than a body are not places, they are noise off a corner.
 static func _keep(run: Dictionary) -> void:
 	if run.to - run.from >= STEP:
-		_runs.append({"from": run.from, "to": run.to, "y": run.y})
+		_runs.append({"from": run.from, "to": run.to, "y": run.y,
+			"tops": PackedFloat32Array(run.tops)})
+
+
+## How high the floor is at a point along a run.
+##
+## Runs used to carry a single height - whatever the last column sampled - and
+## every point along one was treated as being at it. On level ground that is
+## true and on a ramp it is nonsense: the route would place a link halfway up a
+## slope at the height of its foot, the body would walk to a spot inside the
+## hill, and the drawn line would cut straight through the floor it was
+## describing. Both of those were reported. The floor is now remembered column by
+## column and read back by interpolation, so a slope is a slope.
+static func _height(run: Dictionary, x: float) -> float:
+	var tops: PackedFloat32Array = run.tops
+	if tops.is_empty():
+		return run.y
+	var along: float = (x - run.from) / STEP
+	var i := int(floorf(along))
+	if i < 0:
+		return tops[0]
+	if i >= tops.size() - 1:
+		return tops[tops.size() - 1]
+	return lerpf(tops[i], tops[i + 1], along - float(i))
+
+
+## The floor under a point, followed along its actual shape.
+##
+## Handed to the preview line so it draws the ground rather than a straight
+## segment between two points that happen to be on it - which over a ramp or a
+## dip is a line through solid rock.
+static func walk_line(tree: SceneTree, from: Vector2, to: Vector2) -> PackedVector2Array:
+	_survey(tree)
+	var line := PackedVector2Array()
+	var step: float = STEP if to.x >= from.x else -STEP
+	var x: float = from.x
+	# Carried from the last sample, so the line follows one continuous surface
+	# instead of jumping to whichever floor happens to be nearest in the
+	# absolute. Under a catwalk the nearest floor changes twice on the way past
+	# it, and a line that took the bait would dive through the walkway and come
+	# back out.
+	var y: float = _surface_near(x, from.y)
+	line.append(Vector2(x, y))
+	while absf(to.x - x) > STEP:
+		x += step
+		y = _surface_near(x, y)
+		line.append(Vector2(x, y))
+	line.append(Vector2(to.x, _surface_near(to.x, y)))
+	return line
+
+
+## The height of the floor at a point, taking the surface nearest the one the
+## line is already following.
+##
+## Walking a single run's profile from end to end was not enough: a leg can run
+## off the end of the run it started on, and past that the profile has nothing
+## to say, so it held the last height it knew and drew a level line into the side
+## of whatever came next. Eleven per cent of the drawn route was inside solid
+## geometry, which is the "path goes right through the floor" report.
+static func _surface_near(x: float, hint: float) -> float:
+	var best := hint
+	var best_gap := INF
+	for run in _runs:
+		if x < run.from - STEP or x > run.to + STEP:
+			continue
+		var high: float = _height(run, clampf(x, run.from, run.to))
+		var gap: float = absf(high - hint)
+		if gap < best_gap:
+			best_gap = gap
+			best = high
+	return best
 
 
 ## Steps between neighbouring runs, and drops off their ends.
@@ -300,29 +404,40 @@ static func _link_runs(space: PhysicsDirectSpaceState2D) -> void:
 				continue
 			var two: Dictionary = _runs[b]
 
-			if absf(one.y - two.y) <= STEP_UP:
-				# Overlapping in x: a ledge that begins partway along this run,
-				# which is the commonest shape there is - a crate against a wall,
-				# a step up onto a walkway. Linked at the overlap, because there
-				# is no gap to cross at all.
-				var over_from: float = maxf(one.from, two.from)
-				var over_to: float = minf(one.to, two.to)
-				if over_from <= over_to:
-					var mid := (over_from + over_to) * 0.5
+			# Overlapping in x: a ledge that begins partway along this run,
+			# which is the commonest shape there is - a crate against a wall, a
+			# step up onto a walkway. Linked at the overlap, because there is no
+			# gap to cross at all.
+			#
+			# Heights are read at the place they are compared, not off the run
+			# as a whole. Two ramps can be a body's height apart at one end and
+			# touching at the other, and asking "how far apart are these runs"
+			# has no answer for them - only "how far apart are they here" does.
+			var over_from: float = maxf(one.from, two.from)
+			var over_to: float = minf(one.to, two.to)
+			if over_from <= over_to:
+				var mid := (over_from + over_to) * 0.5
+				var up: float = _height(one, mid)
+				var down: float = _height(two, mid)
+				if absf(up - down) <= STEP_UP:
 					_join(a, b, {"to": b, "kind": "step",
-						"at": Vector2(mid, one.y),
-						"lands": Vector2(mid, two.y),
+						"at": Vector2(mid, up),
+						"lands": Vector2(mid, down),
 						"cost": COST_STEP})
-				else:
-					# Not overlapping: a gap, jumpable if it is short enough.
-					for pair in [[one.to, two.from], [one.from, two.to]]:
-						var gap: float = absf(pair[0] - pair[1])
-						if gap > STEP_ACROSS:
-							continue
-						_join(a, b, {"to": b, "kind": "step",
-							"at": Vector2(pair[0], one.y),
-							"lands": Vector2(pair[1], two.y),
-							"cost": gap + COST_STEP})
+			else:
+				# Not overlapping: a gap, jumpable if it is short enough.
+				for pair in [[one.to, two.from], [one.from, two.to]]:
+					var gap: float = absf(pair[0] - pair[1])
+					if gap > STEP_ACROSS:
+						continue
+					var lip: float = _height(one, pair[0])
+					var far: float = _height(two, pair[1])
+					if absf(lip - far) > STEP_UP:
+						continue
+					_join(a, b, {"to": b, "kind": "step",
+						"at": Vector2(pair[0], lip),
+						"lands": Vector2(pair[1], far),
+						"cost": gap + COST_STEP})
 
 	_link_drops()
 
@@ -341,20 +456,25 @@ static func _link_drops() -> void:
 	for a in _runs.size():
 		var one: Dictionary = _runs[a]
 		for lip in [one.from, one.to]:
+			var lip_y: float = _height(one, lip)
 			var best := -1
 			var best_y := INF
 			for b in _runs.size():
 				if a == b:
 					continue
 				var two: Dictionary = _runs[b]
-				if two.y <= one.y + STEP_UP or two.y > one.y + DROP_REACH:
-					continue
 				if lip < two.from - DROP_OUT or lip > two.to + DROP_OUT:
+					continue
+				# Measured under the lip itself. A run that is far below this one
+				# on average can still rise to meet it, and on a ramp that is the
+				# difference between a step and a two storey fall.
+				var under: float = _height(two, clampf(lip, two.from, two.to))
+				if under <= lip_y + STEP_UP or under > lip_y + DROP_REACH:
 					continue
 				# Highest of the candidates: the one it meets first on the way
 				# down.
-				if two.y < best_y:
-					best_y = two.y
+				if under < best_y:
+					best_y = under
 					best = b
 			if best < 0:
 				continue
@@ -367,8 +487,8 @@ static func _link_drops() -> void:
 			# difference between "go there" and "step off this side".
 			var way := 1.0 if is_equal_approx(lip, one.to) else -1.0
 			_join(a, best, {"to": best, "kind": "drop", "way": way,
-				"at": Vector2(lip, one.y),
-				"lands": Vector2(at, land.y),
+				"at": Vector2(lip, lip_y),
+				"lands": Vector2(at, _height(land, at)),
 				"cost": absf(at - lip) + COST_DROP})
 
 
@@ -380,8 +500,16 @@ static func _link_cables(tree: SceneTree) -> void:
 			continue
 		var top := line.world_top()
 		var bottom := line.world_bottom()
+		# The nearest floor when an end is not sitting on one. A rope anchored a
+		# little above its platform, or over the lip of it, otherwise joins
+		# nothing at all - which is two of this level's twenty-two ropes simply
+		# missing from the map, and a decoy that cannot see the only way up.
 		var up := run_at(tree, top)
+		if up < 0:
+			up = _nearest_run(top)
 		var down := run_at(tree, bottom)
+		if down < 0:
+			down = _nearest_run(bottom)
 		if up < 0 or down < 0 or up == down:
 			continue
 		_join(down, up, {"to": up, "kind": "cable", "cable": line,

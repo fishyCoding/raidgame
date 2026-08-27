@@ -169,6 +169,12 @@ const SETTLE_TIME := 0.45
 ## How often the route is worked out again. Cheap - a search over a few dozen
 ## runs - so this is about the body not twitching between two equal routes
 ## rather than about the cost of asking.
+##
+## Tried at one second and two while chasing a body that changed its mind at a
+## lip and walked seven hundred pixels the wrong way. Both measured worse than
+## this across the soak, and not in a straight line either - eighteen journeys is
+## a small enough sample that a few points of difference is noise. Left where the
+## evidence puts it rather than where the story about flip-flopping wanted it.
 const REPLAN_TIME := 0.5
 
 ## How far from a planned lip still counts as being at it. Wide enough to cover
@@ -1519,6 +1525,9 @@ func _let_go(hop: bool) -> void:
 	_leg_cable = null
 	_leg_end = Vector2.INF
 	_target = Vector2.INF
+	# A new floor is a new set of options: ask again rather than walking on with
+	# a plan drawn up from the other end of the rope.
+	_replan = 0.0
 	_rethink = 0.0
 	if _mind == Mind.ORDERS:
 		_target = _next_leg()

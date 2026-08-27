@@ -385,13 +385,19 @@ func _drive_projection() -> void:
 	pass
 
 
+## Where the thumb is, handed to the character rather than written onto it.
+##
+## It used to set `projection_mark` directly, which did nothing at all: the pad
+## runs in _process and the character re-derives the mark from the mouse in
+## _physics_process, so every frame the thumb placed the marker the mouse put it
+## straight back. On a phone there is no mouse to put it anywhere sensible, so
+## the marker sat wherever the pointer happened to have been left.
 func _mark_at(at: Vector2) -> void:
-	var player := Net.local_player
-	if player:
-		player.projection_mark = _world_at(at)
+	PlayerInput.touch_projection_point = _world_at(at)
 
 
 func _cancel_projection() -> void:
+	PlayerInput.touch_projection_point = Vector2.INF
 	var player := Net.local_player
 	if player and player.has_method(&"_cancel_projection_aim"):
 		player._cancel_projection_aim()

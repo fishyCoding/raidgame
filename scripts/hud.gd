@@ -22,8 +22,6 @@ const ROUTE_LINE := Color(0.95, 0.26, 0.24)
 
 ## The same planner the ghost walks with, so the drawn route and the walked route
 ## are one piece of code. See decoy_route.gd.
-const ROUTE := preload("res://scripts/decoy_route.gd")
-
 ## The same surveyed map the decoy walks by, so the line and the walk are the
 ## same answer to the same question rather than two guesses that agree by luck.
 const MAP := preload("res://scripts/decoy_map.gd")
@@ -609,7 +607,6 @@ func _draw_projection_route(to: Vector2) -> void:
 		_draw_route_stop(to)
 		return
 
-	var space := _player.get_world_2d().direct_space_state
 	for leg in legs:
 		if leg.kind == "cable":
 			# A rope genuinely is a straight line through the air, so this one
@@ -625,11 +622,11 @@ func _draw_projection_route(to: Vector2) -> void:
 			_draw_route_leg([leg.from, leg.to] as PackedVector2Array, 2.0, 0.7)
 			continue
 
-		# A walk is not straight. Followed over the ground it would be walked on,
-		# so the line bends over the floor instead of cutting through the room -
-		# a straight line here is a promise of a walk nothing can take.
-		var walk: Dictionary = ROUTE.trace_walk(space, leg.from, leg.to)
-		_draw_route_leg(walk.line, 2.0, 0.5)
+		# A walk is not straight. Drawn along the floor the map surveyed, so the
+		# line rises over a ramp and dips into a hollow instead of cutting the
+		# corner - a straight segment between two points that are both on the
+		# ground still goes through the ground everywhere in between.
+		_draw_route_leg(MAP.walk_line(get_tree(), leg.from, leg.to), 2.0, 0.5)
 
 
 ## One run of the route, in screen space. Silently drops any leg the camera

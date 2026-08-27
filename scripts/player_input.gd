@@ -24,6 +24,15 @@ const STICK_DEADZONE := 0.25
 ## is placed, not pointed. Vector2.INF means "not set, use the cursor".
 var touch_aim_point := Vector2.INF
 
+## Where a thumb has dragged the projection's marker, or INF while nobody is
+## placing one.
+##
+## Its own field rather than a reuse of `touch_aim_point`. That one belongs to
+## the throw pad, which clears it on its own schedule, and a decoy's marker being
+## wiped halfway through placing it because a grenade pill decided it was
+## finished would be a very hard thing to explain to somebody playing.
+var touch_projection_point := Vector2.INF
+
 ## Set true for one frame by the SEND button on the touch projection pad, which
 ## is that scheme's answer to clicking the level.
 var touch_projection_send := false
