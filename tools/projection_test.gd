@@ -222,6 +222,7 @@ func _run() -> void:
 
 	print("\n-- throwing with a thumb --")
 	await _check_touch_throw(main, player)
+	await _check_touch_projection(main, player)
 
 	print("\n%s" % ("PASS" if _ok else "FAIL"))
 	quit(0 if _ok else 1)
@@ -468,6 +469,100 @@ func _check_touch_throw(main: Node, player: Node2D) -> void:
 	_check_that(seen["rearmed"], "a second grenade arms the same way")
 	_check_that(seen["cancelled"], "CANCEL has to put the grenade back")
 	_check_that(seen["let_go"], "and let go of the target")
+
+
+## Placing a decoy with a thumb.
+##
+## The ult is castable on a phone - the ULT pill drives the real action - but
+## being able to cast it is not the same as being able to aim it, and aiming was
+## broken in a way no desktop test could see: the pad wrote the marker in
+## _process and the character re-derived it from the mouse in _physics_process,
+## so every frame the thumb placed it, a cursor that does not exist on a phone
+## put it straight back.
+##
+## Results are collected and the control scheme put back before a single assert.
+## Setting the scheme writes user://controls.cfg, which is the same file the real
+## game reads on launch, so a test that fails an assert first leaves the machine
+## - editor, exported build and every later headless run - stuck in touch mode.
+func _check_touch_projection(main: Node, player: Node2D) -> void:
+	print("
+-- placing a decoy with a thumb --")
+	var input: Node = root.get_node("PlayerInput")
+	var pad: Control = main.get_node("HUD/TouchControls")
+	var was: int = input.control_scheme
+	input.control_scheme = 1 # Controls.TOUCH
+	await process_frame
+
+	var seen := {}
+	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
+	var ult: Object = maker.from_gadget(load("res://resources/gadgets/projection.tres"))
+	ult.charge = 1.0
+	player.inventory.set_ultimate(ult)
+
+	player._begin_projection_aim()
+	await physics_frame
+	# Before any drag there has to be a marker somewhere real. On a phone the
+	# obvious somewhere is the caster's own feet; what it must not be is
+	# wherever a mouse was last left, which on a touch build is the origin.
+	var start_gap: float = player.projection_mark.distance_to(player.global_position)
+	print("  opened=%s, marker starts %.0f px from the caster" % [
+		player.projection_aiming, start_gap])
+	seen["opened"] = player.projection_aiming
+	seen["starts_near"] = player.projection_mark.is_finite() and start_gap < 400.0
+
+	# A thumb on the map. Given in world space directly - turning a screen touch
+	# into a world point is the camera's job and is not what this is testing.
+	var spot: Vector2 = player.global_position + Vector2(300.0, 0.0)
+	input.touch_projection_point = spot
+	await physics_frame
+	await physics_frame
+	print("  thumb at %s -> marker %s" % [str(spot.round()),
+		str(player.projection_mark.round())])
+	seen["follows"] = absf(player.projection_mark.x - spot.x) < 60.0
+
+	# And the pad has to be the thing that writes it.
+	pad._mark_at(Vector2(200.0, 200.0))
+	seen["pad_writes"] = input.touch_projection_point.is_finite()
+
+	# SEND casts it, the same as a left click does.
+	input.touch_projection_point = spot
+	await physics_frame
+	# Reached through the tree, not by name. A --script tool compiles without the
+	# autoloads, so naming Net here fails to compile the whole file.
+	var net: Node = root.get_node("Net")
+	var before: Object = net.projection_for(net.peer_id())
+	input.touch_projection_send = true
+	await physics_frame
+	await physics_frame
+	var after: Object = net.projection_for(net.peer_id())
+	print("  SEND: aiming=%s, decoy out=%s (was %s)" % [
+		player.projection_aiming, after != null, before != null])
+	seen["sent"] = after != null
+	seen["closed"] = not player.projection_aiming
+
+	# CANCEL closes it and lets go of the thumb's spot.
+	player._begin_projection_aim()
+	await physics_frame
+	pad._cancel_projection()
+	await physics_frame
+	print("  CANCEL: aiming=%s, spot cleared=%s" % [
+		player.projection_aiming, not input.touch_projection_point.is_finite()])
+	seen["cancelled"] = not player.projection_aiming
+	seen["let_go"] = not input.touch_projection_point.is_finite()
+
+	# Before a single assert. See the note above this function.
+	input.control_scheme = was
+	await process_frame
+
+	_check_that(seen["opened"], "the placing view has to open on touch")
+	_check_that(seen["starts_near"],
+		"and start the marker somewhere real, not where a mouse was left")
+	_check_that(seen["follows"], "a thumb has to move the marker and have it stay moved")
+	_check_that(seen["pad_writes"], "the pad has to be what writes the spot")
+	_check_that(seen["sent"], "SEND has to actually cast the decoy")
+	_check_that(seen["closed"], "and close the placing view")
+	_check_that(seen["cancelled"], "CANCEL has to close it")
+	_check_that(seen["let_go"], "and let go of the spot")
 
 
 ## Every keyboard action in the map has to be printed somewhere on the legend.
