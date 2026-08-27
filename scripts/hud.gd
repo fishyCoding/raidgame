@@ -15,6 +15,14 @@ const BAD := Color(0.85, 0.42, 0.42)
 const OVERLOAD := Color(1.0, 0.68, 0.28)
 const RECON := Color(0.55, 0.85, 0.95, 0.95)
 const PROJECTION := Color(0.62, 0.78, 1.0)
+## The route line while a decoy is being placed. Red, and the only red on the
+## screen that is not damage - it is a claim about where a body is going to walk,
+## and it should read as a line drawn on a map rather than as part of the ghost.
+const ROUTE_LINE := Color(0.95, 0.26, 0.24)
+
+## The same planner the ghost walks with, so the drawn route and the walked route
+## are one piece of code. See decoy_route.gd.
+const ROUTE := preload("res://scripts/decoy_route.gd")
 
 ## How far the weapon panel steps back while fully aimed. Not all the way to
 ## invisible: ammo still matters mid-fight.
@@ -552,11 +560,7 @@ func _draw_projection_aim() -> void:
 	if not at.is_finite():
 		return
 
-	# A line from the character to the mark, so the distance reads as a journey
-	# rather than as a coordinate. Faint, and behind the marker.
-	var from := _to_screen(_player.global_position)
-	if from.is_finite():
-		draw_line(from, at, Color(PROJECTION, 0.28), 2.0, true)
+	_draw_projection_route(spot)
 
 	var beat := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
 	draw_arc(at, lerpf(16.0, 22.0, beat), 0.0, TAU, 32, PROJECTION, 2.0, true)
@@ -571,6 +575,54 @@ func _draw_projection_aim() -> void:
 		hint = "drag to place it, SEND to commit"
 	draw_string(_font, Vector2(0.0, size.y * 0.16), hint,
 		HORIZONTAL_ALIGNMENT_CENTER, size.x, 18, Color(PROJECTION, 0.85))
+
+
+## The route it will actually walk, in red, over the level.
+##
+## Not a straight line from you to the cursor. The thing that makes this control
+## worth having is that a decoy sent upstairs *takes the rope* - and a straight
+## line implies it flies, which is both wrong and much more useful than what
+## really happens. Every corner drawn here is a corner the body turns.
+##
+## Computed by DecoyRoute, the same file the ghost plans with, so the two cannot
+## drift apart. It is planned from where the ghost is if one is already out -
+## re-sending an existing decoy is a journey from wherever it has got to, not
+## from you - and from the caster otherwise.
+##
+## Red on purpose. Everything else this gadget draws is the pale blue that means
+## "projection"; the route is the one part that is a claim about the future, and
+## it wants to read as a line on a map rather than as more of the ghost.
+func _draw_projection_route(to: Vector2) -> void:
+	var out := Net.projection_for(Net.peer_id())
+	var from: Vector2 = _player.global_position
+	var skip: Zipline = null
+	if out and not bool(out.get("gone")):
+		from = out.global_position
+		skip = out.get("_last_cable") as Zipline
+		if float(out.get("_cable_cooldown")) <= 0.0:
+			skip = null
+
+	var route: PackedVector2Array = ROUTE.plan(get_tree(), from, to, skip)
+	if route.size() < 2:
+		return
+
+	var screen := PackedVector2Array()
+	for point in route:
+		var at := _to_screen(point)
+		if not at.is_finite():
+			return
+		screen.append(at)
+
+	# The legs, then the corners on top. Cable rides are drawn heavier than the
+	# walks because they are the part of the plan worth reading: everything else
+	# is "and then it walks", and a rope is a decision.
+	for i in screen.size() - 1:
+		var riding := i % 2 == 1 and screen.size() > 2 and i < screen.size() - 2
+		draw_line(screen[i], screen[i + 1],
+			Color(ROUTE_LINE, 0.9 if riding else 0.5),
+			4.0 if riding else 2.0, true)
+	for i in range(1, screen.size() - 1):
+		draw_circle(screen[i], 5.0, Color(ROUTE_LINE, 0.85))
 
 
 ## World space to screen space, through whichever camera is live. INF when there

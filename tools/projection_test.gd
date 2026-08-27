@@ -205,6 +205,9 @@ func _run() -> void:
 	print("\n-- and it takes a rope to get to another floor --")
 	await _check_routes_by_cable(main, player)
 
+	print("\n-- the drawn route is the walked route --")
+	_check_route_preview(main)
+
 	print("\n-- and it does not bounce off walls --")
 	await _check_not_jumpy(main, player)
 
@@ -840,7 +843,57 @@ func _check_routes_by_cable(main: Node, player: Node2D) -> void:
 		ghost.queue_free()
 
 
-## It should not spend its life bouncing off walls.## It should not spend its life bouncing off walls.## It should not spend its life bouncing off walls.
+## The red line has to be the route the body actually walks.
+##
+## A preview computed separately from the behaviour is a preview that lies, and a
+## line promising a cable ride the ghost then ignores is worse than drawing
+## nothing at all. Both come out of decoy_route.gd; this checks that what the
+## plan says is what the body then does.
+func _check_route_preview(main: Node) -> void:
+	var route: Object = (load("res://scripts/decoy_route.gd") as GDScript).new()
+	var cables: Array = get_nodes_in_group(&"zipline")
+	if cables.is_empty():
+		print("  no cables to plan through - skipped")
+		return
+	var cable: Node2D = cables[0]
+	for line in cables:
+		if line.cable_length() > cable.cable_length():
+			cable = line
+
+	# Same floor: a straight walk, two points and no rope.
+	# `self` is the tree in a --script tool; there is no get_tree() to call.
+	var flat: PackedVector2Array = route.plan(
+		self, cable.world_bottom(), cable.world_bottom() + Vector2(300.0, 0.0))
+	print("  a walk on one floor plans %d points" % flat.size())
+	_check_that(flat.size() == 2, "a route on one floor is just here and there")
+
+	# Another floor: the rope has to be in the plan, as its two ends, in the
+	# order it would be ridden.
+	var up: PackedVector2Array = route.plan(
+		self, cable.world_bottom(), cable.world_top() + Vector2(200.0, 0.0))
+	print("  a walk to the floor above plans %d points" % up.size())
+	_check_that(up.size() >= 4, "a route to another floor goes via a cable")
+	if up.size() < 4:
+		return
+	_check_that((up[1] as Vector2).distance_to(cable.world_bottom()) < 2.0,
+		"boarding at the end on this floor")
+	_check_that((up[2] as Vector2).distance_to(cable.world_top()) < 2.0,
+		"and leaving at the other")
+
+	# And the ghost picks the same rope the line drew.
+	var ghost: Node2D = (load("res://scenes/projection.tscn") as PackedScene).instantiate()
+	ghost.name = "Ghost_previewprobe"
+	main.get_node("Players").add_child(ghost)
+	ghost.global_position = cable.world_bottom()
+	var _sent: bool = ghost.order_to(cable.world_top() + Vector2(200.0, 0.0))
+	var walked: Object = ghost._leg_cable
+	print("  the line goes via %s, the body chose %s" % [
+		cable.name, walked.name if walked else "nothing"])
+	_check_that(walked == cable, "the body rides the cable the line drew")
+	ghost.queue_free()
+
+
+## It should not spend its life bouncing off walls.
 ##
 ## The reported symptom was "jumps around a lot and runs into walls", which was
 ## two missing things rather than one: no cooldown between jumps, and no question

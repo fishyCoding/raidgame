@@ -38,6 +38,10 @@ extends CharacterBody2D
 ## Group everything that wants to find one of these looks in.
 const GROUP := &"projection"
 
+## How it works out where to walk. Shared with the HUD, which draws the same
+## route as a line while the caster is choosing one - see decoy_route.gd.
+const ROUTE := preload("res://scripts/decoy_route.gd")
+
 ## Run, taken from Player so the gait reads as the same person. A ghost that
 ## moved at its own speed would be a tell you could measure with a stopwatch.
 const MAX_SPEED := 260.0
@@ -123,6 +127,11 @@ const FLOOR_REACH := 130.0
 const WALL_PROBE := 20.0
 const LEDGE_PROBE := 26.0
 const LEDGE_DROP := 16.0
+
+## How long after stepping off a cable before it will drive itself sideways
+## again. Just long enough to land: a body that steers while airborne cannot see
+## the ledge it is steering over.
+const SETTLE_TIME := 0.45
 
 ## Least time between two jumps.
 ##
@@ -302,6 +311,10 @@ var _was_at := INF
 ## it has just committed to.
 var _jump_cool := 0.0
 var _commit := 0.0
+## Counts down after a cable release. See _let_go.
+var _settle_left := 0.0
+## How many times it has backed away from something on the current order.
+var _refusals := 0
 var _watch_timer := 0.0
 ## Where the rivals were at the last sweep. Refreshed by _watch, read by the
 ## route search, so choosing somewhere to walk costs no extra raycasts against
@@ -758,6 +771,7 @@ func order_to(spot: Vector2) -> bool:
 	_orders_left = ORDERS_TIME
 	_leg_cable = null
 	_leg_end = Vector2.INF
+	_refusals = 0
 	# A fresh order is a clean slate, cable grudge included. CABLE_MEMORY
 	# stops it riding one rope up and down in front of everybody while it is
 	# baiting on its own; under orders it is the wrong rule entirely, because
@@ -830,72 +844,25 @@ func _next_leg() -> Vector2:
 
 ## The cable that gets it closest to a height, for the least walking.
 ##
-## Three rules, and the first two were both missing, which is most of why the
-## routing was bad:
-##
-## 1. **The end it gets on at has to be on this floor.** Ends were picked by
-##    straight-line distance before, so the "near" end of a cable running through
-##    the ceiling directly overhead measured as twenty pixels away - and the
-##    ghost would set off towards a point it had no way of reaching, stand under
-##    it, and give up. Which end is on your floor is a question about height, not
-##    about distance.
-## 2. **Walking cost is horizontal.** It walks; it does not fly. A rope a hundred
-##    pixels away and two floors up is not a hundred pixels away.
-## 3. Riding it has to actually buy height towards where it is going.
-##
-## Only one hop is chosen at a time and that is deliberate: after a ride it works
-## the next leg out from where it has ended up, so two- and three-cable journeys
-## fall out of the same rule without any of the machinery a real path search
-## would need. Fourteen seconds is not long enough to plan further than the next
-## rope anyway.
+## Delegated to DecoyRoute, which is also what draws the red line over the level
+## while the caster is choosing where to send it. One set of rules, so the line
+## and the walk cannot disagree - a preview promising a rope the body then
+## ignores is worse than no preview at all.
 func _cable_towards(goal_y: float) -> Zipline:
-	var here := global_position
-	var climb := absf(here.y - goal_y)
-	var best: Zipline = null
-	var best_score := -INF
+	var skip: Array = []
+	if _last_cable and _cable_cooldown > 0.0:
+		skip.append(_last_cable)
+	var line := ROUTE.best_cable(get_tree(), global_position, goal_y, skip)
 	_leg_end = Vector2.INF
-
-	for node in get_tree().get_nodes_in_group(&"zipline"):
-		var line := node as Zipline
-		if line == null:
-			continue
-		if line == _last_cable and _cable_cooldown > 0.0:
-			continue
-
-		var ends := _ends_of(line)
-		var near: Vector2 = ends[0]
-		var far: Vector2 = ends[1]
-		# Has to start somewhere it can walk to.
-		if absf(near.y - here.y) > FLOOR_REACH:
-			continue
-		# Has to finish nearer the floor it wants than it is now.
-		var gain := climb - absf(far.y - goal_y)
-		if gain < WORTH_A_CABLE:
-			continue
-		var walk := absf(near.x - here.x)
-		if walk > CABLE_SEARCH:
-			continue
-
-		var score := gain - walk * 0.8
-		if score > best_score:
-			best_score = score
-			best = line
-			_leg_end = near
-	return best
+	if line:
+		_leg_end = (ROUTE.ends_of(line, global_position) as Array)[0]
+	return line
 
 
-## A cable's two ends, ordered: the one on this body's floor first.
-##
-## By height rather than by distance. The end you can walk to is the one at your
-## own level, and a rope passing through the floor above has its far end closer
-## to you in a straight line than its near end is - which is exactly the case
-## that used to send the ghost to stand underneath a cable it could not reach.
+## A cable's two ends, near first. A thin passthrough, so anything asking this
+## body the question gets the same answer the planner would give.
 func _ends_of(line: Zipline) -> Array:
-	var top := line.world_top()
-	var bottom := line.world_bottom()
-	if absf(top.y - global_position.y) < absf(bottom.y - global_position.y):
-		return [top, bottom]
-	return [bottom, top]
+	return ROUTE.ends_of(line, global_position)
 
 
 ## Somewhere to run when it has been seen: away from the watcher, and further## Somewhere to run when it has been seen: away from the watcher, and further
@@ -1037,6 +1004,14 @@ func _cable_here() -> Zipline:
 ## Turns a target into a heading, a jump and a cable.
 func _steer(delta: float) -> void:
 	_jump_cool = maxf(_jump_cool - delta, 0.0)
+	# Freshly off a rope and still in the air: let it land before it starts
+	# driving itself anywhere.
+	if _settle_left > 0.0:
+		_settle_left = maxf(_settle_left - delta, 0.0)
+		if not is_on_floor():
+			velocity.x = move_toward(velocity.x, 0.0, GROUND_FRICTION * delta)
+			return
+		_settle_left = 0.0
 	if not _target.is_finite():
 		velocity.x = move_toward(velocity.x, 0.0, GROUND_FRICTION * delta)
 		return
@@ -1075,10 +1050,14 @@ func _steer(delta: float) -> void:
 				_turn_back(way)
 				return
 		elif ledge:
-			# A drop. Worth taking at a run when there is something to land on,
-			# never worth taking otherwise - walking off a catwalk to reach a
-			# target on the floor below is how it used to spend its life falling.
-			if _mind == Mind.BREAK and _can_land_across(way):
+			# A drop. Three different right answers, and picking the wrong one is
+			# what produced the pacing:
+			if _mind == Mind.ORDERS and destination.y > global_position.y + FLOOR_REACH:
+				# Sent somewhere below. The edge is the way down, so take it -
+				# nothing here hurts a body that falls, and refusing meant
+				# walking to the lip, backing off, walking to the lip again.
+				pass
+			elif _mind == Mind.BREAK and _can_land_across(way):
 				_hop()
 			else:
 				_turn_back(way)
@@ -1153,6 +1132,13 @@ func _turn_back(way: float) -> void:
 	# towards where it was sent. Giving up outright on the first obstacle would
 	# be worse: most walls on this map have a way round.
 	if _mind == Mind.ORDERS:
+		# Twice is a barrier, not an obstacle. Backing off, walking forward,
+		# backing off again is the pacing people see - so the second refusal
+		# ends the order rather than starting another lap of it.
+		_refusals += 1
+		if _refusals >= 2:
+			_stand_down()
+			return
 		_detour = spot
 		_detour_left = TURN_COMMIT
 		_leg_cable = null
@@ -1280,7 +1266,15 @@ func _let_go(hop: bool) -> void:
 	_cable_cooldown = CABLE_MEMORY
 	_zipline = null
 	riding = false
+	velocity.x = 0.0
 	velocity.y = -220.0 if hop else 0.0
+	# Nothing horizontal until its feet are down. Stepping off the top of a
+	# rope leaves it in the air for a moment, and _steer only looks for
+	# ledges when it is standing on something - so it would accelerate
+	# straight at a target that is very often back the way it came, drift
+	# off the narrow platform it had just been delivered to, and fall. That
+	# is the "rides up and then walks backwards off the edge" report.
+	_settle_left = SETTLE_TIME
 	# That leg is done. Under orders the next one is worked out from where it has
 	# ended up - which is usually "now just walk there" - and otherwise the floor
 	# it has arrived on is a new place with new sightlines, so it picks again.
