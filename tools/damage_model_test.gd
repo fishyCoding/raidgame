@@ -107,46 +107,64 @@ func _init() -> void:
 	_eq("the rifle is untouched by any of this",
 		ar.armor_pierce, 0.0)
 
-	# --- the sniper, which armour is allowed to answer ------------------------
+	# --- the sniper: two to the body, one to the head -------------------------
 	#
-	# A body shot used to end the fight whatever you had on: 205 against a
-	# hundred health, and the best plate in the shop left 78 of it standing.
-	# That made the vest slot a decision about every gun except the one that
-	# mattered, and "wear armour" is the only reply the shop has to a rifle
-	# pointed at you from across the map.
+	# A body shot used to be 205 against a hundred health, so the gun answered
+	# every question by itself and the vest slot had nothing to say about the
+	# one round it most needed to. It is 95 now, which is under a hundred on
+	# purpose: nothing this gun does to a torso ends a fight on its own, whether
+	# you are plated or standing there in a shirt.
 	#
-	# 155 is not a round number and is not meant to be - it is the window
-	# between two things that both have to stay true, and the window is only
-	# thirty wide. Below 143 a headshot stops going through a fresh Combat
-	# Helmet (a doubled round, then 65% of it taken off, has to clear a hundred)
-	# and the gun loses the thing it is bought for. Above 172 the cheapest vest
-	# in the shop stops saving anybody and we are back where we started. Pick
-	# either edge and one of the two lines below fails.
+	# That alone would have made the head a joke, because a doubled 95 does not
+	# get through a Combat Helmet - 190 with 65% taken off is 66, and the most
+	# expensive helmet in the shop would have made you immune to the sniper
+	# entirely. So the round pierces. 0.4 thins every plate it meets by that
+	# much, which is what a .338 is *for* and is the same mechanism the slug
+	# already uses; it is what buys the headshot back without putting a single
+	# point back on the body shot. Both facts below fall out of the pair, and
+	# neither survives changing one without the other.
 	var sniper := load("res://resources/weapons/sniper.tres") as WeaponData
 	print("
 -- the sniper against the armour ladder --")
+	_eq("sniper body shots with nothing on",
+		float(_rounds_to_kill(damage, sniper, "", false)), 2.0)
 	for vest_name in ["light_vest", "medium_vest", "heavy_vest"]:
 		_eq("sniper body shots through a %s" % vest_name,
 			float(_rounds_to_kill(damage, sniper, vest_name, false)), 2.0)
-	_eq("sniper body shots with nothing on",
-		float(_rounds_to_kill(damage, sniper, "", false)), 1.0)
 	for helmet_name in ["light_helmet", "medium_helmet", "heavy_helmet"]:
 		_eq("sniper headshots through a %s" % helmet_name,
 			float(_rounds_to_kill(damage, sniper, helmet_name, true)), 1.0)
+	# The two walls, stated as the numbers rather than as the counts, so a
+	# failure says which way it went. A torso has to survive the round and a
+	# helmeted head has not to.
+	_eq("sniper into a bare torso", _first_hit(damage, sniper.damage, _kit("", 1), false),
+		95.0, 0.1)
+	_eq("sniper headshot through a fresh Combat Helmet",
+		_first_hit_pierced(damage, sniper, _kit("heavy_helmet", 0), true), 115.9, 0.1)
 
-	# The far end of the curve, which is the other half of the same tune. The
-	# floor was raised from 0.45 to 0.6 as the damage came down, so what the
-	# round does at the edge of the map is where it already was - 93 against the
-	# 92 it did before - and a guard still drops to one body shot at any range
-	# the bullet will carry. Lowering the damage alone would have quietly taken
-	# that away, and a sniper that cannot kill a patrolling guard across the map
-	# is not a sniper.
-	_eq("sniper damage at the falloff floor", sniper.get_damage_at(9999.0), 93.0, 0.01)
-	var guard_health := 90.0
-	if sniper.get_damage_at(9999.0) < guard_health:
-		_failures.append("a sniper body shot no longer kills a guard at range "
-			+ "(%.0f against %.0f health)"
-			% [sniper.get_damage_at(9999.0), guard_health])
+	# The far end of the curve. The floor came up from 0.45 to 0.6 as the damage
+	# came down, and it is carrying one thing: an unhelmeted head is a one-shot
+	# at any range the bullet will travel. At 0.45 it stopped being one somewhere
+	# in the middle distance, which is the shot the gun exists to take.
+	_eq("sniper damage at the falloff floor", sniper.get_damage_at(9999.0), 57.0, 0.01)
+	var bare_head_far := sniper.get_damage_at(9999.0) * 2.0
+	if bare_head_far < HP:
+		_failures.append("a bare head survives a sniper round at the far end of "
+			+ "the curve (%.0f against %.0f)" % [bare_head_far, HP])
+	else:
+		print("  ok   %-42s %.0f" % ["bare head at the far end of the curve",
+			bare_head_far])
+
+	# What it costs, said out loud because it is a real loss and not an
+	# oversight: a guard has 90 health, so a body shot that no longer drops a
+	# hundred-health player no longer drops him either past the flat part of the
+	# curve. Inside 900 px it still does.
+	if sniper.get_damage_at(sniper.falloff_start) < 90.0:
+		_failures.append("a sniper body shot no longer kills a guard even at "
+			+ "point blank (%.0f against 90)" % sniper.get_damage_at(sniper.falloff_start))
+	else:
+		print("  ok   %-42s %.0f" % ["guard drops to one body shot inside 900px",
+			sniper.get_damage_at(sniper.falloff_start)])
 
 	# Armour has to survive the fight it is priced for. It used to be charged
 	# the whole incoming round rather than the part it stopped, which left a
@@ -233,6 +251,15 @@ func _hit_point(centre: Vector2, head: bool) -> Vector2:
 func _first_hit(damage: RefCounted, amount: float, kit: Inventory, head: bool) -> float:
 	var centre := Vector2.ZERO
 	var result = damage.resolve(amount, _hit_point(centre, head), centre, BODY_HEIGHT, kit)
+	return result.amount
+
+
+## Like _first_hit, but for a round that does something about the plate.
+func _first_hit_pierced(damage: RefCounted, gun: WeaponData, kit: Inventory,
+		head: bool) -> float:
+	var centre := Vector2.ZERO
+	var result = damage.resolve(gun.damage, _hit_point(centre, head), centre,
+		BODY_HEIGHT, kit, gun.armor_pierce)
 	return result.amount
 
 
