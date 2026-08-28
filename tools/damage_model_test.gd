@@ -107,6 +107,47 @@ func _init() -> void:
 	_eq("the rifle is untouched by any of this",
 		ar.armor_pierce, 0.0)
 
+	# --- the sniper, which armour is allowed to answer ------------------------
+	#
+	# A body shot used to end the fight whatever you had on: 205 against a
+	# hundred health, and the best plate in the shop left 78 of it standing.
+	# That made the vest slot a decision about every gun except the one that
+	# mattered, and "wear armour" is the only reply the shop has to a rifle
+	# pointed at you from across the map.
+	#
+	# 155 is not a round number and is not meant to be - it is the window
+	# between two things that both have to stay true, and the window is only
+	# thirty wide. Below 143 a headshot stops going through a fresh Combat
+	# Helmet (a doubled round, then 65% of it taken off, has to clear a hundred)
+	# and the gun loses the thing it is bought for. Above 172 the cheapest vest
+	# in the shop stops saving anybody and we are back where we started. Pick
+	# either edge and one of the two lines below fails.
+	var sniper := load("res://resources/weapons/sniper.tres") as WeaponData
+	print("
+-- the sniper against the armour ladder --")
+	for vest_name in ["light_vest", "medium_vest", "heavy_vest"]:
+		_eq("sniper body shots through a %s" % vest_name,
+			float(_rounds_to_kill(damage, sniper, vest_name, false)), 2.0)
+	_eq("sniper body shots with nothing on",
+		float(_rounds_to_kill(damage, sniper, "", false)), 1.0)
+	for helmet_name in ["light_helmet", "medium_helmet", "heavy_helmet"]:
+		_eq("sniper headshots through a %s" % helmet_name,
+			float(_rounds_to_kill(damage, sniper, helmet_name, true)), 1.0)
+
+	# The far end of the curve, which is the other half of the same tune. The
+	# floor was raised from 0.45 to 0.6 as the damage came down, so what the
+	# round does at the edge of the map is where it already was - 93 against the
+	# 92 it did before - and a guard still drops to one body shot at any range
+	# the bullet will carry. Lowering the damage alone would have quietly taken
+	# that away, and a sniper that cannot kill a patrolling guard across the map
+	# is not a sniper.
+	_eq("sniper damage at the falloff floor", sniper.get_damage_at(9999.0), 93.0, 0.01)
+	var guard_health := 90.0
+	if sniper.get_damage_at(9999.0) < guard_health:
+		_failures.append("a sniper body shot no longer kills a guard at range "
+			+ "(%.0f against %.0f health)"
+			% [sniper.get_damage_at(9999.0), guard_health])
+
 	# Armour has to survive the fight it is priced for. It used to be charged
 	# the whole incoming round rather than the part it stopped, which left a
 	# medium vest scrap after three rifle rounds - so the four-round kill above
@@ -149,8 +190,13 @@ func _init() -> void:
 		var gun: WeaponData = load("res://resources/weapons/%s.tres" % name)
 		var vested := _rounds_to_kill(damage, gun, "medium_vest", false)
 		var naked := _rounds_to_kill(damage, gun, "", false)
-		print("%-14s %5d %6.0f %7.0fpx | %2d rounds %8.0f ms | %2d rounds %8.0f ms" % [
-			name, gun.rounds_per_minute, gun.damage, gun.get_half_damage_range(),
+		# INF is a real answer and not a broken one - a gun still doing 60% of
+		# its damage at the edge of the map has no half-damage range - but
+		# "infpx" in a column of numbers reads as a bug, so it says so in words.
+		var reach := gun.get_half_damage_range()
+		var reach_text := "no drop" if is_inf(reach) else "%.0fpx" % reach
+		print("%-14s %5d %6.0f %8s | %2d rounds %8.0f ms | %2d rounds %8.0f ms" % [
+			name, gun.rounds_per_minute, gun.damage, reach_text,
 			vested, float(vested - 1) * gun.get_shot_interval() * 1000.0,
 			naked, float(naked - 1) * gun.get_shot_interval() * 1000.0])
 		# The floor the whole model stands on.
