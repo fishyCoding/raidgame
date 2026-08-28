@@ -16,6 +16,11 @@ var life := 8.0
 ## rebuilding it every frame while the cloud billows costs nothing.
 const OCCLUDER_POINTS := 16
 
+## Points around the rim offered to the vision system. Fewer than the occluder
+## needs: this only has to catch "some of it is showing", and every one of them
+## is a raycast every physics frame.
+const SIGHT_SAMPLES := 8
+
 var _age := 0.0
 var _colour := Color(0.66, 0.7, 0.76, 0.85)
 var _blocks := true
@@ -36,8 +41,35 @@ func setup(cloud_radius: float, duration: float,
 func _ready() -> void:
 	if _blocks:
 		add_to_group(&"smoke")
+		# Drawn only when some part of it can actually be seen. A cloud is a
+		# thing in the world, not an overlay: a screen thrown two rooms away
+		# used to hang there through the walls, which told you where somebody
+		# was rather than hiding them - the exact opposite of what it is for.
+		#
+		# "shadowed" rather than "hideable" on purpose: hideable means "a body a
+		# recon arrow can paint", and a diamond pinned to every smoke cloud on
+		# the map is not what that gadget is for. Only clouds that really block
+		# sight join - a flash pop and a recon pulse are feedback about
+		# something you did, and feedback you cannot see is not feedback.
+		add_to_group(&"shadowed")
 		_build_occluder()
 	z_index = 6
+
+
+## Where to look for this cloud, for the vision system.
+##
+## A disc, so it is sampled around its rim rather than at its origin. Without
+## this it would be one point: a cloud whose centre sits behind a wall would
+## vanish whole while most of it stood in the open, which is the pop this method
+## exists to avoid. The rim is measured at the cloud's current size, because a
+## cloud that is still billowing outward is smaller than `radius` says.
+func sight_points() -> Array[Vector2]:
+	var points: Array[Vector2] = [global_position]
+	var r := _current_radius()
+	for i in SIGHT_SAMPLES:
+		var angle := TAU * float(i) / float(SIGHT_SAMPLES)
+		points.append(global_position + Vector2(cos(angle), sin(angle)) * r)
+	return points
 
 
 ## A disc that blocks light, matched to the cloud. Culling is disabled because a
@@ -100,10 +132,17 @@ func _draw() -> void:
 
 
 ## True if the segment from `from` to `to` passes through any live cloud.
-static func blocks_sight(tree: SceneTree, from: Vector2, to: Vector2) -> bool:
+## `except` is the thing being looked at, when that thing is itself a cloud.
+##
+## Without it a cloud hides itself the moment it thickens: the vision system
+## tests a line from the eye to a point on the cloud's own edge, and that line
+## ends inside the very disc being asked about, so the answer is always "blocked"
+## and a smoke screen is invisible to everyone including the person who threw it.
+static func blocks_sight(tree: SceneTree, from: Vector2, to: Vector2,
+		except: Node = null) -> bool:
 	for node in tree.get_nodes_in_group(&"smoke"):
 		var cloud := node as Smoke
-		if cloud == null or cloud._opacity() < 0.35:
+		if cloud == null or cloud == except or cloud._opacity() < 0.35:
 			continue
 		var r: float = cloud._current_radius()
 		var nearest := Geometry2D.get_closest_point_to_segment(cloud.global_position, from, to)

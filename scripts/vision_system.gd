@@ -169,7 +169,7 @@ func _can_see(space: PhysicsDirectSpaceState2D, origin: Vector2, node: Node2D) -
 		if not space.intersect_ray(query).is_empty():
 			continue
 		# Geometry is not the only thing that hides people.
-		if Smoke.blocks_sight(get_tree(), origin, probe):
+		if Smoke.blocks_sight(get_tree(), origin, probe, node):
 			continue
 		# A screen shows you the room without the people in it. Checked here,
 		# against bodies, rather than added to SIGHT_MASK - a screen is not a
