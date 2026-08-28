@@ -6,13 +6,14 @@
 script = ExtResource("1_data")
 display_name = "Shotgun"
 short_name = "SHOTGUN"
-accuracy = 16.0
+accuracy = 68.0
 handling = 54.0
 recoil = 60.0
 stability = 46.0
-rounds_per_minute = 80.0
+rounds_per_minute = 55.0
 automatic = false
 pellets = 9
+pellet_spread = 2.2
 damage = 13.0
 bullet_speed = 5200.0
 bullet_range = 480.0

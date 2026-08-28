@@ -331,9 +331,18 @@ func try_fire(origin: Vector2, angle: float, pressed: bool, held: bool,
 	# it was heard only by whoever pulled the trigger, so another player's gun was
 	# silent and, on a client, so was every guard's.
 
-	var spread := get_spread(move_factor, air_factor)
-	for i in data.pellets:
-		_spawn_bullet(origin, angle + _pellet_offset(i, spread))
+	# A cone inside a cone. The outer one is the gun - accuracy, bloom, how hard
+	# you were moving - and it is rolled once, for the shell rather than for each
+	# pellet, so the whole pattern goes where the shot went. The inner one is the
+	# shell, and it is the only thing between one pellet and the next.
+	var aim := get_spread(move_factor, air_factor)
+	var line := angle + randf_range(-aim, aim)
+	if data.pellets <= 1:
+		_spawn_bullet(origin, line)
+	else:
+		var pattern := data.get_pellet_spread()
+		for i in data.pellets:
+			_spawn_bullet(origin, line + _pellet_offset(i, pattern))
 
 	# Both ease into their ceilings instead of slamming into them. Adding a flat
 	# amount and clamping means a long burst climbs hard and then, at one
@@ -352,13 +361,20 @@ func _headroom(value: float, ceiling: float) -> float:
 	return clampf(1.0 - value / maxf(ceiling, 0.0001), 0.0, 1.0)
 
 
-## Single rounds jitter anywhere in the cone; buckshot is spread evenly across it
-## so a shotgun pattern stays a pattern instead of clumping at random.
-func _pellet_offset(index: int, spread: float) -> float:
+## Where one pellet sits inside the shell's own pattern.
+##
+## Laid out evenly across it rather than rolled per pellet, so a pattern stays a
+## pattern instead of clumping at random - nine independent rolls give you a
+## cluster and two stragglers about as often as they give you buckshot. A fifth
+## of it is left to chance so no two shells are identical.
+##
+## Measured against the pattern, not against the aim cone. Which way the shell
+## itself went has already been decided by the caller, once, for all of them.
+func _pellet_offset(index: int, pattern: float) -> float:
 	if data.pellets <= 1:
-		return randf_range(-spread, spread)
+		return 0.0
 	var t := float(index) / float(data.pellets - 1) * 2.0 - 1.0
-	return t * spread * 0.8 + randf_range(-spread, spread) * 0.2
+	return t * pattern * 0.8 + randf_range(-pattern, pattern) * 0.2
 
 
 ## Every round goes through Net, which draws it here at once and gets it onto

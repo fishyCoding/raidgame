@@ -78,6 +78,20 @@ extends Resource
 ## Automatic guns fire while held; semi needs a fresh click per shot.
 @export var automatic := true
 @export var pellets := 1
+## How wide the buckshot patterns, in degrees either side of the shell's line.
+##
+## The inner of two cones, and only meaningful above one pellet. The outer cone
+## is the gun's aim spread - accuracy, bloom, movement - and it decides where the
+## *shell* goes; this one decides how the pellets sit around that, because nine
+## pellets leaving one barrel do not leave it in exactly the same direction.
+##
+## Keeping them apart is what makes buckshot behave like buckshot. Spread the
+## pellets evenly across the aim cone instead and the middle of the pattern is
+## nailed to the crosshair however badly you were moving - bloom and sprint stop
+## costing a shotgun anything at all, because the one pellet that mattered was
+## always dead centre. Rolled once for the shell and then patterned inside it,
+## a bad shot misses as a whole rather than politely keeping its centre.
+@export_range(0.0, 12.0) var pellet_spread := 2.5
 @export var damage := 26.0
 @export var bullet_speed := 2800.0
 @export var bullet_range := 2000.0
@@ -212,6 +226,12 @@ func get_burst_damage() -> float:
 ## Half-angle of the resting cone, in radians.
 func get_base_spread() -> float:
 	return deg_to_rad(lerpf(9.0, 0.12, accuracy * 0.01))
+
+
+## Half-angle of the buckshot pattern, in radians. Zero for anything that fires
+## a single round, which has no pattern to have.
+func get_pellet_spread() -> float:
+	return deg_to_rad(pellet_spread) if pellets > 1 else 0.0
 
 
 # --- recoil (the climb) -------------------------------------------------------
