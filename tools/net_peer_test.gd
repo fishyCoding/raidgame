@@ -86,16 +86,18 @@ func _run() -> void:
 		tag, mine.name, mine.is_local(), theirs.name, theirs.is_local()])
 
 	# Somebody else's body must not be drawing its owner's readouts on our
-	# screen. One camera, one crosshair, one torch - and one dash trail, which
-	# is on that layer for exactly this reason. A streak is a record of the route
-	# somebody took to break off a fight, and if this layer ever comes back on
-	# for a replica it would be painted across everybody else's screen.
+	# screen: one camera, one crosshair, one torch.
 	var their_overlay: CanvasLayer = theirs.get_node("Overlay")
-	var their_trail: Node2D = theirs.get_node("Overlay/DashTrail")
+	# Their dash streak is the other way round - it is meant to be drawn here,
+	# which is the whole reason `dash_left` is on the wire. What must be true is
+	# that this machine built one for their body at all, and that it is scenery
+	# the dark can take away rather than something drawn through walls.
+	var their_trail: Node = theirs.get_parent().get_node_or_null(
+		"DashTrail_%s" % theirs.name)
 	var theirs_hidden: bool = (not their_overlay.visible
-		and their_trail._marks.is_empty())
-	print("%s | their overlay drawn here: %s, marks on their trail: %d" % [
-		tag, their_overlay.visible, their_trail._marks.size()])
+		and their_trail != null and their_trail.is_in_group(&"shadowed"))
+	print("%s | their overlay drawn here: %s; their streak built here: %s" % [
+		tag, their_overlay.visible, their_trail != null])
 
 	# Drive our own character and watch whether the other machine's copy of it
 	# follows. Both sides walk, in opposite directions, so each has something to

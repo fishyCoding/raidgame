@@ -285,13 +285,11 @@ func _run() -> void:
 
 	# --- the streak it leaves ------------------------------------------------
 	#
-	# Two halves, and the second one is the half that matters. A dash is over in
-	# a tenth of a second and there has to be something left in the air to read
-	# the move off - but a streak anybody else could see would mark the line you
-	# took out of a fight you were breaking off, which is the one move in the
-	# game that must not leave a sign.
-	var trail: Node2D = player.get_node("Overlay/DashTrail")
-	var overlay: CanvasLayer = player.get_node("Overlay")
+	# Two halves. A dash is over in a tenth of a second and there has to be
+	# something left in the air to read the move off - and then the dark has to
+	# be able to take it away again, or a streak is a free answer to the only
+	# question this level asks.
+	var trail: Node2D = player.get_parent().get_node("DashTrail_%s" % player.name)
 	trail.clear()
 	player.dashes_left = 1
 	while not player.is_on_floor():
@@ -321,16 +319,44 @@ func _run() -> void:
 		tail.distance_to(head), head.distance_to(player.sight_centre())])
 	_check(tail.distance_to(head) > 60.0, "and the streak has to span the move")
 
-	# Nobody else's machine draws it. This is the layer the camera, the crosshair
-	# and the torch are all switched off on for anyone but the owner, which is
-	# why the trail was put there rather than out in the world.
-	print("-- trail sits on the owner-only overlay: %s (visible=%s)" % [
-		trail.get_parent() == overlay, overlay.visible])
-	_check(trail.get_parent() == overlay,
-		"the streak lives on the layer only its owner draws")
+	# It is out in the world where anybody can see it, and it answers to the dark
+	# the way the ropes do.
+	print("-- trail is a sibling of the body: %s, shadowed: %s, hideable: %s" % [
+		trail.get_parent() == player.get_parent(),
+		trail.is_in_group(&"shadowed"), trail.is_in_group(&"hideable")])
+	_check(trail.get_parent() == player.get_parent(),
+		"the streak stands beside the body rather than under it")
+	_check(trail.is_in_group(&"shadowed"),
+		"and is scenery the dark can swallow")
+	_check(not trail.is_in_group(&"hideable"),
+		"but not a body the recon arrow should pin a marker to")
+
+	# Asked about along its length rather than at one end. A streak judged by its
+	# origin alone would be thrown out whole for having its far end in a wall.
+	var seen_at: Array = trail.sight_points()
+	print("-- it offers %d points to look for it at" % seen_at.size())
+	_check(seen_at.size() > 2, "sight is asked about every mark in it")
+
+	# And the dark actually takes it away. Asked of the vision pass itself rather
+	# than by reading a collision mask: the mask is only half of what hides a
+	# body, since smoke and screens hide people without being geometry at all,
+	# and a streak has to answer to all of it.
+	var vision: Node = get_first_node_in_group(&"vision_system")
+	_check(vision != null, "the vision pass has to be running to be asked")
+	if vision:
+		print("-- a streak in the open is seen: %s" % vision.is_seen(trail))
+		_check(vision.is_seen(trail), "a streak out in the open is drawn")
+		# The same streak, moved under the floor the character is standing on.
+		# Solid geometry between it and the eye is the plainest case there is.
+		var buried := _buried_spot(player)
+		for mark in trail._marks:
+			mark.at = buried
+		print("-- the same streak, put behind cover: seen=%s" % vision.is_seen(trail))
+		_check(not vision.is_seen(trail),
+			"and one with cover in the way is not")
 	var world_src := FileAccess.get_file_as_string("res://scripts/dash_trail.gd")
 	_check(not world_src.contains("rpc"),
-		"and nothing about it crosses the wire")
+		"and nothing about the streak itself crosses the wire")
 
 	# And it goes. A streak that outlived the dash by much would still be
 	# hanging there when somebody rounded the corner behind you.
@@ -343,6 +369,19 @@ func _run() -> void:
 
 	print("\n%s" % ("PASS" if _ok else "FAIL"))
 	quit(0 if _ok else 1)
+
+
+## Somewhere with solid geometry between it and the character: through the floor
+## they are standing on, and well past the far side of it.
+func _buried_spot(player: Node2D) -> Vector2:
+	var space := player.get_world_2d().direct_space_state
+	var from: Vector2 = player.global_position
+	var probe := PhysicsRayQueryParameters2D.create(
+		from, from + Vector2(0.0, 400.0), 1)
+	var hit := space.intersect_ray(probe)
+	if hit.is_empty():
+		return from + Vector2(0.0, 400.0)
+	return hit.position + Vector2(0.0, 60.0)
 
 
 ## Which way there is room to dash, as -1 or 1.

@@ -376,7 +376,6 @@ var _vision_scale := 7.0
 ## and the vision light's shadows never fall across them.
 @onready var _reticle: Reticle = $Overlay/Reticle
 @onready var _aim_line: AimLine = $Overlay/AimLine
-@onready var _dash_trail: DashTrail = $Overlay/DashTrail
 @onready var _shape: CollisionShape2D = $CollisionShape2D
 @onready var _torso: Polygon2D = $Body/Torso
 @onready var weapon: Weapon = $Weapon
@@ -543,8 +542,19 @@ var dashes_left := 0
 ## Armed for a dash: the mouse is a dash stick, the trigger is dead, and the next
 ## drag or swipe spends one. Q switches it on and off.
 var dash_ready := false
-var _dash_left := 0.0
+## Seconds left of the dash in flight, or 0.
+##
+## Public and replicated, which it did not need to be while a dash was only a
+## thing that happened to your own velocity. The streak it leaves is drawn on
+## every machine - see DashTrail - and "is this body dashing" is not something a
+## replica can work out for itself: the only tell in what is already on the wire
+## is a velocity of 860, and a grapple tops out at 900, so a swing would have
+## painted a dash trail behind it.
+var dash_left := 0.0
 var _dash_way := Vector2.ZERO
+## The streak, which lives beside this body in the level rather than under it.
+## See DashTrail for why it cannot be a child.
+var _dash_trail: DashTrail
 ## Placing a screen. The first corner once it has been clicked, the second
 ## wherever the crosshair is, and whether the pair of them make a legal sheet.
 ## Set when a placing view has just spent a trigger press. The gun stays quiet
@@ -666,6 +676,16 @@ func _ready() -> void:
 	grapple_left = grapple_charges
 
 	Net.note_player(self)
+	# Beside this body, not under it: a child of a hidden node is hidden with it,
+	# and a replica's body is hidden the moment it loses line of sight. See
+	# DashTrail. Deferred because this is somebody else's _ready to be adding
+	# children in the middle of.
+	_dash_trail = DashTrail.new()
+	_dash_trail.name = "DashTrail_%s" % name
+	_dash_trail.body = self
+	var beside := get_parent()
+	if beside:
+		beside.add_child.call_deferred(_dash_trail)
 	# One camera, one set of crosshairs and one light per machine. Every character
 	# carries all three, because a character does not know whose it is until it is
 	# in the tree - so they are switched off on arrival for everyone but their
@@ -715,6 +735,18 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	Net.forget_player(self)
+	# The streak outlives the body by design - it frees itself once the last mark
+	# has faded - but only if it ever reached the tree. One still waiting on its
+	# deferred add has nothing to fade and nobody to collect it.
+	#
+	# Asked by parent rather than by is_inside_tree(), which is not the same
+	# question during a teardown: the whole level goes at once, and a node whose
+	# parent is on its way out already answers "no" to being in the tree while
+	# still very much having somewhere to be removed from. Freeing it there tried
+	# to take a child off a parent that was mid-removal and threw.
+	if is_instance_valid(_dash_trail) and _dash_trail.get_parent() == null:
+		_dash_trail.free()
+		_dash_trail = null
 	# Never in the tree, so nothing else is going to collect it.
 	if _bow_preview:
 		_bow_preview.free()
@@ -1729,7 +1761,7 @@ func _update_run(delta: float) -> void:
 
 ## Whether a dash is in flight right now.
 func is_dashing() -> bool:
-	return _dash_left > 0.0
+	return dash_left > 0.0
 
 
 ## Two dashes, spent by swiping.
@@ -1738,13 +1770,8 @@ func is_dashing() -> bool:
 ## you want to be somewhere else is usually the moment you have already left the
 ## floor and committed to a jump you regret.
 func _update_dash(delta: float) -> void:
-	if _dash_left > 0.0:
-		_dash_left = maxf(_dash_left - delta, 0.0)
-		# Laid before the body moves, so what the trail records is where it has
-		# been rather than where it is about to be. Only ever from here, which is
-		# a tick no replica runs - and onto a layer no other machine draws - so
-		# the streak stays a thing you can see and nobody else can.
-		_lay_dash_mark()
+	if dash_left > 0.0:
+		dash_left = maxf(dash_left - delta, 0.0)
 		# Held flat for the whole dash - no gravity, no friction, no steering.
 		# Anything else and a dash upwards sags into a hop and a dash sideways
 		# reads as a stumble.
@@ -1776,13 +1803,8 @@ func _update_dash(delta: float) -> void:
 		return
 
 	_dash_way = way.normalized()
-	_dash_left = DASH_TIME
+	dash_left = DASH_TIME
 	dashes_left -= 1
-	# Where you left from. The branch at the top of this function does not run
-	# until the frame after, and the whole dash is only eight frames long, so
-	# without a mark here the streak starts fifteen pixels into the move and
-	# never quite reaches back to the spot you went from.
-	_lay_dash_mark()
 	# One press, one dash. Left armed, the drag that started this one carries
 	# straight on into the next and spends both in a single gesture - which is
 	# exactly what it did. Press Q again for the second.
@@ -1795,15 +1817,14 @@ func _update_dash(delta: float) -> void:
 		_audio.reload_finished(global_position)
 
 
-## One frame of the dash streak: where the body is, and how much of it there is.
+## How big a mark the streak should leave: half the body, as it is right now.
 ##
-## The height is read off the collision shape rather than off `size`, so a dash
-## taken crouched leaves a crouched trail. Anything else and sliding under a
-## catwalk paints a standing body through the underside of it.
-func _lay_dash_mark() -> void:
+## Read off the collision shape rather than off `size`, so a dash taken crouched
+## leaves a crouched trail. Anything else and sliding under a catwalk paints a
+## standing body through the underside of it.
+func dash_half() -> Vector2:
 	var box := _shape.shape as RectangleShape2D
-	var half := size * 0.5 if box == null else box.size * 0.5
-	_dash_trail.lay(sight_centre(), half)
+	return size * 0.5 if box == null else box.size * 0.5
 
 
 ## The desktop half of a swipe: hold the ultimate and drag the mouse.
@@ -3189,11 +3210,12 @@ func _die(knocked_out := false) -> void:
 	_let_go_of_grapple(false)
 	_leave_the_kit_behind()
 	velocity = Vector2.ZERO
-	_dash_left = 0.0
-	# Shot out of a dash. The streak is a readout of a move you are making, and
-	# there is no move any more - leaving it to fade would draw a line pointing
-	# at your own body over the death screen.
-	_dash_trail.clear()
+	dash_left = 0.0
+	# Shot out of a dash. The streak points at whoever was taking it, and there
+	# is no move any more - left to fade it would draw a line to the body for
+	# whoever fired the round, which is a reward for having already hit.
+	if is_instance_valid(_dash_trail):
+		_dash_trail.clear()
 	_shape.set_deferred(&"disabled", true)
 	died.emit(knocked_out)
 

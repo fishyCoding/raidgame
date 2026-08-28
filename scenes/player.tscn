@@ -1,11 +1,10 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
 [ext_resource type="Script" path="res://scripts/weapon.gd" id="2_weapon"]
 [ext_resource type="Script" path="res://scripts/reticle.gd" id="3_reticle"]
 [ext_resource type="Script" path="res://scripts/aim_line.gd" id="4_aimline"]
 [ext_resource type="Script" path="res://scripts/shield_outline.gd" id="5_shield"]
-[ext_resource type="Script" path="res://scripts/dash_trail.gd" id="6_dashtrail"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_player"]
 size = Vector2(28, 48)
@@ -62,6 +61,9 @@ properties/11/replication_mode = 2
 properties/12/path = NodePath(".:injuries")
 properties/12/spawn = true
 properties/12/replication_mode = 2
+properties/13/path = NodePath(".:dash_left")
+properties/13/spawn = true
+properties/13/replication_mode = 1
 
 [node name="Player" type="CharacterBody2D" groups=["player"]]
 collision_layer = 4
@@ -121,9 +123,6 @@ follow_viewport_enabled = true
 
 [node name="AimLine" type="Node2D" parent="Overlay"]
 script = ExtResource("4_aimline")
-
-[node name="DashTrail" type="Node2D" parent="Overlay"]
-script = ExtResource("6_dashtrail")
 
 [node name="Reticle" type="Node2D" parent="Overlay"]
 script = ExtResource("3_reticle")

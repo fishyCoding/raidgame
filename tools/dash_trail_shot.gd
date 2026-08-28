@@ -56,7 +56,7 @@ func _run() -> void:
 	input.touch_dash = true
 	input.touch_dash_way = Vector2(way, 0.0)
 
-	var trail: Node2D = player.get_node("Overlay/DashTrail")
+	var trail: Node2D = player.get_parent().get_node("DashTrail_%s" % player.name)
 	# Caught while the body is still moving, which is the only moment the streak
 	# has a body on the end of it.
 	while not player.is_dashing():
