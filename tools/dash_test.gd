@@ -283,6 +283,64 @@ func _run() -> void:
 	pad._watch_for_swipe(9, Vector2(200.0 + pad.SWIPE_MIN + 40.0, 400.0))
 	_check(not _input.touch_dash, "but a slow drag over the same ground must not")
 
+	# --- the streak it leaves ------------------------------------------------
+	#
+	# Two halves, and the second one is the half that matters. A dash is over in
+	# a tenth of a second and there has to be something left in the air to read
+	# the move off - but a streak anybody else could see would mark the line you
+	# took out of a fight you were breaking off, which is the one move in the
+	# game that must not leave a sign.
+	var trail: Node2D = player.get_node("Overlay/DashTrail")
+	var overlay: CanvasLayer = player.get_node("Overlay")
+	trail.clear()
+	player.dashes_left = 1
+	while not player.is_on_floor():
+		await physics_frame
+	for i in 20:
+		await physics_frame
+	player.dash_ready = true
+	await physics_frame
+	var trail_way := _open_way(player)
+	_input.touch_dash = true
+	_input.touch_dash_way = Vector2(trail_way, 0.0)
+	await physics_frame
+	_check(player.is_dashing(), "a dash is actually running for this check")
+	var laid := 0
+	while player.is_dashing():
+		laid = maxi(laid, trail._marks.size())
+		await physics_frame
+	laid = maxi(laid, trail._marks.size())
+	print("-- during the dash: %d marks in the air" % laid)
+	_check(laid > 2, "a dash has to leave a streak behind it")
+
+	# It reaches back to where you went from, not to where the second frame of
+	# the move happened to catch you.
+	var tail: Vector2 = trail._marks[0].at if trail._marks.size() > 0 else Vector2.ZERO
+	var head: Vector2 = trail._marks[-1].at if trail._marks.size() > 0 else Vector2.ZERO
+	print("-- it spans %.0f px, ending %.0f px from the body" % [
+		tail.distance_to(head), head.distance_to(player.sight_centre())])
+	_check(tail.distance_to(head) > 60.0, "and the streak has to span the move")
+
+	# Nobody else's machine draws it. This is the layer the camera, the crosshair
+	# and the torch are all switched off on for anyone but the owner, which is
+	# why the trail was put there rather than out in the world.
+	print("-- trail sits on the owner-only overlay: %s (visible=%s)" % [
+		trail.get_parent() == overlay, overlay.visible])
+	_check(trail.get_parent() == overlay,
+		"the streak lives on the layer only its owner draws")
+	var world_src := FileAccess.get_file_as_string("res://scripts/dash_trail.gd")
+	_check(not world_src.contains("rpc"),
+		"and nothing about it crosses the wire")
+
+	# And it goes. A streak that outlived the dash by much would still be
+	# hanging there when somebody rounded the corner behind you.
+	for i in 60:
+		await physics_frame
+		if trail._marks.is_empty():
+			break
+	print("-- marks left once it had faded: %d" % trail._marks.size())
+	_check(trail._marks.is_empty(), "and it fades rather than staying up")
+
 	print("\n%s" % ("PASS" if _ok else "FAIL"))
 	quit(0 if _ok else 1)
 

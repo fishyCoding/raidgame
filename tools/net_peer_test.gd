@@ -85,6 +85,18 @@ func _run() -> void:
 	print("%s | mine=%s (local=%s)  theirs=%s (local=%s)" % [
 		tag, mine.name, mine.is_local(), theirs.name, theirs.is_local()])
 
+	# Somebody else's body must not be drawing its owner's readouts on our
+	# screen. One camera, one crosshair, one torch - and one dash trail, which
+	# is on that layer for exactly this reason. A streak is a record of the route
+	# somebody took to break off a fight, and if this layer ever comes back on
+	# for a replica it would be painted across everybody else's screen.
+	var their_overlay: CanvasLayer = theirs.get_node("Overlay")
+	var their_trail: Node2D = theirs.get_node("Overlay/DashTrail")
+	var theirs_hidden: bool = (not their_overlay.visible
+		and their_trail._marks.is_empty())
+	print("%s | their overlay drawn here: %s, marks on their trail: %d" % [
+		tag, their_overlay.visible, their_trail._marks.size()])
+
 	# Drive our own character and watch whether the other machine's copy of it
 	# follows. Both sides walk, in opposite directions, so each has something to
 	# observe.
@@ -139,7 +151,8 @@ func _run() -> void:
 	print("%s | guards: %d of %d thinking here, %d of %d moving" % [
 		tag, thinking, guards.get_child_count(), stirred.size(), guards.get_child_count()])
 
-	var ok := i_moved > 20.0 and they_moved > 20.0 and stirred.size() > 0
+	var ok := (i_moved > 20.0 and they_moved > 20.0 and stirred.size() > 0
+		and theirs_hidden)
 	if _hosting:
 		ok = ok and thinking > 0
 	else:

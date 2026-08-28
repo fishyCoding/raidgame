@@ -376,6 +376,7 @@ var _vision_scale := 7.0
 ## and the vision light's shadows never fall across them.
 @onready var _reticle: Reticle = $Overlay/Reticle
 @onready var _aim_line: AimLine = $Overlay/AimLine
+@onready var _dash_trail: DashTrail = $Overlay/DashTrail
 @onready var _shape: CollisionShape2D = $CollisionShape2D
 @onready var _torso: Polygon2D = $Body/Torso
 @onready var weapon: Weapon = $Weapon
@@ -1739,6 +1740,11 @@ func is_dashing() -> bool:
 func _update_dash(delta: float) -> void:
 	if _dash_left > 0.0:
 		_dash_left = maxf(_dash_left - delta, 0.0)
+		# Laid before the body moves, so what the trail records is where it has
+		# been rather than where it is about to be. Only ever from here, which is
+		# a tick no replica runs - and onto a layer no other machine draws - so
+		# the streak stays a thing you can see and nobody else can.
+		_lay_dash_mark()
 		# Held flat for the whole dash - no gravity, no friction, no steering.
 		# Anything else and a dash upwards sags into a hop and a dash sideways
 		# reads as a stumble.
@@ -1772,6 +1778,11 @@ func _update_dash(delta: float) -> void:
 	_dash_way = way.normalized()
 	_dash_left = DASH_TIME
 	dashes_left -= 1
+	# Where you left from. The branch at the top of this function does not run
+	# until the frame after, and the whole dash is only eight frames long, so
+	# without a mark here the streak starts fifteen pixels into the move and
+	# never quite reaches back to the spot you went from.
+	_lay_dash_mark()
 	# One press, one dash. Left armed, the drag that started this one carries
 	# straight on into the next and spends both in a single gesture - which is
 	# exactly what it did. Press Q again for the second.
@@ -1782,6 +1793,17 @@ func _update_dash(delta: float) -> void:
 		else "DASH - that was the last")
 	if _audio:
 		_audio.reload_finished(global_position)
+
+
+## One frame of the dash streak: where the body is, and how much of it there is.
+##
+## The height is read off the collision shape rather than off `size`, so a dash
+## taken crouched leaves a crouched trail. Anything else and sliding under a
+## catwalk paints a standing body through the underside of it.
+func _lay_dash_mark() -> void:
+	var box := _shape.shape as RectangleShape2D
+	var half := size * 0.5 if box == null else box.size * 0.5
+	_dash_trail.lay(sight_centre(), half)
 
 
 ## The desktop half of a swipe: hold the ultimate and drag the mouse.
@@ -3167,6 +3189,11 @@ func _die(knocked_out := false) -> void:
 	_let_go_of_grapple(false)
 	_leave_the_kit_behind()
 	velocity = Vector2.ZERO
+	_dash_left = 0.0
+	# Shot out of a dash. The streak is a readout of a move you are making, and
+	# there is no move any more - leaving it to fade would draw a line pointing
+	# at your own body over the death screen.
+	_dash_trail.clear()
 	_shape.set_deferred(&"disabled", true)
 	died.emit(knocked_out)
 
