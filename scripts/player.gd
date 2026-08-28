@@ -627,6 +627,11 @@ var _stand_pivot_y := -6.0
 
 
 func _ready() -> void:
+	# Screens are solid to walk into as well as to shoot at. Set here rather than
+	# left as a number in the scene so the reason is next to the reasoning: a
+	# sheet you can stroll through is one you would walk through by accident and
+	# come out the far side of, in front of whoever you were hiding from.
+	collision_mask = Layers.WORLD | Layers.ONE_WAY | Layers.SCREEN
 	_recalculate_jump()
 	# The weapon node builds the starting kit (a sidearm and rounds for it) if
 	# nobody hands it one, so the player simply adopts what it made.

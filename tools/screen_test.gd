@@ -103,6 +103,25 @@ func _run() -> void:
 	_check(not audio_src.contains("collision_mask"),
 		"sound is not occluded by anything, screens included")
 
+	# --- and it is solid -----------------------------------------------------
+	#
+	# Walking into it has to stop you. Checked by moving a body at it rather than
+	# by reading the mask: the mask is on the player and the layer is on the
+	# sheet, and the two agreeing is the only thing that matters.
+	var mid: Vector2 = (sheet._from + sheet._to) * 0.5
+	player.global_position = mid + Vector2(-70.0, 0.0)
+	player.velocity = Vector2.ZERO
+	for i in 6:
+		await physics_frame
+	var start_x: float = player.global_position.x
+	for i in 40:
+		player.velocity.x = 400.0
+		await physics_frame
+	var through: bool = player.global_position.x > mid.x + 20.0
+	print("-- walked at it from %.0f, ended at %.0f (sheet at %.0f)" % [
+		start_x, player.global_position.x, mid.x])
+	_check(not through, "a screen stops you walking through it")
+
 	# --- one hit and it is gone ----------------------------------------------
 	sheet.take_damage(10.0, across, Vector2.RIGHT)
 	await physics_frame

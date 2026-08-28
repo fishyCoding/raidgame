@@ -17,6 +17,10 @@ extends StaticBody2D
 ##
 ## Bullets do not go through, and one is all it takes. The moment somebody shoots
 ## the empty room, the empty room stops being empty.
+##
+## Bodies do not go through either. It is a real sheet with a real edge, so it is
+## cover you can put your back against - and a thing you can be pinned behind,
+## since the only way out through it is to break it and announce yourself.
 
 ## How thick the sheet is. Only wide enough that a bullet cannot tunnel through
 ## it between two physics steps at close range.
