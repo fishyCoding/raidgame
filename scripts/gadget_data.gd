@@ -8,7 +8,7 @@ extends Resource
 ## that recharge over the course of a raid. Both are bought before you go in,
 ## which is what makes the shop a decision rather than a shopping list.
 
-enum Kind { FRAG, SMOKE, OVERLOAD, RECON_BOW, PROJECTION, FLASH, DASH }
+enum Kind { FRAG, SMOKE, OVERLOAD, RECON_BOW, PROJECTION, FLASH, DASH, SCREEN }
 enum Class { THROWABLE, ULTIMATE }
 
 @export var display_name := "Gadget"
@@ -40,6 +40,9 @@ enum Class { THROWABLE, ULTIMATE }
 ## and two dashes evaporating while you wait for the right moment is a tax on
 ## thinking.
 @export var dashes := 2
+## How long a screen may be, in player heights. It has to reach something solid
+## at one end, so this is the leash on where "something solid" is allowed to be.
+@export var reach_in_heights := 5.0
 
 @export_group("Look")
 @export var tint := Color(0.8, 0.8, 0.85)

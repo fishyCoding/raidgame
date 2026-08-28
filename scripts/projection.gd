@@ -745,6 +745,8 @@ func _seen_from(eyes: Array[Vector2], point: Vector2) -> Vector2:
 		# in somebody's smoke is as hidden as they would be.
 		if Smoke.blocks_sight(get_tree(), eye, point):
 			continue
+		if Screen.blocks_sight(get_tree(), eye, point):
+			continue
 		return eye
 	return Vector2.INF
 

@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="GadgetData" format=3 uid="uid://0kk31gstr165"]
+
+[ext_resource type="Script" path="res://scripts/gadget_data.gd" id="1_gadget"]
+
+[resource]
+script = ExtResource("1_gadget")
+display_name = "Screen"
+short_name = "SCREEN"
+kind = 7
+gadget_class = 1
+price = 1200
+charge_time = 40.0
+active_time = 0.0
+reach_in_heights = 5.0
+tint = Color(0.62, 0.86, 1.0, 1)
+grid_size = Vector2i(1, 1)

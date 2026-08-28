@@ -115,6 +115,9 @@ const EYE_SEARCHING := Color(1.0, 0.72, 0.38)
 ## Solid geometry only, matching vision_system.gd: guards see under and over the
 ## one-way catwalks exactly as the player does, so cover means the same thing to
 ## both sides.
+## Whether guards exist at all. Temporary - see _ready.
+const GUARDS_ON := false
+
 const SIGHT_MASK := Layers.WORLD
 const SIDEARM := "res://resources/weapons/pistol.tres"
 const CHEST_RIG := "res://resources/backpacks/chest_rig.tres"
@@ -170,6 +173,12 @@ var net_alive := true
 
 
 func _ready() -> void:
+	# Off while the screen gadget is being tested. Eleven guards shooting at you
+	# is a lot of noise to debug a stealth tool through. One line, flipped back
+	# when the testing is done.
+	if not GUARDS_ON:
+		queue_free()
+		return
 	collision_layer = Layers.ENEMY
 	collision_mask = Layers.WORLD | Layers.ONE_WAY
 	_home = global_position
@@ -449,6 +458,8 @@ func _can_see_player() -> bool:
 		if not get_world_2d().direct_space_state.intersect_ray(query).is_empty():
 			continue
 		# Smoke works both ways: what hides them from you hides you from them.
+		if Screen.blocks_sight(get_tree(), eye, target):
+			continue
 		if Smoke.blocks_sight(get_tree(), eye, target):
 			continue
 		return true

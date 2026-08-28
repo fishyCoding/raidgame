@@ -128,6 +128,7 @@ const CATALOGUE := {
 		{"kind": "gadget", "path": "res://resources/gadgets/recon_bow.tres", "price": 1000},
 		{"kind": "gadget", "path": "res://resources/gadgets/projection.tres", "price": 1400},
 		{"kind": "gadget", "path": "res://resources/gadgets/dash.tres", "price": 1100},
+		{"kind": "gadget", "path": "res://resources/gadgets/screen.tres", "price": 1200},
 	],
 	"throw": [
 		{"kind": "gadget", "path": "res://resources/gadgets/frag.tres", "price": 450},

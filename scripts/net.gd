@@ -775,6 +775,48 @@ func cast_projection(gadget_path: String, at: Vector2, look: Dictionary,
 	return mine
 
 
+## Puts a screen up on every machine.
+##
+## Same shape as casting a projection: the host is the one that really decides,
+## and a client asks rather than tells. A screen that existed on the machine of
+## whoever raised it and nowhere else would be an invisible wall in the most
+## literal and least useful sense - stopping their bullets and nobody else's.
+func raise_screen(top: Vector2, bottom: Vector2, by: int) -> Node:
+	var mine := _build_screen(top, bottom, by)
+	if not is_networked():
+		return mine
+	if is_host:
+		for peer in multiplayer.get_peers():
+			if peer != by:
+				_make_screen.rpc_id(peer, top, bottom, by)
+	else:
+		_ask_to_screen.rpc_id(1, top, bottom)
+	return mine
+
+
+@rpc("any_peer", "reliable")
+func _ask_to_screen(top: Vector2, bottom: Vector2) -> void:
+	if not is_host:
+		return
+	raise_screen(top, bottom, multiplayer.get_remote_sender_id())
+
+
+@rpc("authority", "reliable")
+func _make_screen(top: Vector2, bottom: Vector2, by: int) -> void:
+	_build_screen(top, bottom, by)
+
+
+func _build_screen(top: Vector2, bottom: Vector2, by: int) -> Node:
+	var scene: PackedScene = load("res://scenes/screen.tscn")
+	var sheet: Node2D = scene.instantiate()
+	var into := get_tree().current_scene
+	if into == null:
+		return null
+	into.add_child(sheet)
+	sheet.setup(top, bottom, by)
+	return sheet
+
+
 @rpc("any_peer", "reliable")
 func _ask_to_project(gadget_path: String, at: Vector2, look: Dictionary) -> void:
 	if not is_host:

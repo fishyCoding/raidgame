@@ -1922,6 +1922,13 @@ func _use_ultimate(slot := 0) -> void:
 		GadgetData.Kind.OVERLOAD:
 			overload_left = ult.gadget.active_time
 			_say_loot("OVERLOAD")
+		GadgetData.Kind.SCREEN:
+			if not _raise_screen(ult.gadget):
+				# Nothing solid within reach to hang it from, so nothing is
+				# spent. A gadget that eats a full meter and produces no object
+				# is worse than one that refuses.
+				ult.charge = keep_charge
+				_say_loot("nothing to anchor a screen to here")
 		GadgetData.Kind.DASH:
 			dashes_left = ult.gadget.dashes
 			# Armed by the cast, so the press that buys them is also the press
@@ -1939,6 +1946,58 @@ func _use_ultimate(slot := 0) -> void:
 			_say_loot("bow out - hold fire to draw, release to loose")
 	if _audio:
 		_audio.reload_finished(global_position)
+
+
+## Hangs a screen where you are pointing.
+##
+## It has to reach something solid. The sheet runs straight up and down from the
+## aimed spot: up to a ceiling if there is one close enough, otherwise down to
+## the floor - and it stops early at whatever it meets on the way, so a screen in
+## a low room is a short screen rather than one poking through the roof.
+##
+## Vertical rather than free-angle because of what it is for. Sight in this game
+## is a horizontal question - you are looking across a room at somebody - and a
+## sheet you hang across that line has to stand up in it.
+func _raise_screen(gadget: GadgetData) -> bool:
+	# The crosshair itself, not the floor under it. A screen is hung in the air
+	# between two surfaces; snapping it down first would put every one of them on
+	# the ground whatever you were pointing at.
+	var at := PlayerInput.get_aim_point(global_position, _aim_reach)
+	var reach: float = gadget.reach_in_heights * size.y
+	var space := get_world_2d().direct_space_state
+
+	# Whichever surface is nearer: the sheet hangs from a ceiling or stands on a
+	# floor, and either counts as being anchored.
+	var up := _surface_from(space, at, Vector2(0.0, -1.0), reach)
+	var down := _surface_from(space, at, Vector2(0.0, 1.0), reach)
+	if not up.is_finite() and not down.is_finite():
+		return false
+
+	var top := up if up.is_finite() else at - Vector2(0.0, reach)
+	var bottom := down if down.is_finite() else at + Vector2(0.0, reach)
+	# Capped from the anchored end, so the leash is measured from the thing it is
+	# actually attached to.
+	if up.is_finite() and bottom.y - top.y > reach:
+		bottom = top + Vector2(0.0, reach)
+	elif not up.is_finite() and bottom.y - top.y > reach:
+		top = bottom - Vector2(0.0, reach)
+	if bottom.y - top.y < size.y * 0.5:
+		return false
+
+	Net.raise_screen(top, bottom, get_multiplayer_authority())
+	_say_loot("SCREEN up - they cannot see through it, they can still hear you")
+	return true
+
+
+## The first solid surface along a direction, within reach, or INF.
+func _surface_from(space: PhysicsDirectSpaceState2D, at: Vector2,
+		way: Vector2, reach: float) -> Vector2:
+	var probe := PhysicsRayQueryParameters2D.create(at, at + way * reach)
+	# Walls only. A one-way platform is something you jump through, so hanging a
+	# sheet off one would anchor it to a thing that is not there from below.
+	probe.collision_mask = Layers.WORLD
+	var hit := space.intersect_ray(probe)
+	return (hit.position as Vector2) if hit else Vector2.INF
 
 
 ## Steps a copy of you out of where you are standing.

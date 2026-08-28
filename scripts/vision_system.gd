@@ -152,6 +152,12 @@ func _can_see(space: PhysicsDirectSpaceState2D, origin: Vector2, node: Node2D) -
 		# Geometry is not the only thing that hides people.
 		if Smoke.blocks_sight(get_tree(), origin, probe):
 			continue
+		# A screen shows you the room without the people in it. Checked here,
+		# against bodies, rather than added to SIGHT_MASK - a screen is not a
+		# wall and must not read as one anywhere. The level behind it draws
+		# exactly as it always did; only what is alive back there goes missing.
+		if Screen.blocks_sight(get_tree(), origin, probe):
+			continue
 		return true
 	return false
 

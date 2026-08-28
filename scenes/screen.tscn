@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://mjshwa4pe5xs"]
+
+[ext_resource type="Script" path="res://scripts/screen.gd" id="1_screen"]
+
+[node name="Screen" type="StaticBody2D"]
+collision_layer = 32
+collision_mask = 0
+script = ExtResource("1_screen")
+
+[node name="Shape" type="CollisionShape2D" parent="."]
