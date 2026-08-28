@@ -1916,7 +1916,12 @@ func _use_ultimate(slot := 0) -> void:
 		if ult.charge >= 1.0:
 			screen_aiming = true
 			screen_first = Vector2.INF
-			_update_screen_aim()
+			screen_to = Vector2.INF
+			# Deliberately not run here. The view treats a press of this same
+			# button as "put it away", and we are inside that very press - so
+			# calling it now opened the view and shut it again in one frame,
+			# leaving the trigger back on the gun. It runs from _update_weapon
+			# on the next frame, when the edge has passed.
 			_say_loot("click one end of the screen, then the other")
 		else:
 			_say_loot("ultimate at %d%%" % roundi(ult.charge * 100.0))

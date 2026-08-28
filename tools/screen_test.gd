@@ -56,15 +56,28 @@ func _run() -> void:
 	# other. Driven through the real input edges rather than by calling the
 	# placement directly - "two clicks make a screen" is the feature, and a test
 	# that hands the function two points would pass with the clicks unwired.
-	player._use_ultimate(0)
+	# Opened by pressing the key, not by calling the function. That distinction
+	# is the whole of the last bug: the view treats a press of this button as
+	# "put it away", so opening it from inside that press shut it again in the
+	# same frame - and a test that called _use_ultimate directly never saw the
+	# edge and passed happily while the gadget did not work at all.
+	Input.action_press(&"ultimate")
 	await physics_frame
-	_check(player.screen_aiming, "the ultimate opens the placing view")
+	Input.action_release(&"ultimate")
+	await physics_frame
+	await physics_frame
+	_check(player.screen_aiming, "pressing the ultimate opens the placing view")
 	_check(ult.charge >= 1.0, "and looking at it costs nothing yet")
 
 	# Aimed by setting the crosshair's own offset, not by writing
 	# PlayerInput.touch_aim_point. The touch pad rewrites that field every frame
 	# it processes, so a harness that sets it is quietly overruled - which is
 	# exactly what happened here: the click landed somewhere else entirely.
+	# And it stays open across frames rather than closing itself.
+	for i in 10:
+		await physics_frame
+	_check(player.screen_aiming, "and it stays open")
+
 	var anchor: Vector2 = player.global_position + Vector2(90.0, -20.0)
 	_aim_at(player, anchor)
 	await physics_frame
