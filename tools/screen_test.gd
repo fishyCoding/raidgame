@@ -52,7 +52,38 @@ func _run() -> void:
 	for i in 20:
 		await physics_frame
 
-	var raised: bool = player._raise_screen(ult.gadget)
+	# Placed the way a person places one: open the view, click one end, click the
+	# other. Driven through the real input edges rather than by calling the
+	# placement directly - "two clicks make a screen" is the feature, and a test
+	# that hands the function two points would pass with the clicks unwired.
+	player._use_ultimate(0)
+	await physics_frame
+	_check(player.screen_aiming, "the ultimate opens the placing view")
+	_check(ult.charge >= 1.0, "and looking at it costs nothing yet")
+
+	# Aimed by setting the crosshair's own offset, not by writing
+	# PlayerInput.touch_aim_point. The touch pad rewrites that field every frame
+	# it processes, so a harness that sets it is quietly overruled - which is
+	# exactly what happened here: the click landed somewhere else entirely.
+	var anchor: Vector2 = player.global_position + Vector2(90.0, -20.0)
+	_aim_at(player, anchor)
+	await physics_frame
+	await _click()
+	print("-- first end at %s" % str(player.screen_first.round()))
+	_check(player.screen_first.is_finite(), "the first click sets one end")
+
+	# Further than the leash allows, to prove it is held rather than refused.
+	_aim_at(player, anchor + Vector2(0.0, -900.0))
+	await physics_frame
+	var span: float = player.screen_first.distance_to(player.screen_to)
+	var cap: float = player.SCREEN_REACH * player.size.y
+	print("-- dragged 900 px away, the sheet is %.0f px (cap %.0f)" % [span, cap])
+	_check(span <= cap + 1.0, "and the second end is held to the leash")
+
+	_aim_at(player, anchor + Vector2(0.0, -200.0))
+	await physics_frame
+	await _click()
+	var raised: bool = not player.screen_aiming
 	await physics_frame
 	var sheets := get_nodes_in_group(&"screen")
 	print("-- raised=%s, screens in the world: %d" % [raised, sheets.size()])
@@ -62,11 +93,11 @@ func _run() -> void:
 		return
 
 	var sheet: Node2D = sheets[0]
-	var span: float = (sheet._from as Vector2).distance_to(sheet._to)
-	var cap: float = ult.gadget.reach_in_heights * player.size.y
-	print("-- it spans %.0f px, the cap is %.0f" % [span, cap])
-	_check(span <= cap + 1.0, "and never longer than its reach allows")
-	_check(span > player.size.y * 0.5, "but long enough to hide behind")
+	var made: float = (sheet._from as Vector2).distance_to(sheet._to)
+	print("-- the sheet that went up spans %.0f px" % made)
+	_check(made <= cap + 1.0, "and never longer than its reach allows")
+	_check(made > player.size.y * 0.5, "but long enough to hide behind")
+	_check(ult.charge < 1.0, "setting it is what spends the meter")
 
 	# --- it hides bodies -----------------------------------------------------
 	var across: Vector2 = (sheet._from + sheet._to) * 0.5
@@ -131,6 +162,19 @@ func _run() -> void:
 	_check(after == 0, "a single hit takes it down")
 
 	_finish()
+
+
+## Points the crosshair at a spot in the world.
+func _aim_at(player: Node2D, spot: Vector2) -> void:
+	player._aim_reach = spot - player.global_position
+
+
+## One trigger press, seen by the placing view.
+func _click() -> void:
+	Input.action_press(&"fire")
+	await physics_frame
+	Input.action_release(&"fire")
+	await physics_frame
 
 
 func _finish() -> void:

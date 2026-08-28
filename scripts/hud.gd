@@ -20,6 +20,10 @@ const PROJECTION := Color(0.62, 0.78, 1.0)
 ## and it should read as a line drawn on a map rather than as part of the ghost.
 const ROUTE_LINE := Color(0.95, 0.26, 0.24)
 
+## Placing a screen: workable, and not.
+const SCREEN_OK := Color(0.62, 0.86, 1.0)
+const SCREEN_BAD := Color(0.95, 0.36, 0.32)
+
 ## The same planner the ghost walks with, so the drawn route and the walked route
 ## are one piece of code. See decoy_route.gd.
 ## The same surveyed map the decoy walks by, so the line and the walk are the
@@ -282,6 +286,8 @@ func _draw_health() -> void:
 		_draw_projection()
 	if _player.projection_aiming:
 		_draw_projection_aim()
+	if _player.screen_aiming:
+		_draw_screen_aim()
 	_draw_gadgets()
 	if _player.bow_out:
 		_draw_bow_meter(bar.position + Vector2(0.0, -52.0), bar.size.x)
@@ -537,6 +543,34 @@ func _ult_tint(item: Item) -> Color:
 	if item and item.gadget and item.gadget.kind == GadgetData.Kind.PROJECTION:
 		return PROJECTION
 	return OVERLOAD
+
+
+## The screen being placed: the line you are drawing, and its two ends.
+##
+## Drawn because a screen is invisible once it is up. If you cannot see it while
+## you are placing it you are guessing, and a gadget you guess at is one you
+## waste - you get one, and it dies to a single bullet.
+##
+## Amber while it is a legal sheet, red while it is not, so "too short" reads
+## before you click rather than after.
+func _draw_screen_aim() -> void:
+	var to: Vector2 = _player.screen_to
+	if not to.is_finite():
+		return
+	var lit: Color = SCREEN_OK if _player.screen_ok else SCREEN_BAD
+	var here := _to_screen(to)
+	if not here.is_finite():
+		return
+
+	var first: Vector2 = _player.screen_first
+	if first.is_finite():
+		var start := _to_screen(first)
+		if start.is_finite():
+			draw_line(start, here, Color(lit, 0.85), 3.0, true)
+			draw_circle(start, 5.0, lit)
+	# The loose end, always: before the first click it is the only thing there is
+	# to look at, and it is what tells you the crosshair has snapped to a wall.
+	draw_circle(here, 5.0, Color(lit, 0.9))
 
 
 ## One ultimate slot: what is in it, what it is doing, and the key that fires it.

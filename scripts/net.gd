@@ -775,23 +775,31 @@ func cast_projection(gadget_path: String, at: Vector2, look: Dictionary,
 	return mine
 
 
-## Puts a screen up on every machine.
+## Screens, identified by a number the host mints.
 ##
-## Same shape as casting a projection: the host is the one that really decides,
-## and a client asks rather than tells. A screen that existed on the machine of
-## whoever raised it and nowhere else would be an invisible wall in the most
-## literal and least useful sense - stopping their bullets and nobody else's.
+## The identity is the whole reason this is not a copy of the projection path.
+## A screen has to be able to die on every machine at once, and "the one that
+## just got shot" is not something two peers can work out independently - so the
+## host names each one and everybody refers to it by that name afterwards.
+##
+## Without it the host freed its own copy when a bullet landed and every client
+## kept theirs: an invisible, solid, permanent wall standing in a room that the
+## person who shot it can see straight through.
+var _screen_serial := 0
+
+
 func raise_screen(top: Vector2, bottom: Vector2, by: int) -> Node:
-	var mine := _build_screen(top, bottom, by)
 	if not is_networked():
-		return mine
-	if is_host:
-		for peer in multiplayer.get_peers():
-			if peer != by:
-				_make_screen.rpc_id(peer, top, bottom, by)
-	else:
+		_screen_serial += 1
+		return _build_screen(top, bottom, by, _screen_serial)
+	if not is_host:
+		# Asked for, not built. The host owns the numbering, and a sheet raised
+		# here under a name of its own could never be taken down anywhere else.
 		_ask_to_screen.rpc_id(1, top, bottom)
-	return mine
+		return null
+	_screen_serial += 1
+	_make_screen.rpc(top, bottom, by, _screen_serial)
+	return _build_screen(top, bottom, by, _screen_serial)
 
 
 @rpc("any_peer", "reliable")
@@ -802,19 +810,37 @@ func _ask_to_screen(top: Vector2, bottom: Vector2) -> void:
 
 
 @rpc("authority", "reliable")
-func _make_screen(top: Vector2, bottom: Vector2, by: int) -> void:
-	_build_screen(top, bottom, by)
+func _make_screen(top: Vector2, bottom: Vector2, by: int, id: int) -> void:
+	_build_screen(top, bottom, by, id)
 
 
-func _build_screen(top: Vector2, bottom: Vector2, by: int) -> Node:
+func _build_screen(top: Vector2, bottom: Vector2, by: int, id: int) -> Node:
 	var scene: PackedScene = load("res://scenes/screen.tscn")
 	var sheet: Node2D = scene.instantiate()
 	var into := get_tree().current_scene
 	if into == null:
 		return null
 	into.add_child(sheet)
-	sheet.setup(top, bottom, by)
+	sheet.setup(top, bottom, by, id)
 	return sheet
+
+
+## Takes one down everywhere. Only the host decides, the same as with damage.
+func break_screen(id: int) -> void:
+	_drop_screen_here(id)
+	if is_networked() and is_host:
+		_drop_screen.rpc(id)
+
+
+@rpc("authority", "reliable")
+func _drop_screen(id: int) -> void:
+	_drop_screen_here(id)
+
+
+func _drop_screen_here(id: int) -> void:
+	for node in get_tree().get_nodes_in_group(&"screen"):
+		if is_instance_valid(node) and int(node.get(&"id")) == id:
+			node.queue_free()
 
 
 @rpc("any_peer", "reliable")

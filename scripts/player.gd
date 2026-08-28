@@ -544,6 +544,13 @@ var dashes_left := 0
 var dash_ready := false
 var _dash_left := 0.0
 var _dash_way := Vector2.ZERO
+## Placing a screen. The first corner once it has been clicked, the second
+## wherever the crosshair is, and whether the pair of them make a legal sheet.
+var screen_aiming := false
+var screen_first := Vector2.INF
+var screen_to := Vector2.INF
+var screen_ok := false
+
 var projection_aiming := false
 ## Where the pointer is asking for while aiming, in world space.
 var projection_mark := Vector2.INF
@@ -1825,6 +1832,9 @@ func _update_weapon() -> void:
 
 	# Placing a projection owns the trigger, the pointer and Q. Handled before
 	# anything else in here so none of the three leak through to the gun.
+	if screen_aiming:
+		_update_screen_aim()
+		return
 	if projection_aiming:
 		_update_projection_aim()
 		return
@@ -1899,6 +1909,19 @@ func _use_ultimate(slot := 0) -> void:
 	# charge is checked at the click rather than here, so backing out of the
 	# view costs nothing - and so re-pointing a ghost that is already out works
 	# through the same two presses on an empty meter.
+	# A screen is placed, not thrown. Q opens the view you place it from and the
+	# charge is spent by the confirming click, so looking at where it would go
+	# and thinking better of it costs nothing.
+	if ult.gadget.kind == GadgetData.Kind.SCREEN:
+		if ult.charge >= 1.0:
+			screen_aiming = true
+			screen_first = Vector2.INF
+			_update_screen_aim()
+			_say_loot("click one end of the screen, then the other")
+		else:
+			_say_loot("ultimate at %d%%" % roundi(ult.charge * 100.0))
+		return
+
 	if ult.gadget.kind == GadgetData.Kind.PROJECTION:
 		var out := Net.projection_for(get_multiplayer_authority())
 		var already := out != null and not bool(out.get("gone"))
@@ -1928,12 +1951,8 @@ func _use_ultimate(slot := 0) -> void:
 			overload_left = ult.gadget.active_time
 			_say_loot("OVERLOAD")
 		GadgetData.Kind.SCREEN:
-			if not _raise_screen(ult.gadget):
-				# Nothing solid within reach to hang it from, so nothing is
-				# spent. A gadget that eats a full meter and produces no object
-				# is worse than one that refuses.
-				ult.charge = keep_charge
-				_say_loot("nothing to anchor a screen to here")
+			# Handled before the meter is touched - see the placing branch above.
+			pass
 		GadgetData.Kind.DASH:
 			dashes_left = ult.gadget.dashes
 			# Armed by the cast, so the press that buys them is also the press
@@ -1953,45 +1972,99 @@ func _use_ultimate(slot := 0) -> void:
 		_audio.reload_finished(global_position)
 
 
-## Hangs a screen where you are pointing.
+## How far apart the two ends may be, in player heights. The leash on a screen:
+## far enough to cut a room in half, not far enough to fence one off.
+const SCREEN_REACH := 5.0
+
+## How close to a surface a clicked end has to be before it sticks to it. Enough
+## that meaning to touch a wall is enough to touch it, without dragging ends
+## across the room to walls nobody was pointing at.
+const SCREEN_SNAP := 44.0
+
+
+## Placing a screen: click one end, click the other.
 ##
-## It has to reach something solid. The sheet runs straight up and down from the
-## aimed spot: up to a ceiling if there is one close enough, otherwise down to
-## the floor - and it stops early at whatever it meets on the way, so a screen in
-## a low room is a short screen rather than one poking through the roof.
-##
-## Vertical rather than free-angle because of what it is for. Sight in this game
-## is a horizontal question - you are looking across a room at somebody - and a
-## sheet you hang across that line has to stand up in it.
-func _raise_screen(gadget: GadgetData) -> bool:
-	# The crosshair itself, not the floor under it. A screen is hung in the air
-	# between two surfaces; snapping it down first would put every one of them on
-	# the ground whatever you were pointing at.
-	var at := PlayerInput.get_aim_point(global_position, _aim_reach)
-	var reach: float = gadget.reach_in_heights * size.y
-	var space := get_world_2d().direct_space_state
+## Drawn rather than derived. An earlier version worked the whole sheet out from
+## a single press - nearest floor, nearest ceiling, cap the length - and the
+## trouble with it is that you cannot tell it what you meant. Two clicks is more
+## work and it is the kind of work you want: you are choosing where the line
+## goes, and where the line goes is the entire gadget.
+func _update_screen_aim() -> void:
+	if inventory_open or not is_alive or is_downed:
+		_cancel_screen_aim()
+		return
+	var ult := inventory.get_ultimate(
+		inventory.slot_of_kind(GadgetData.Kind.SCREEN)) if inventory else null
+	if ult == null:
+		_cancel_screen_aim()
+		return
 
-	# Whichever surface is nearer: the sheet hangs from a ceiling or stands on a
-	# floor, and either counts as being anchored.
-	var up := _surface_from(space, at, Vector2(0.0, -1.0), reach)
-	var down := _surface_from(space, at, Vector2(0.0, 1.0), reach)
-	if not up.is_finite() and not down.is_finite():
-		return false
+	var at := _screen_point()
+	if screen_first.is_finite():
+		# Held to the leash, in the direction you are pointing, rather than
+		# refused outright. Being told "too far" as you move the cursor is worse
+		# than being shown exactly how much of it you can have.
+		var span: float = SCREEN_REACH * size.y
+		var offset := at - screen_first
+		if offset.length() > span:
+			at = screen_first + offset.normalized() * span
+		screen_to = at
+		screen_ok = screen_first.distance_to(at) >= size.y * 0.5
+	else:
+		screen_to = at
+		screen_ok = false
 
-	var top := up if up.is_finite() else at - Vector2(0.0, reach)
-	var bottom := down if down.is_finite() else at + Vector2(0.0, reach)
-	# Capped from the anchored end, so the leash is measured from the thing it is
-	# actually attached to.
-	if up.is_finite() and bottom.y - top.y > reach:
-		bottom = top + Vector2(0.0, reach)
-	elif not up.is_finite() and bottom.y - top.y > reach:
-		top = bottom - Vector2(0.0, reach)
-	if bottom.y - top.y < size.y * 0.5:
-		return false
+	# Q or the right button steps back: first out of a half-drawn screen, then
+	# out of the view. Two presses to leave, which is right - the first one is
+	# usually "no, not from there" rather than "no, not at all".
+	if PlayerInput.is_ultimate_just_pressed() or Input.is_action_just_pressed(&"aim"):
+		if screen_first.is_finite():
+			screen_first = Vector2.INF
+			_say_loot("click one end of the screen, then the other")
+		else:
+			_cancel_screen_aim()
+			_say_loot("screen put away")
+		return
 
-	Net.raise_screen(top, bottom, get_multiplayer_authority())
+	if not PlayerInput.is_fire_just_pressed():
+		return
+	if not screen_first.is_finite():
+		screen_first = at
+		_say_loot("now the other end")
+		return
+	if not screen_ok:
+		_say_loot("too short to be worth putting up")
+		return
+	ult.charge = 0.0
+	Net.raise_screen(screen_first, screen_to, get_multiplayer_authority())
+	_cancel_screen_aim()
 	_say_loot("SCREEN up - they cannot see through it, they can still hear you")
-	return true
+
+
+## Where a clicked end lands: the crosshair, pulled onto a surface if one is
+## close. A sheet that ends a hand's width from the floor has a gap under it that
+## somebody will see you through, and nobody clicking there meant to leave one.
+func _screen_point() -> Vector2:
+	var at := PlayerInput.get_aim_point(global_position, _aim_reach)
+	var space := get_world_2d().direct_space_state
+	var best := at
+	var best_gap := SCREEN_SNAP
+	for way in [Vector2.DOWN, Vector2.UP, Vector2.LEFT, Vector2.RIGHT]:
+		var found := _surface_from(space, at, way, SCREEN_SNAP)
+		if not found.is_finite():
+			continue
+		var gap := at.distance_to(found)
+		if gap < best_gap:
+			best_gap = gap
+			best = found
+	return best
+
+
+func _cancel_screen_aim() -> void:
+	screen_aiming = false
+	screen_first = Vector2.INF
+	screen_to = Vector2.INF
+	screen_ok = false
 
 
 ## The first solid surface along a direction, within reach, or INF.

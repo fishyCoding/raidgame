@@ -28,6 +28,9 @@ const THICK := 10.0
 
 ## Who put it up. Only they can see it - see _draw.
 var caster := 0
+## The host's name for this sheet. Every machine holding a copy uses the same
+## one, which is what lets a bullet on the host take it down everywhere.
+var id := 0
 
 var _span := 0.0
 var _life := 0.0
@@ -36,8 +39,9 @@ var _from := Vector2.ZERO
 var _to := Vector2.ZERO
 
 
-func setup(from: Vector2, to: Vector2, by: int) -> void:
+func setup(from: Vector2, to: Vector2, by: int, name_from_host := 0) -> void:
 	caster = by
+	id = name_from_host
 	_from = from
 	_to = to
 	global_position = (from + to) * 0.5
@@ -73,10 +77,15 @@ func _process(delta: float) -> void:
 ## Anything that reaches it takes it down. The damage is thrown away - a screen
 ## has no health to whittle, it either stands or it does not.
 func take_damage(_amount: float, at: Vector2, _from: Vector2) -> void:
-	shatter(at)
+	# Through Net, so it comes down on every machine rather than only on the one
+	# where the round happened to be resolved. Bullets have consequences on the
+	# host alone; a screen that only died there would live on as an invisible
+	# wall for everybody else.
+	_burst(at)
+	Net.break_screen(id)
 
 
-func shatter(at: Vector2) -> void:
+func _burst(at: Vector2) -> void:
 	if not is_inside_tree():
 		return
 	# Loud on purpose. Whoever was hiding needs to know their cover has gone, and
@@ -84,7 +93,6 @@ func shatter(at: Vector2) -> void:
 	# explosion rather than given a sound of its own, quietly and at a fraction
 	# of the size - a new sample is a separate job from making the thing work.
 	Audio.explosion(at if at.is_finite() else global_position, 0.25)
-	queue_free()
 
 
 ## Drawn only for whoever deployed it, and faintly.
