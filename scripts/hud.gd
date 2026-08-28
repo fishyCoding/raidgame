@@ -503,11 +503,8 @@ func _draw_extraction(point) -> void:
 ## Overload running: a banner, a countdown and a rim of colour around the whole
 ## screen. It lasts eight seconds and changes how the gun behaves, so it should
 ## be impossible to forget that it is on.
-## Seconds left of whichever ultimate is currently burning, or 0.
-##
-## One number rather than one per gadget. Only one ultimate can be equipped, so
-## only one can ever be running, and the tile at the bottom of the screen asks
-## the same question of all of them: is this thing doing something right now.
+## Seconds left of whichever ultimate is currently burning, or 0. Used by the
+## screen-wide effects, which do not care which slot a thing came out of.
 func _ult_left() -> float:
 	if _player == null:
 		return 0.0
@@ -517,6 +514,74 @@ func _ult_left() -> float:
 ## What colour to say it in. Overload is a fire; a projection is a picture.
 func _ult_colour() -> Color:
 	return PROJECTION if _player and _player.projection_left > 0.0 else OVERLOAD
+
+
+## Seconds left of one particular gadget, which is the question a tile asks.
+##
+## Asked per item since there are two slots. It used to be one number for the
+## whole screen on the grounds that only one ultimate could be equipped - true
+## when it was written, and it would have lit both tiles at once now.
+func _ult_running(item: Item) -> float:
+	if _player == null or item == null or item.gadget == null:
+		return 0.0
+	match item.gadget.kind:
+		GadgetData.Kind.OVERLOAD:
+			return _player.overload_left
+		GadgetData.Kind.PROJECTION:
+			return _player.projection_left
+	return 0.0
+
+
+## The colour for one gadget, whether or not it happens to be running.
+func _ult_tint(item: Item) -> Color:
+	if item and item.gadget and item.gadget.kind == GadgetData.Kind.PROJECTION:
+		return PROJECTION
+	return OVERLOAD
+
+
+## One ultimate slot: what is in it, what it is doing, and the key that fires it.
+func _draw_ult_tile(box: Rect2, ult: Item, key: String) -> void:
+	var burning := _ult_running(ult)
+	var running := burning > 0.0
+	var lit := _ult_tint(ult)
+	var ready := ult != null and ult.charge >= 1.0
+
+	draw_rect(box, PANEL_BG)
+	draw_rect(Rect2(box.position, Vector2(3.0, box.size.y)),
+		lit if running else (ACCENT if ready else Color(DIM, 0.5)))
+	draw_string(_font, box.position + Vector2(12.0, 18.0), key,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, DIM)
+
+	if ult == null:
+		draw_string(_font, box.position + Vector2(30.0, 18.0), "empty",
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(DIM, 0.8))
+		return
+
+	draw_string(_font, box.position + Vector2(30.0, 18.0), ult.gadget.short_name,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13,
+		lit if running else (ACCENT if ready else TEXT))
+
+	# Dashes in hand beat a charge meter: the meter is how you get more, and the
+	# number is what you can actually spend right now.
+	var held := 0
+	if ult.gadget.kind == GadgetData.Kind.DASH and _player:
+		held = int(_player.dashes_left)
+	var idle := "READY" if ready else "%d%%" % roundi(ult.charge * 100.0)
+	if held > 0:
+		idle = "x%d" % held
+	var right := "%.1fs" % burning if running else idle
+	draw_string(_font, box.position + Vector2(0.0, 18.0), right,
+		HORIZONTAL_ALIGNMENT_RIGHT, box.size.x - 12.0, 12,
+		lit if running else (ACCENT if (ready or held > 0) else DIM))
+
+	# Draining while it runs, filling while it charges. Same bar either way,
+	# because it is the same question asked from the two ends.
+	var spent := clampf(burning / maxf(_overload_span, 0.01), 0.0, 1.0)
+	var fraction := spent if running else clampf(ult.charge, 0.0, 1.0)
+	var bar := Rect2(box.position + Vector2(12.0, 28.0), Vector2(box.size.x - 24.0, 6.0))
+	draw_rect(bar, Color(0.16, 0.18, 0.22))
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * fraction, bar.size.y)),
+		lit if running else (ACCENT if ready else Color(0.45, 0.62, 0.75)))
 
 
 func _draw_overload() -> void:
@@ -741,50 +806,27 @@ func _draw_gadgets() -> void:
 	#
 	# With thumbs, the right of the bar is the aim stick's corner, so the row
 	# moves to sit centred *above* the bar instead. Same strip, stacked.
-	var row := tile.x * Inventory.THROWABLE_SLOTS + (tile.x + gap * 2.0)
-	var origin := Vector2(size.x * 0.5 - row * 0.5, size.y - MARGIN - tile.y - 56.0) \
-		if PlayerInput.is_touch() \
-		else Vector2(size.x * 0.5 + 150.0, size.y - MARGIN - tile.y)
+	# Two rows of two: ultimates above, throwables below. Four across in one
+	# strip does not fit beside the health bar - the second ultimate either ran
+	# off the edge of the screen or pushed the row back over the bar it is meant
+	# to sit beside.
+	#
+	# Written with a local rather than a line continuation. Backslashes at the
+	# ends of lines do not survive being written to this file by tooling - they
+	# collapse the statement onto one line, which still parses and is unreadable.
+	var wide := tile.x * Inventory.THROWABLE_SLOTS + gap
+	var origin := Vector2(size.x * 0.5 + 150.0, size.y - MARGIN - tile.y)
+	if PlayerInput.is_touch():
+		origin = Vector2(size.x * 0.5 - wide * 0.5,
+			size.y - MARGIN - tile.y - 56.0)
 
-	var ult: Item = kit.get_ultimate(0)
-	var burning := _ult_left()
-	var running := burning > 0.0
-	var lit := _ult_colour()
-	var ready := ult != null and ult.charge >= 1.0
-	var box := Rect2(origin, tile)
-	draw_rect(box, PANEL_BG)
-	draw_rect(Rect2(box.position, Vector2(3.0, box.size.y)),
-		lit if running else (ACCENT if ready else Color(DIM, 0.5)))
-
-	if ult == null:
-		draw_string(_font, box.position + Vector2(12.0, 18.0), "Q",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, DIM)
-		draw_string(_font, box.position + Vector2(30.0, 18.0), "no ultimate",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(DIM, 0.8))
-	else:
-		draw_string(_font, box.position + Vector2(12.0, 18.0), "Q",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, DIM)
-		draw_string(_font, box.position + Vector2(30.0, 18.0), ult.gadget.short_name,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 13,
-			lit if running else (ACCENT if ready else TEXT))
-		var idle := "READY" if ready else "%d%%" % roundi(ult.charge * 100.0)
-		var right := "%.1fs" % burning if running else idle
-		draw_string(_font, box.position + Vector2(0.0, 18.0), right,
-			HORIZONTAL_ALIGNMENT_RIGHT, box.size.x - 12.0, 12,
-			lit if running else (ACCENT if ready else DIM))
-
-		# Draining while it runs, filling while it charges. Same bar either way,
-		# because it is the same question asked from the two ends.
-		var spent := clampf(burning / maxf(_overload_span, 0.01), 0.0, 1.0)
-		var fraction := spent if running else clampf(ult.charge, 0.0, 1.0)
-		var bar := Rect2(box.position + Vector2(12.0, 28.0), Vector2(box.size.x - 24.0, 6.0))
-		draw_rect(bar, Color(0.16, 0.18, 0.22))
-		draw_rect(Rect2(bar.position, Vector2(bar.size.x * fraction, bar.size.y)),
-			lit if running else (ACCENT if ready else Color(0.45, 0.62, 0.75)))
+	for i in kit.ultimates.size():
+		var at := origin + Vector2((tile.x + gap) * i, -tile.y - gap)
+		_draw_ult_tile(Rect2(at, tile), kit.get_ultimate(i), "Q" if i == 0 else "Z")
 
 	for i in Inventory.THROWABLE_SLOTS:
 		var item: Item = kit.get_throwable(i)
-		var slot := Rect2(origin + Vector2((tile.x + gap) * (i + 1), 0.0), tile)
+		var slot := Rect2(origin + Vector2((tile.x + gap) * i, 0.0), tile)
 		draw_rect(slot, PANEL_BG)
 		draw_rect(Rect2(slot.position, Vector2(3.0, slot.size.y)),
 			ACCENT if item else Color(DIM, 0.5))

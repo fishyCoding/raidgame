@@ -46,16 +46,17 @@ func _run() -> void:
 	counter.open(player.inventory)
 	counter.credits = 12000
 	for pick in [["backpack", 1], ["primary", 1], ["ultimate", 0],
-			["throw0", 0], ["throw1", 1]]:
+			["ultimate2", 3], ["throw0", 0], ["throw1", 1]]:
 		counter._open = {"id": pick[0], "list": _list_for(counter, pick[0]),
 			"label": "", "kind": "slot"}
 		counter._buy(counter.CATALOGUE[_list_for(counter, pick[0])][pick[1]])
 	counter.queue_free()
 	await _wait(20)
 
-	# A charged ultimate, so the tile reads READY rather than 0%.
-	if player.inventory.ultimate:
-		player.inventory.ultimate.charge = 1.0
+	# Charged ultimates, so the tiles read READY rather than 0%.
+	for ult in player.inventory.ultimates:
+		if ult:
+			ult.charge = 1.0
 	await _wait(10)
 	await _save("res://tools/scr_hud.png")
 	print("hud_shot | saved scr_hud.png")

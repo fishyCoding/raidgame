@@ -40,7 +40,8 @@ const LAYOUT := [
 			"says": "slots"},
 	]},
 	{"title": "KIT", "pairs": [
-		{"actions": [&"ultimate"], "says": "ultimate"},
+		{"actions": [&"ultimate"], "says": "ultimate 1"},
+		{"actions": [&"ultimate_2"], "says": "ultimate 2"},
 		{"actions": [&"throw_1", &"throw_2"], "says": "aim and throw"},
 		{"actions": [&"heal"], "says": "medkit / get back up"},
 		{"actions": [&"surgical"], "says": "surgical kit - clears a wound"},
