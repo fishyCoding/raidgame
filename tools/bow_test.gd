@@ -13,7 +13,6 @@ func _initialize() -> void:
 	_main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(_main)
 	current_scene = _main
-	_player = _main.get_node("Player")
 	_run()
 
 
@@ -25,6 +24,16 @@ func _run() -> void:
 	shop.deployed.emit()
 	await physics_frame
 	_input = root.get_node("/root/PlayerInput")
+	# Taken from Net after the deploy, not from a node called "Player" in the
+	# scene. There has not been one of those since characters started being
+	# spawned per peer, so this fetched null and every check below it died on
+	# the first line that touched it - silently, because the tool reported no
+	# verdict at all rather than a failure.
+	_player = root.get_node("Net").local_player
+	if _player == null:
+		print("no character - cannot run")
+		quit(1)
+		return
 
 	await _bow()
 	_bags()
@@ -36,7 +45,7 @@ func _bow() -> void:
 	print("-- the recon bow --")
 	var kit: Inventory = _player.inventory
 	kit.set_ultimate(Item.from_gadget(load("res://resources/gadgets/recon_bow.tres")))
-	kit.ultimate.charge = 1.0
+	kit.ultimates[0].charge = 1.0
 
 	var guard: Node2D = _main.get_node("Enemies/Enemy2")
 	# Open ground with a clear lane east: standing against the crate makes the

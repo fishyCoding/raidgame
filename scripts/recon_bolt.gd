@@ -11,12 +11,16 @@ extends Node2D
 ## Muzzle velocity, pixels per second.
 @export var speed := 3000.0
 ## Arrows drop. Not much, but enough that a long shot has to be aimed high.
-## Well over four times what it was, because the arrow is now twice as fast and
-## speed flattens an arc hard: at double the speed a shot crosses the same
-## ground in half the time, so the same gravity would only pull it a quarter as
-## far down. Restoring the old arc alone would have taken four times this; past
-## that is the deeper arc asked for.
-@export var gravity := 1600.0
+## Nine times what it started at, because speed flattens an arc hard: at double
+## the speed a shot crosses the same ground in half the time, so the same gravity
+## would only pull it a quarter as far down. Four times over would merely have
+## restored the original arc at the new speed - everything past that is the curve
+## being asked for.
+##
+## For a sense of it: across the bow's 910 px reach the arrow now drops about
+## 110 px, against roughly 47 px before any of this. It is a lobbed shot that has
+## to be aimed above what you want to hit, not a flat one.
+@export var gravity := 2400.0
 
 var velocity := Vector2.ZERO
 var data: GadgetData

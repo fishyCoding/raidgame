@@ -8,12 +8,18 @@ extends SceneTree
 ## reports scripts something else pulls in. A parse error in a script that is
 ## only loaded when a gadget is used will sail past both and then show up as a
 ## body in the level behaving like a bare CharacterBody2D.
+##
+## tools/ is included, and that is not tidiness. Splitting the inventory's single
+## ultimate into two slots broke eight test tools that still named the old field,
+## and every one of them sailed through here because this only looked at
+## scripts/. A test that cannot load is worse than no test: it reports nothing
+## and looks like it passed.
 
 
 func _initialize() -> void:
 	var bad: Array = []
 	var seen := 0
-	for path in _scripts("res://scripts"):
+	for path in _scripts("res://scripts") + _scripts("res://tools"):
 		seen += 1
 		var script := ResourceLoader.load(path, "GDScript")
 		if script == null or not (script as GDScript).can_instantiate():

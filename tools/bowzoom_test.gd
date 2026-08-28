@@ -27,7 +27,7 @@ func _run(main: Node) -> void:
 
 	var kit: Inventory = player.inventory
 	kit.set_ultimate(Item.from_gadget(load("res://resources/gadgets/recon_bow.tres")))
-	kit.ultimate.charge = 1.0
+	kit.ultimates[0].charge = 1.0
 	player.global_position = Vector2(-1600, 200)
 	input.touch_aim_direction = Vector2.RIGHT
 	for i in 30:

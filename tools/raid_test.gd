@@ -80,7 +80,7 @@ func _overload() -> void:
 	print("\n-- overload moves you, not the gun --")
 	var kit: Inventory = _player.inventory
 	kit.set_ultimate(Item.from_gadget(load("res://resources/gadgets/overload.tres")))
-	kit.ultimate.charge = 1.0
+	kit.ultimates[0].charge = 1.0
 
 	# Peak rather than final speed: the complex has no long straight runs any
 	# more, so anything measured at the end of a fixed window is measured against
@@ -104,7 +104,7 @@ func _sprint(with_overload: bool) -> float:
 	_input.touch_move_axis = 0.0
 	await _wait(20)
 	if with_overload:
-		_player.inventory.ultimate.charge = 1.0
+		_player.inventory.ultimates[0].charge = 1.0
 		_player._use_ultimate()
 
 	_input.touch_move_axis = -1.0

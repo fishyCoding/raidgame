@@ -23,7 +23,7 @@ func _capture(main: Node) -> void:
 	kit.store(Item.from_gadget(load("res://resources/gadgets/frag.tres")))
 	kit.store(Item.from_gadget(load("res://resources/gadgets/smoke.tres")))
 	kit.set_ultimate(Item.from_gadget(load("res://resources/gadgets/recon_bow.tres")))
-	kit.ultimate.charge = 0.6
+	kit.ultimates[0].charge = 0.6
 
 	player.global_position = Vector2(-1000, 250)
 	input.touch_aim_direction = Vector2(1.0, -0.3).normalized()

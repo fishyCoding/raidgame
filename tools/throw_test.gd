@@ -39,14 +39,14 @@ func _run() -> void:
 func _debug_key() -> void:
 	print("-- Y with nothing equipped --")
 	var kit: Inventory = _player.inventory
-	print("  ultimate before: %s" % (kit.ultimate.label() if kit.ultimate else "none"))
+	print("  ultimate before: %s" % (kit.ultimates[0].label() if kit.ultimates[0] else "none"))
 	# The same path the key takes, minus the keyboard.
-	if kit.ultimate == null:
+	if kit.ultimates[0] == null:
 		kit.set_ultimate(Item.from_gadget(
 			load("res://resources/gadgets/overload.tres") as GadgetData))
-	kit.ultimate.charge = 1.0
+	kit.ultimates[0].charge = 1.0
 	print("  after Y: %s at %d%%" % [
-		kit.ultimate.gadget.short_name, roundi(kit.ultimate.charge * 100.0)])
+		kit.ultimates[0].gadget.short_name, roundi(kit.ultimates[0].charge * 100.0)])
 
 
 ## The arc is the grenade's own maths, so measuring the arc measures the throw.

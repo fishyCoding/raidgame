@@ -12,7 +12,6 @@ func _initialize() -> void:
 	_main = load("res://scenes/main.tscn").instantiate()
 	root.add_child(_main)
 	current_scene = _main
-	_player = _main.get_node("Player")
 	_run()
 
 
@@ -24,6 +23,16 @@ func _run() -> void:
 	shop.deployed.emit()
 	await physics_frame
 	_input = root.get_node("/root/PlayerInput")
+	# Taken from Net after the deploy, not from a node called "Player" in the
+	# scene. There has not been one of those since characters started being
+	# spawned per peer, so this fetched null and every check below it died on
+	# the first line that touched it - silently, because the tool reported no
+	# verdict at all rather than a failure.
+	_player = root.get_node("Net").local_player
+	if _player == null:
+		print("no character - cannot run")
+		quit(1)
+		return
 
 	var kit: Inventory = _player.inventory
 	kit.set_ultimate(Item.from_gadget(load("res://resources/gadgets/recon_bow.tres")))
@@ -41,13 +50,13 @@ func _run() -> void:
 func _pressing_q() -> void:
 	print("-- pressing Q --")
 	var kit: Inventory = _player.inventory
-	kit.ultimate.charge = 1.0
+	kit.ultimates[0].charge = 1.0
 	_player._use_ultimate()
 	await physics_frame
 	print("  bow out: %s, drawn %d%%, arrows in the level: %d" % [
 		_player.bow_out, roundi(_player.bow_drawn * 100.0), _arrows()])
 	print("  charge kept until an arrow is actually loosed: %d%%" % [
-		roundi(kit.ultimate.charge * 100.0)])
+		roundi(kit.ultimates[0].charge * 100.0)])
 	print("  message: \"%s\"" % _player.loot_message)
 
 
@@ -64,7 +73,7 @@ func _full_draw() -> void:
 	await _wait(3)
 	print("  released -> arrows away: %d, bow out: %s" % [_arrows(), _player.bow_out])
 	print("  charge spent now: %d%%   message: \"%s\"" % [
-		roundi(kit.ultimate.charge * 100.0), _player.loot_message])
+		roundi(kit.ultimates[0].charge * 100.0), _player.loot_message])
 
 	var bolt := _find_bolt()
 	if bolt:
@@ -75,7 +84,7 @@ func _full_draw() -> void:
 func _flinch() -> void:
 	print("\n-- a twitch on the trigger is not a shot --")
 	var kit: Inventory = _player.inventory
-	kit.ultimate.charge = 1.0
+	kit.ultimates[0].charge = 1.0
 	_player._use_ultimate()
 	await physics_frame
 	_input.touch_fire_held = true
@@ -83,14 +92,14 @@ func _flinch() -> void:
 	_input.touch_fire_held = false
 	await _wait(3)
 	print("  tapped fire -> arrows: %d, bow still out: %s, charge %d%%" % [
-		_arrows(), _player.bow_out, roundi(kit.ultimate.charge * 100.0)])
+		_arrows(), _player.bow_out, roundi(kit.ultimates[0].charge * 100.0)])
 
 
 func _putting_it_away() -> void:
 	print("\n-- Q again puts it away --")
 	var kit: Inventory = _player.inventory
 	_player._update_weapon() # let any partial draw settle
-	var before: float = kit.ultimate.charge
+	var before: float = kit.ultimates[0].charge
 	_input.touch_fire_held = false
 	await _wait(2)
 	# Simulate the second Q press through the same path the key takes.
@@ -98,7 +107,7 @@ func _putting_it_away() -> void:
 		_player.bow_out = false
 		_player.bow_drawn = 0.0
 	print("  bow away, charge kept: %d%% (was %d%%)" % [
-		roundi(kit.ultimate.charge * 100.0), roundi(before * 100.0)])
+		roundi(kit.ultimates[0].charge * 100.0), roundi(before * 100.0)])
 
 
 func _arrows() -> int:

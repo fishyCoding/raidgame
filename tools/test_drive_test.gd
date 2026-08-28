@@ -68,7 +68,7 @@ func _run() -> void:
 	var kit: Inventory = player.inventory
 	_check("a rifle in hand", kit != null and kit.primary != null)
 	_check("something to throw", kit.get_throwable(0) != null)
-	_check("an ultimate", kit.ultimate != null)
+	_check("an ultimate", kit.ultimates[0] != null)
 	_check("a bag", kit.backpack_item != null)
 	_check("and rounds for the rifle", kit.total_rounds() > 100)
 	_say("kitted with: %s" % kit.summary())
