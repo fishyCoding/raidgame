@@ -27,6 +27,14 @@ var touch_aim_point := Vector2.INF
 ## Set by a swipe across the pad, and the direction it went. Consumed on read,
 ## the same as the projection's send - a swipe is an event, and an event left
 ## lying around fires again on the next frame that looks at it.
+## How long a flick has to happen inside, in milliseconds. Short: this is meant
+## to catch a deliberate throw of the hand, not a slow drag that eventually
+## covers the same ground while you were only looking around.
+const FLICK_WINDOW := 170
+
+var _flick_went := Vector2.ZERO
+var _flick_ms := 0
+
 var touch_dash := false
 var touch_dash_way := Vector2.ZERO
 
@@ -242,6 +250,35 @@ func _input(event: InputEvent) -> void:
 	var motion := event as InputEventMouseMotion
 	if motion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		_mouse_motion += motion.relative
+		_note_flick(motion.relative)
+
+
+## Recent mouse travel, kept for spotting a flick.
+##
+## Its own running total rather than a reading of _mouse_motion, because aiming
+## consumes that every single frame - by the time anything could measure a
+## gesture across it, it has already been handed to the crosshair and cleared.
+##
+## And relative motion rather than where the pointer is. On a desktop the mouse
+## is captured: it is hidden, locked to the window, and its reported position
+## never changes, so a flick measured by position is a flick that never happens.
+## That is exactly why the first version of the dash did nothing on PC.
+func _note_flick(went: Vector2) -> void:
+	var now := Time.get_ticks_msec()
+	if now - _flick_ms > FLICK_WINDOW:
+		_flick_went = Vector2.ZERO
+	_flick_ms = now
+	_flick_went += went
+
+
+## The flick, if there has been one worth calling a swipe, and nothing otherwise.
+## Cleared on the way out, so one gesture cannot spend two dashes.
+func take_mouse_flick(least: float) -> Vector2:
+	if _flick_went.length() < least:
+		return Vector2.ZERO
+	var way := _flick_went
+	_flick_went = Vector2.ZERO
+	return way
 
 
 func _process(_delta: float) -> void:

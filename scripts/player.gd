@@ -343,13 +343,14 @@ const GROUND_HUNT := 900.0
 const DASH_SPEED := 720.0
 const DASH_TIME := 0.13
 
-## What counts as a mouse swipe: this far across the screen, this quickly.
+## What counts as a mouse swipe: this much raw mouse travel inside
+## PlayerInput.FLICK_WINDOW.
 ##
-## Deliberately a hard flick. Only watched for while you actually have dashes,
-## but within that window the mouse is also how you aim, and a dash you did not
-## ask for spends something you paid for.
-const FLICK_MIN := 250.0
-const FLICK_MS := 170
+## Counted in the mouse's own units rather than in screen pixels, because a
+## captured mouse has no screen position to measure against. Deliberately a hard
+## throw of the hand - the same mouse is how you aim, and a dash you did not ask
+## for spends something you paid for.
+const FLICK_MIN := 300.0
 ## What the bow's flight line is drawn in. The same blue as a recon sweep and
 ## a recon ping, because a blue circle on the ground already means "this is
 ## about to be scanned" and the preview is a promise of exactly that.
@@ -541,10 +542,6 @@ var flash_from := Vector2.INF
 var dashes_left := 0
 var _dash_left := 0.0
 var _dash_way := Vector2.ZERO
-## Where the mouse was when the current flick window opened.
-var _flick_at := Vector2.INF
-var _flick_ms := 0
-
 var projection_aiming := false
 ## Where the pointer is asking for while aiming, in world space.
 var projection_mark := Vector2.INF
@@ -1747,28 +1744,16 @@ func _update_dash(delta: float) -> void:
 
 ## A hard flick of the mouse, as the desktop half of a swipe.
 ##
-## Measured in screen pixels rather than world ones, because it is a gesture made
-## with a hand on a desk - how far the mouse went should not depend on how far
-## the camera happens to be zoomed out.
-##
-## The window slides: every FLICK_MS the anchor is dropped where the pointer is
-## and the measuring starts again. Without that, a slow drag across the screen
-## eventually covers the distance and dashes you somewhere you were only looking.
+## Asked of PlayerInput, which is the only thing that sees the motion. The mouse
+## on a desktop is captured - hidden, locked to the window, its reported position
+## never moving - so the first version of this, which watched where the pointer
+## was, could not have worked and did not: on PC the dash simply never fired.
+## What moves is the relative motion in the event stream, and that is what is
+## measured now.
 func _mouse_flick() -> Vector2:
 	if PlayerInput.is_touch():
 		return Vector2.ZERO
-	var now := Time.get_ticks_msec()
-	var here := get_viewport().get_mouse_position()
-	if not _flick_at.is_finite() or now - _flick_ms > FLICK_MS:
-		_flick_at = here
-		_flick_ms = now
-		return Vector2.ZERO
-	var went := here - _flick_at
-	if went.length() < FLICK_MIN:
-		return Vector2.ZERO
-	_flick_at = here
-	_flick_ms = now
-	return went
+	return PlayerInput.take_mouse_flick(FLICK_MIN)
 
 
 func _update_jump(delta: float) -> void:

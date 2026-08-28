@@ -127,6 +127,51 @@ func _run() -> void:
 	print("-- aim moved %.3f rad during the dash" % absf(swung))
 	_check(absf(swung) < 0.02, "aiming has to be frozen while dashing")
 
+	# --- and the same thing with a mouse -------------------------------------
+	#
+	# The half that shipped broken. On a desktop the mouse is captured: hidden,
+	# locked to the window, its reported position never changing. The first
+	# version watched the pointer's position for a flick, which on PC is a value
+	# that cannot move - so the dash never fired there at all.
+	#
+	# Driven from _note_flick rather than from a real InputEventMouseMotion,
+	# because a headless run cannot deliver one: mouse_mode will not go to
+	# CAPTURED without a window, so PlayerInput._input drops the event before it
+	# reaches anything. Confirmed rather than assumed - pushing motion in that
+	# way leaves _mouse_motion empty too, and that is the path ordinary aiming
+	# uses, which certainly works in the game. So the single line this cannot
+	# reach is the line aiming already proves, and everything downstream of it is
+	# under test here.
+	ult.charge = 1.0
+	player._use_ultimate()
+	while not player.is_on_floor():
+		await physics_frame
+	for i in 30:
+		await physics_frame
+
+	var mouse_way := _open_way(player)
+	var mouse_from: Vector2 = player.global_position
+	for i in 4:
+		_input._note_flick(Vector2(mouse_way * 120.0, 0.0))
+	for i in 18:
+		await physics_frame
+	var mouse_went: float = (player.global_position.x - mouse_from.x) * mouse_way
+	print("-- flicked the mouse: travelled %.0f px, %d dashes left" % [
+		mouse_went, player.dashes_left])
+	_check(mouse_went > 140.0, "a mouse flick has to dash on a desktop")
+	_check(player.dashes_left == 1, "and spend one doing it")
+
+	# Ordinary aiming must not. This is the same motion the crosshair reads, so
+	# the threshold is the only thing standing between looking and dashing.
+	var calm_from: Vector2 = player.global_position
+	for i in 3:
+		_input._note_flick(Vector2(mouse_way * 20.0, 0.0))
+	for i in 12:
+		await physics_frame
+	print("-- drifted the mouse: moved %.0f px, %d dashes left" % [
+		absf(player.global_position.x - calm_from.x), player.dashes_left])
+	_check(player.dashes_left == 1, "ordinary aiming must not spend a dash")
+
 	# --- the pad turns a drag into a swipe -----------------------------------
 	var pad: Control = main.get_node("HUD/TouchControls")
 	_input.touch_dash = false
