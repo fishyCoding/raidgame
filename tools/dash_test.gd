@@ -134,14 +134,14 @@ func _run() -> void:
 	# version watched the pointer's position for a flick, which on PC is a value
 	# that cannot move - so the dash never fired there at all.
 	#
-	# Driven from _note_flick rather than from a real InputEventMouseMotion,
+	# Driven by writing the drag total rather than by a real InputEventMouseMotion,
 	# because a headless run cannot deliver one: mouse_mode will not go to
 	# CAPTURED without a window, so PlayerInput._input drops the event before it
 	# reaches anything. Confirmed rather than assumed - pushing motion in that
 	# way leaves _mouse_motion empty too, and that is the path ordinary aiming
 	# uses, which certainly works in the game. So the single line this cannot
 	# reach is the line aiming already proves, and everything downstream of it is
-	# under test here.
+	# under test here - the threshold, the held button, and the spend.
 	ult.charge = 1.0
 	player._use_ultimate()
 	while not player.is_on_floor():
@@ -151,26 +151,37 @@ func _run() -> void:
 
 	var mouse_way := _open_way(player)
 	var mouse_from: Vector2 = player.global_position
+	# Holding the ultimate is what turns the mouse into a dash stick.
+	Input.action_press(&"ultimate")
 	for i in 4:
-		_input._note_flick(Vector2(mouse_way * 120.0, 0.0))
+		_input._drag_went += Vector2(mouse_way * 120.0, 0.0)
 	for i in 18:
 		await physics_frame
 	var mouse_went: float = (player.global_position.x - mouse_from.x) * mouse_way
-	print("-- flicked the mouse: travelled %.0f px, %d dashes left" % [
+	print("-- held and dragged the mouse: travelled %.0f px, %d dashes left" % [
 		mouse_went, player.dashes_left])
-	_check(mouse_went > 140.0, "a mouse flick has to dash on a desktop")
+	_check(mouse_went > 140.0, "holding the ultimate and dragging has to dash")
 	_check(player.dashes_left == 1, "and spend one doing it")
 
 	# Ordinary aiming must not. This is the same motion the crosshair reads, so
 	# the threshold is the only thing standing between looking and dashing.
 	var calm_from: Vector2 = player.global_position
 	for i in 3:
-		_input._note_flick(Vector2(mouse_way * 20.0, 0.0))
+		_input._drag_went += Vector2(mouse_way * 20.0, 0.0)
 	for i in 12:
 		await physics_frame
-	print("-- drifted the mouse: moved %.0f px, %d dashes left" % [
+	print("-- twitched the mouse while holding: moved %.0f px, %d dashes left" % [
 		absf(player.global_position.x - calm_from.x), player.dashes_left])
-	_check(player.dashes_left == 1, "ordinary aiming must not spend a dash")
+	_check(player.dashes_left == 1, "a twitch of the mouse must not spend a dash")
+
+	# And with the button let go, no amount of dragging is a dash.
+	Input.action_release(&"ultimate")
+	await physics_frame
+	_input._drag_went = Vector2(mouse_way * 600.0, 0.0)
+	for i in 12:
+		await physics_frame
+	print("-- dragged with the button up: %d dashes left" % player.dashes_left)
+	_check(player.dashes_left == 1, "dragging without holding the ultimate does nothing")
 
 	# --- the pad turns a drag into a swipe -----------------------------------
 	var pad: Control = main.get_node("HUD/TouchControls")

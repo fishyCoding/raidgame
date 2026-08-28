@@ -27,14 +27,6 @@ var touch_aim_point := Vector2.INF
 ## Set by a swipe across the pad, and the direction it went. Consumed on read,
 ## the same as the projection's send - a swipe is an event, and an event left
 ## lying around fires again on the next frame that looks at it.
-## How long a flick has to happen inside, in milliseconds. Short: this is meant
-## to catch a deliberate throw of the hand, not a slow drag that eventually
-## covers the same ground while you were only looking around.
-const FLICK_WINDOW := 170
-
-var _flick_went := Vector2.ZERO
-var _flick_ms := 0
-
 var touch_dash := false
 var touch_dash_way := Vector2.ZERO
 
@@ -249,40 +241,46 @@ func _ready() -> void:
 func _input(event: InputEvent) -> void:
 	var motion := event as InputEventMouseMotion
 	if motion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		_mouse_motion += motion.relative
-		_note_flick(motion.relative)
+		# Holding the ultimate turns the mouse into a dash stick. The motion is
+		# taken *instead of* being given to the aim, not as well as: the whole
+		# point of having to hold something is that the drag is unmistakably a
+		# dash and not a shot you were lining up.
+		if Input.is_action_pressed(&"ultimate"):
+			_drag_went += motion.relative
+		else:
+			_mouse_motion += motion.relative
 
 
-## Recent mouse travel, kept for spotting a flick.
+## How far the mouse has been dragged since the button went down.
 ##
-## Its own running total rather than a reading of _mouse_motion, because aiming
-## consumes that every single frame - by the time anything could measure a
-## gesture across it, it has already been handed to the crosshair and cleared.
-##
-## And relative motion rather than where the pointer is. On a desktop the mouse
-## is captured: it is hidden, locked to the window, and its reported position
-## never changes, so a flick measured by position is a flick that never happens.
+## Relative motion rather than where the pointer is. On a desktop the mouse is
+## captured: hidden, locked to the window, and its reported position never
+## changes - so a gesture measured by position is a gesture that never happens.
 ## That is exactly why the first version of the dash did nothing on PC.
-func _note_flick(went: Vector2) -> void:
-	var now := Time.get_ticks_msec()
-	if now - _flick_ms > FLICK_WINDOW:
-		_flick_went = Vector2.ZERO
-	_flick_ms = now
-	_flick_went += went
+var _drag_went := Vector2.ZERO
 
 
+## The drag so far, once it is long enough to mean it, and nothing before then.
+## Cleared on the way out, so one hold cannot spend two dashes without the mouse
+## being moved again.
 ## The flick, if there has been one worth calling a swipe, and nothing otherwise.
 ## Cleared on the way out, so one gesture cannot spend two dashes.
-func take_mouse_flick(least: float) -> Vector2:
-	if _flick_went.length() < least:
+func take_mouse_drag(least: float) -> Vector2:
+	if not Input.is_action_pressed(&"ultimate"):
 		return Vector2.ZERO
-	var way := _flick_went
-	_flick_went = Vector2.ZERO
+	if _drag_went.length() < least:
+		return Vector2.ZERO
+	var way := _drag_went
+	_drag_went = Vector2.ZERO
 	return way
 
 
 func _process(_delta: float) -> void:
 	_update_mouse_mode()
+	# Letting go throws away whatever was drawn but not spent, so a half gesture
+	# cannot sit around and combine with the next one.
+	if Input.is_action_just_released(&"ultimate"):
+		_drag_went = Vector2.ZERO
 
 
 ## Whether a pointer is wanted right now: paused, or some screen is up that you

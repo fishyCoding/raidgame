@@ -343,14 +343,12 @@ const GROUND_HUNT := 900.0
 const DASH_SPEED := 720.0
 const DASH_TIME := 0.13
 
-## What counts as a mouse swipe: this much raw mouse travel inside
-## PlayerInput.FLICK_WINDOW.
+## How far the mouse has to be dragged, while the ultimate is held, to dash.
 ##
-## Counted in the mouse's own units rather than in screen pixels, because a
-## captured mouse has no screen position to measure against. Deliberately a hard
-## throw of the hand - the same mouse is how you aim, and a dash you did not ask
-## for spends something you paid for.
-const FLICK_MIN := 300.0
+## In the mouse's own units, because a captured mouse has no screen position to
+## measure against. Lower than a bare flick needed to be: holding the button is
+## already the statement of intent, so this only has to be more than a twitch.
+const DRAG_MIN := 200.0
 ## What the bow's flight line is drawn in. The same blue as a recon sweep and
 ## a recon ping, because a blue circle on the ground already means "this is
 ## about to be scanned" and the preview is a promise of exactly that.
@@ -1727,7 +1725,7 @@ func _update_dash(delta: float) -> void:
 	# dash on a gesture made half a minute earlier.
 	var way := PlayerInput.take_dash()
 	if way.is_zero_approx():
-		way = _mouse_flick()
+		way = _mouse_drag()
 	if way.is_zero_approx():
 		return
 	if dashes_left <= 0 or is_downed or riding or is_grappling():
@@ -1742,18 +1740,17 @@ func _update_dash(delta: float) -> void:
 		_audio.reload_finished(global_position)
 
 
-## A hard flick of the mouse, as the desktop half of a swipe.
+## The desktop half of a swipe: hold the ultimate and drag the mouse.
 ##
-## Asked of PlayerInput, which is the only thing that sees the motion. The mouse
-## on a desktop is captured - hidden, locked to the window, its reported position
-## never moving - so the first version of this, which watched where the pointer
-## was, could not have worked and did not: on PC the dash simply never fired.
-## What moves is the relative motion in the event stream, and that is what is
-## measured now.
-func _mouse_flick() -> Vector2:
+## Held rather than flicked, because a bare flick is indistinguishable from
+## aiming - the same hand, the same mouse, the same motion - and the game cannot
+## tell which you meant. Having to hold something makes it an act rather than a
+## guess, and while you hold it the drag is taken instead of being given to the
+## crosshair, so lining a dash up never swings your aim.
+func _mouse_drag() -> Vector2:
 	if PlayerInput.is_touch():
 		return Vector2.ZERO
-	return PlayerInput.take_mouse_flick(FLICK_MIN)
+	return PlayerInput.take_mouse_drag(DRAG_MIN)
 
 
 func _update_jump(delta: float) -> void:
@@ -1870,7 +1867,11 @@ func _use_ultimate() -> void:
 		return
 
 	if ult.charge < 1.0:
-		_say_loot("ultimate at %d%%" % roundi(ult.charge * 100.0))
+		# Quiet while you still have dashes in hand. Holding this button is how
+		# you dash, so the meter would otherwise announce itself every time you
+		# reached for one.
+		if dashes_left <= 0:
+			_say_loot("ultimate at %d%%" % roundi(ult.charge * 100.0))
 		return
 
 	var keep_charge := ult.charge
