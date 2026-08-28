@@ -178,7 +178,14 @@ func _name_of(event: InputEvent) -> String:
 		# binding per launch - which is every gameplay test in tools/ printing
 		# thirty stack traces before it does anything. The physical code is a
 		# US label already, so the fallback is the right answer there anyway.
-		if DisplayServer.get_name() != "headless":
+		#
+		# A browser has a keyboard and still cannot answer: the web display
+		# server does not implement the question. Same error, same once per
+		# binding, and there are forty-nine bindings - so a player who opens the
+		# console on the web build sees forty-nine red lines before the menu has
+		# finished drawing. Skipped there for the same reason and with the same
+		# fallback.
+		if DisplayServer.get_name() != "headless" and not OS.has_feature("web"):
 			var mapped := DisplayServer.keyboard_get_keycode_from_physical(
 				key.physical_keycode)
 			if mapped != KEY_NONE:

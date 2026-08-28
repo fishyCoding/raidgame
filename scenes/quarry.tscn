@@ -1,0 +1,445 @@
+[gd_scene format=3 uid="uid://b4t36mhrn42qr"]
+
+[ext_resource type="Script" uid="uid://dwh6vswml06ja" path="res://scripts/editor_view.gd" id="1_0i1r7"]
+[ext_resource type="Script" uid="uid://bcxfmp5s3q1rv" path="res://scripts/vision_system.gd" id="2_idrrd"]
+[ext_resource type="PackedScene" path="res://scenes/decor.tscn" id="3_hdcd5"]
+[ext_resource type="Texture2D" uid="uid://c6o6vc7jgasri" path="res://resources/pixil-frame-0.png" id="4_q66qn"]
+[ext_resource type="Texture2D" uid="uid://r6rxopipv1df" path="res://resources/pixil-frame-0(2).png" id="5_63r5p"]
+[ext_resource type="Texture2D" uid="uid://bh864rkftdeep" path="res://resources/pixil-frame-0(3).png" id="6_y7d88"]
+[ext_resource type="Texture2D" uid="uid://dfy5h33w6udqn" path="res://resources/pixil-frame-1.png" id="7_2hhkm"]
+[ext_resource type="PackedScene" path="res://scenes/platform.tscn" id="8_i5su0"]
+[ext_resource type="PackedScene" path="res://scenes/zipline.tscn" id="9_dnabq"]
+[ext_resource type="PackedScene" path="res://scenes/spawn_point.tscn" id="10_v5b0e"]
+[ext_resource type="PackedScene" path="res://scenes/enemy.tscn" id="11_jahhw"]
+[ext_resource type="Script" uid="uid://ydgxhwysseee" path="res://scripts/controls_hint.gd" id="12_urngg"]
+[ext_resource type="Script" uid="uid://oshl4qhxdbwj" path="res://scripts/inventory_ui.gd" id="13_no0n7"]
+[ext_resource type="Script" uid="uid://xeib8hy0neca" path="res://scripts/hud.gd" id="14_en4m8"]
+[ext_resource type="Script" uid="uid://cb34p0md66qw0" path="res://scripts/touch_controls.gd" id="15_sceho"]
+[ext_resource type="Script" uid="uid://deaufp2rknqug" path="res://scripts/map_screen.gd" id="16_a62tk"]
+[ext_resource type="Script" uid="uid://ds77uggwicvrj" path="res://scripts/screens.gd" id="17_1sjku"]
+[ext_resource type="Script" uid="uid://dop6bbqsgvhpd" path="res://scripts/shop.gd" id="18_8xyha"]
+
+[node name="Main" type="Node2D" unique_id=612678245]
+
+[node name="EditorView" type="Node" parent="." unique_id=398121074]
+script = ExtResource("1_0i1r7")
+
+[node name="Background" type="CanvasLayer" parent="." unique_id=1586873920]
+layer = -100
+
+[node name="Sky" type="ColorRect" parent="Background" unique_id=477399845]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.0784314, 0.0980392, 0.129412, 1)
+
+[node name="Ambient" type="CanvasModulate" parent="." unique_id=1609251729]
+visible = false
+color = Color(0.137255, 0.152941, 0.192157, 1)
+
+[node name="Air" type="Polygon2D" parent="." unique_id=1645405714]
+visible = false
+z_index = -90
+color = Color(0.164706, 0.192157, 0.239216, 1)
+polygon = PackedVector2Array(-4600, -3000, 4600, -3000, 4600, 3000, -4600, 3000)
+
+[node name="VisionSystem" type="Node" parent="." unique_id=8929692 groups=["vision_system"]]
+script = ExtResource("2_idrrd")
+
+[node name="Backdrop" type="Node2D" parent="." unique_id=1745300911]
+
+[node name="BackTower2" parent="Backdrop" unique_id=1745300914 instance=ExtResource("3_hdcd5")]
+visible = false
+z_index = -56
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-2180, -420)
+texture = ExtResource("4_q66qn")
+size = Vector2(480, 1800)
+tiled = true
+tile_size = 240.0
+tint = Color(0.219608, 0.239216, 0.298039, 1)
+
+[node name="BackPanelYard3" parent="Backdrop" unique_id=1800651110 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4675, -1141)
+texture = ExtResource("5_63r5p")
+size = Vector2(180, 180)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackPanelYard5" parent="Backdrop" unique_id=864872769 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4398, -386)
+texture = ExtResource("5_63r5p")
+size = Vector2(180, 180)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackPanelYard9" parent="Backdrop" unique_id=664388393 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4094, 5)
+scale = Vector2(-0.88, 1)
+texture = ExtResource("6_y7d88")
+size = Vector2(1350, 600)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackPanelYard8" parent="Backdrop" unique_id=31583257 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4398, -555)
+texture = ExtResource("5_63r5p")
+size = Vector2(180, 180)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackPanelYard4" parent="Backdrop" unique_id=1046025930 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4675, -1313)
+texture = ExtResource("5_63r5p")
+size = Vector2(180, 180)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackPanelControl" parent="Backdrop" unique_id=1745300916 instance=ExtResource("3_hdcd5")]
+visible = false
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-520, -380)
+texture = ExtResource("7_2hhkm")
+size = Vector2(240, 240)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackPanelMast" parent="Backdrop" unique_id=1745300917 instance=ExtResource("3_hdcd5")]
+visible = false
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(1180, -620)
+texture = ExtResource("7_2hhkm")
+size = Vector2(360, 360)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="World" type="Node2D" parent="." unique_id=1808002648]
+
+[node name="WallEast" parent="World" unique_id=799847715 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-3500, -135)
+size = Vector2(60, 3000)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling5" parent="World" unique_id=578069771 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4676, -1397)
+scale = Vector2(1.1200024, 1)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling9" parent="World" unique_id=919175633 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4686, 8)
+rotation = 1.5707964
+scale = Vector2(0.44095403, 1)
+size = Vector2(820, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling10" parent="World" unique_id=120535553 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4768, -157)
+rotation = 3.1415927
+scale = Vector2(0.44095403, 1)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling11" parent="World" unique_id=1192536935 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4768, -157)
+rotation = 3.1415927
+scale = Vector2(0.44095403, 1)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ControlFloor8" parent="World" unique_id=585597383 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4398, -644)
+rotation = 0.00059401256
+scale = Vector2(1.9199982, 1)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ControlPart15" parent="World" unique_id=1761585054 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4226, 264)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart16" parent="World" unique_id=953745666 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-3989, 271)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart17" parent="World" unique_id=1227991662 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4120, 237)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart13" parent="World" unique_id=609256053 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4211, -334)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart18" parent="World" unique_id=1258648306 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-3937, -325)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlPart19" parent="World" unique_id=2071449639 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4057, -364)
+scale = Vector2(5.8934402, -0.54980445)
+size = Vector2(26, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ControlDesk5" parent="World" unique_id=142867064 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-3625, 2957.0002)
+scale = Vector2(1.3680797, 0.89835685)
+size = Vector2(200, 24)
+color = Color(0.278431, 0.313726, 0.360784, 1)
+
+[node name="MastCeiling2" parent="World" unique_id=1325371114 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4168, -1052)
+size = Vector2(1300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling3" parent="World" unique_id=1074820447 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4168, -1052)
+size = Vector2(1300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling6" parent="World" unique_id=1746893371 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4168, -1052)
+size = Vector2(1300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling4" parent="World" unique_id=1633630238 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4208, -301.99997)
+scale = Vector2(0.76391536, 0.73447883)
+size = Vector2(1300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling5" parent="World" unique_id=84744853 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-3203, -50)
+scale = Vector2(0.76391536, 0.73447883)
+size = Vector2(1300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="Ziplines" type="Node2D" parent="." unique_id=924256746]
+
+[node name="ZipYard9" parent="Ziplines" unique_id=546928841 instance=ExtResource("9_dnabq")]
+position = Vector2(-4215, -1539)
+top = Vector2(-399.62286, 109.041916)
+bottom = Vector2(78.86279, 458.38477)
+speed = 800.0
+
+[node name="ZipYard8" parent="Ziplines" unique_id=1070833318 instance=ExtResource("9_dnabq")]
+position = Vector2(-4843, -937)
+top = Vector2(76.33411, -160.5625)
+bottom = Vector2(-610.1782, 179.66785)
+speed = 800.0
+
+[node name="ZipYard15" parent="Ziplines" unique_id=267086155 instance=ExtResource("9_dnabq")]
+position = Vector2(-3680, -178)
+top = Vector2(-105.52612, -156.67407)
+bottom = Vector2(115.41919, 95.3418)
+speed = 800.0
+
+[node name="ZipYard18" parent="Ziplines" unique_id=562228375 instance=ExtResource("9_dnabq")]
+position = Vector2(-4152.0005, -515.00006)
+rotation = -0.011121668
+top = Vector2(-105.52612, -156.67407)
+bottom = Vector2(90.18652, 98.843445)
+speed = 800.0
+
+[node name="ZipYard19" parent="Ziplines" unique_id=302868900 instance=ExtResource("9_dnabq")]
+position = Vector2(-4594, -867)
+top = Vector2(92.14429, -214.33978)
+bottom = Vector2(68.14404, 192.49072)
+speed = 800.0
+
+[node name="ZipYard16" parent="Ziplines" unique_id=1357634951 instance=ExtResource("9_dnabq")]
+position = Vector2(-3873, 33)
+top = Vector2(233.72739, -108.272766)
+bottom = Vector2(-226.68286, 163.97583)
+speed = 800.0
+
+[node name="ZipYard17" parent="Ziplines" unique_id=332146811 instance=ExtResource("9_dnabq")]
+position = Vector2(-4321, 92)
+top = Vector2(-420.27954, -277.83398)
+bottom = Vector2(-226.68286, 163.97583)
+speed = 800.0
+
+[node name="Spawns" type="Node2D" parent="." unique_id=1755117685]
+
+[node name="SpawnYard" parent="Spawns" unique_id=385471394 instance=ExtResource("10_v5b0e")]
+position = Vector2(-2399, 386)
+display_name = "THE YARD"
+
+[node name="SpawnControl" parent="Spawns" unique_id=1298046729 instance=ExtResource("10_v5b0e")]
+position = Vector2(-2423, -1355)
+display_name = "CONTROL"
+
+[node name="SpawnMast" parent="Spawns" unique_id=752008386 instance=ExtResource("10_v5b0e")]
+position = Vector2(1703, 365)
+display_name = "MAST DECK"
+
+[node name="SpawnMast2" parent="Spawns" unique_id=432687652 instance=ExtResource("10_v5b0e")]
+position = Vector2(1749, -958)
+display_name = "MAST DECK"
+
+[node name="Enemies" type="Node2D" parent="." unique_id=1002818592]
+
+[node name="GuardYard" parent="Enemies" unique_id=2096302872 instance=ExtResource("11_jahhw")]
+position = Vector2(-1770, 395)
+
+[node name="GuardYard2" parent="Enemies" unique_id=692818654 instance=ExtResource("11_jahhw")]
+position = Vector2(-1765, -87)
+
+[node name="GuardYard3" parent="Enemies" unique_id=18484775 instance=ExtResource("11_jahhw")]
+position = Vector2(-1715, -662)
+
+[node name="GuardYard11" parent="Enemies" unique_id=1148716876 instance=ExtResource("11_jahhw")]
+position = Vector2(-1661, -1030)
+
+[node name="GuardYard4" parent="Enemies" unique_id=1342476506 instance=ExtResource("11_jahhw")]
+position = Vector2(-935, 10)
+
+[node name="GuardYard5" parent="Enemies" unique_id=1202221868 instance=ExtResource("11_jahhw")]
+position = Vector2(-323, 2)
+
+[node name="GuardYard10" parent="Enemies" unique_id=1665318694 instance=ExtResource("11_jahhw")]
+position = Vector2(-343, 381)
+
+[node name="GuardYard6" parent="Enemies" unique_id=1803167443 instance=ExtResource("11_jahhw")]
+position = Vector2(-206, -615)
+
+[node name="GuardYard7" parent="Enemies" unique_id=722346007 instance=ExtResource("11_jahhw")]
+position = Vector2(-172, -939)
+
+[node name="GuardYard8" parent="Enemies" unique_id=1093148849 instance=ExtResource("11_jahhw")]
+position = Vector2(954, -547)
+
+[node name="GuardYard9" parent="Enemies" unique_id=268734520 instance=ExtResource("11_jahhw")]
+position = Vector2(923, -205)
+
+[node name="Players" type="Node2D" parent="." unique_id=1382237455]
+
+[node name="Bullets" type="Node2D" parent="." unique_id=228984577]
+
+[node name="WorldOverlay" type="CanvasLayer" parent="." unique_id=1394881968 groups=["world_overlay"]]
+layer = 2
+follow_viewport_enabled = true
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=413737345]
+
+[node name="Controls" type="Label" parent="HUD" unique_id=840067251]
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 400.0
+offset_bottom = 108.0
+theme_override_colors/font_color = Color(0.611765, 0.658824, 0.717647, 1)
+script = ExtResource("12_urngg")
+
+[node name="InventoryScreen" type="Control" parent="HUD" unique_id=953197987 groups=["inventory_ui"]]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("13_no0n7")
+
+[node name="WeaponHUD" type="Control" parent="HUD" unique_id=24343981]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("14_en4m8")
+
+[node name="TouchControls" type="Control" parent="HUD" unique_id=771044213]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("15_sceho")
+
+[node name="MapScreen" type="Control" parent="HUD" unique_id=422202886 groups=["map_screen"]]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("16_a62tk")
+
+[node name="Screens" type="Control" parent="HUD" unique_id=2099260084]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("17_1sjku")
+
+[node name="Shop" type="Control" parent="HUD" unique_id=663939343 groups=["shop"]]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("18_8xyha")

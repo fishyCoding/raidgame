@@ -86,9 +86,23 @@ func _build() -> void:
 	_shop.set_script(SHOP_SCRIPT)
 	_shop.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_shop)
-	_shop.deploy_label = "JOIN MATCHMAKING"
-	_shop.status = "one button, one world"
-	_shop.deployed.connect(_on_queue)
+	# A browser cannot open a UDP socket, and this game's session model is ENet
+	# from end to end - so on the web the one button that means "put me in a
+	# match" cannot mean that, and pretending otherwise buys a player thirty
+	# seconds of watching a connection that was never going to arrive.
+	#
+	# It becomes the solo button instead, and says why on the line underneath.
+	# The alternative - a second transport, WebSocket or WebRTC, and a server
+	# listening on both - is a real thing to build and not a label change; see
+	# server/README.md.
+	if in_a_browser():
+		_shop.deploy_label = "DEPLOY (SOLO)"
+		_shop.status = "browser build - no matchmaking, a browser has no UDP"
+		_shop.deployed.connect(_on_solo)
+	else:
+		_shop.deploy_label = "JOIN MATCHMAKING"
+		_shop.status = "one button, one world"
+		_shop.deployed.connect(_on_queue)
 	_shop.open(_kit)
 
 	# Added after the shop so they are on top of it: the shop stops mouse input
@@ -128,8 +142,9 @@ func _build() -> void:
 
 	_status = Label.new()
 	_status.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	_status.position = Vector2(190.0, -56.0)
-	_status.text = "server %s" % _address
+	_status.position = Vector2(56.0, -92.0)
+	_status.text = ("solo only in a browser" if in_a_browser()
+		else "server %s" % _address)
 	_status.add_theme_font_size_override(&"font_size", 12)
 	_status.add_theme_color_override(&"font_color", Color(0.48, 0.53, 0.6))
 	add_child(_status)
@@ -140,7 +155,21 @@ func _build() -> void:
 
 ## Into the queue. What was bought goes with us: the level is a scene change
 ## away and the body it belongs to is a match away, so it waits on Net.
+## Whether this is running in a browser, where there is no UDP to have.
+##
+## A function rather than a constant read once: it is asked from _build and from
+## the command line path, and a feature test is cheap enough that caching it
+## would only be a second thing that can be wrong.
+func in_a_browser() -> bool:
+	return OS.has_feature("web")
+
+
 func _on_queue() -> void:
+	# Reachable from the command line as well as the button, so the refusal
+	# lives here too rather than only on the thing that was relabelled.
+	if in_a_browser():
+		_say("no matchmaking in a browser - use the desktop build")
+		return
 	Net.staged_kit = _kit
 	if Net.join(_address, _port) != OK:
 		_say("could not reach %s" % _address)
