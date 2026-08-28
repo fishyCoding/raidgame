@@ -52,6 +52,10 @@ func setup(from: Node2D, aim: Vector2) -> void:
 
 func _ready() -> void:
 	z_index = 4
+	# Hidden by the dark, like a body. Somebody else's rope drawn across an
+	# unlit room tells you where they are, which way they are going and how fast
+	# - all of it for free, and none of it earned by looking.
+	add_to_group(&"shadowed")
 
 
 func _physics_process(delta: float) -> void:
@@ -121,6 +125,29 @@ func bite(at: Vector2) -> void:
 
 func is_anchored() -> bool:
 	return _anchored
+
+
+## Where to look for a hook, for line of sight: along the rope, hand to point.
+##
+## The rope is the giveaway rather than the hook itself. A line stretched a
+## hundred pixels across a dark room says somebody is at the far end of it and
+## roughly how fast they are travelling, which is more than you learn from seeing
+## the person.
+##
+## Your own is always visible, and falls out of this rather than being a special
+## case: one end of it is in your hand, so there is always a point on it you can
+## see.
+func sight_points() -> Array[Vector2]:
+	var points: Array[Vector2] = [global_position]
+	if not is_instance_valid(owner_body):
+		return points
+	var hand: Vector2 = owner_body.global_position
+	points.append(hand)
+	var span := hand.distance_to(global_position)
+	var steps := clampi(int(span / 64.0), 1, 16)
+	for i in range(1, steps):
+		points.append(hand.lerp(global_position, float(i) / float(steps)))
+	return points
 
 
 func _draw() -> void:

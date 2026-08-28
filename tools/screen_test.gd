@@ -43,7 +43,7 @@ func _run() -> void:
 	print("-- guards still in the level: %d" % left)
 	_check(left == 0, "the guards are off, as asked")
 
-	_check_ropes(self)
+	await _check_ropes(self)
 
 	# --- a screen goes up, anchored ------------------------------------------
 	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
@@ -265,24 +265,32 @@ func _check(ok: bool, what: String) -> void:
 		print("  ok    %s" % what)
 
 
-## Ziplines are scenery the dark swallows, not bodies the recon arrow paints.
+## Hooks are hidden by the dark; ziplines are not.
 ##
-## Checked as its own thing because the two groups are easy to confuse and the
-## consequence of confusing them is quiet: put a rope in "hideable" and every
-## cable on the map grows a recon diamond the first time somebody fires an arrow.
+## Both halves matter and they pull in opposite directions. A rope somebody else
+## fired, drawn across an unlit room, hands you their position, heading and speed
+## without you having looked at anything. A zipline is level furniture that has
+## always been drawn and should stay drawn.
 func _check_ropes(tree: SceneTree) -> void:
-	var ropes := tree.get_nodes_in_group(&"zipline")
+	var lines := tree.get_nodes_in_group(&"zipline")
 	var shadowed := 0
-	var painted := 0
-	for rope in ropes:
-		if (rope as Node).is_in_group(&"shadowed"):
+	for line in lines:
+		if (line as Node).is_in_group(&"shadowed"):
 			shadowed += 1
-		if (rope as Node).is_in_group(&"hideable"):
-			painted += 1
-	print("-- ropes: %d, in shadow: %d, in the recon set: %d" % [
-		ropes.size(), shadowed, painted])
-	_check(ropes.size() > 0, "there are ropes to check")
-	_check(shadowed == ropes.size(), "every rope is hidden by the dark")
-	_check(painted == 0, "and none of them are things the recon arrow paints")
-	_check(ropes.is_empty() or (ropes[0] as Node).has_method(&"sight_points"),
-		"a rope says where to look for it, being long and thin")
+	print("-- ziplines: %d, of those hidden by the dark: %d" % [lines.size(), shadowed])
+	_check(lines.size() > 0, "there are ziplines to check")
+	_check(shadowed == 0, "ziplines are not hidden by the dark")
+
+	var hook: Node2D = (load("res://scenes/grapple_hook.tscn") as PackedScene).instantiate()
+	# Asked the moment it enters the tree. A hook with nobody holding it retracts
+	# and frees itself on its first frame, so waiting one is waiting too long.
+	(tree.current_scene as Node).add_child(hook)
+	var hidden: bool = hook.is_in_group(&"shadowed")
+	var walks: bool = hook.has_method(&"sight_points")
+	var painted: bool = hook.is_in_group(&"hideable")
+	print("-- hook: in shadow=%s, says where to look=%s, in the recon set=%s" % [
+		hidden, walks, painted])
+	_check(hidden, "a fired hook is hidden by the dark")
+	_check(walks, "and is looked for along its rope, not at one end of it")
+	_check(not painted, "and is not something the recon arrow paints")
+	hook.queue_free()
