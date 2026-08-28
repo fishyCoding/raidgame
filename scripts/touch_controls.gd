@@ -189,6 +189,7 @@ const PILLS_RIGHT := [
 ## here are only the fallback for an empty one.
 const PILLS_BOTTOM := [
 	{"action": &"ultimate", "label": "ULT"},
+	{"action": &"ultimate_2", "label": "ULT 2"},
 	{"action": &"throw_1", "label": "THROW 1", "mode": "place", "slot": 0},
 	{"action": &"throw_2", "label": "THROW 2", "mode": "place", "slot": 1},
 ]

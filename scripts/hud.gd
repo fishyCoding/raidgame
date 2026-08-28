@@ -746,7 +746,7 @@ func _draw_gadgets() -> void:
 		if PlayerInput.is_touch() \
 		else Vector2(size.x * 0.5 + 150.0, size.y - MARGIN - tile.y)
 
-	var ult: Item = kit.ultimate
+	var ult: Item = kit.get_ultimate(0)
 	var burning := _ult_left()
 	var running := burning > 0.0
 	var lit := _ult_colour()

@@ -337,11 +337,12 @@ const GROUND_HUNT := 900.0
 ##
 ## The ground covered is more than these two multiplied together, because the
 ## speed is not taken off you when the dash ends - you carry out of it for a few
-## frames. The first pass covered nearly three hundred pixels, which crossed most
-## rooms in one gesture and made the rest of the movement in the game beside the
-## point.
-const DASH_SPEED := 720.0
-const DASH_TIME := 0.13
+## frames. The first pass at these numbers covered nearly three hundred pixels,
+## which crossed most rooms in one gesture and made the rest of the movement in
+## the game beside the point; the second overcorrected to a hop. This is between
+## them, nearer the short end.
+const DASH_SPEED := 860.0
+const DASH_TIME := 0.14
 
 ## How far the mouse has to be dragged, while the ultimate is held, to dash.
 ##
@@ -1807,13 +1808,15 @@ func _update_weapon() -> void:
 	# whole raid to charge it. If none is equipped it hands one over too -
 	# testing a gadget should not first require shopping for it.
 	if Input.is_action_just_pressed(&"debug_charge") and inventory:
-		if inventory.ultimate == null:
+		if inventory.get_ultimate(0) == null:
 			inventory.set_ultimate(Item.from_gadget(
 				load("res://resources/gadgets/overload.tres") as GadgetData))
 			_say_loot("debug: Overload equipped and charged")
 		else:
-			_say_loot("debug: %s charged" % inventory.ultimate.gadget.short_name)
-		inventory.ultimate.charge = 1.0
+			_say_loot("debug: %s charged" % inventory.ultimates[0].gadget.short_name)
+		for ult in inventory.ultimates:
+			if ult:
+				ult.charge = 1.0
 
 	# Placing a projection owns the trigger, the pointer and Q. Handled before
 	# anything else in here so none of the three leak through to the gun.
@@ -1828,7 +1831,12 @@ func _update_weapon() -> void:
 			_hide_arrow_flight()
 			_say_loot("bow away")
 		else:
-			_use_ultimate()
+			_use_ultimate(0)
+	# The second slot. Its own button, because both of these are things you reach
+	# for in a hurry and a key that cycles between them is a key you press twice
+	# by accident at the moment it matters.
+	if PlayerInput.is_ultimate_2_just_pressed():
+		_use_ultimate(1)
 	_update_throw(get_physics_process_delta_time())
 
 	if PlayerInput.is_reload_just_pressed():
@@ -1856,23 +1864,30 @@ func _update_weapon() -> void:
 func _charge_ultimate(delta: float) -> void:
 	overload_left = maxf(overload_left - delta, 0.0)
 	projection_left = maxf(projection_left - delta, 0.0)
-	var ult := inventory.ultimate if inventory else null
-	if ult == null or ult.charge >= 1.0:
+	if inventory == null:
 		return
-	ult.charge = minf(ult.charge + delta / maxf(ult.gadget.charge_time, 1.0), 1.0)
+	# Both slots fill at once, each at its own gadget's rate. Charging only the
+	# one you last used would make the second slot a place to keep something you
+	# are not allowed to have yet.
+	for ult in inventory.ultimates:
+		if ult == null or ult.charge >= 1.0:
+			continue
+		ult.charge = minf(ult.charge + delta / maxf(ult.gadget.charge_time, 1.0), 1.0)
 
 
 ## Adds charge for doing something worth charging for - landing hits.
 func add_ultimate_charge(fraction: float) -> void:
-	var ult := inventory.ultimate if inventory else null
-	if ult:
-		ult.charge = minf(ult.charge + fraction, 1.0)
+	if inventory == null:
+		return
+	for ult in inventory.ultimates:
+		if ult:
+			ult.charge = minf(ult.charge + fraction, 1.0)
 
 
-func _use_ultimate() -> void:
-	var ult := inventory.ultimate if inventory else null
+func _use_ultimate(slot := 0) -> void:
+	var ult := inventory.get_ultimate(slot) if inventory else null
 	if ult == null:
-		_say_loot("no ultimate equipped")
+		_say_loot("no ultimate in slot %d" % (slot + 1))
 		return
 	# Q does not cast a projection. It opens the view you cast one from: the
 	# camera pulls back and you click the place you want it to walk to. The
@@ -2056,7 +2071,9 @@ func _cancel_projection_aim() -> void:
 
 ## Sends it, either by casting a new one or by re-tasking the one already out.
 func _send_projection(spot: Vector2) -> void:
-	var ult := inventory.ultimate if inventory else null
+	# By what it is, not by which slot it went in - see Inventory.slot_of_kind.
+	var ult := inventory.get_ultimate(
+		inventory.slot_of_kind(GadgetData.Kind.PROJECTION)) if inventory else null
 	if ult == null:
 		_cancel_projection_aim()
 		return
@@ -2127,7 +2144,9 @@ func _draw_bow(delta: float) -> void:
 ## same launch speed, same gravity, same mask, same fixed step. Anything else and
 ## the line on the screen is a second opinion about where the arrow goes.
 func _show_arrow_flight() -> void:
-	var ult := inventory.ultimate if inventory else null
+	# By what it is, not by which slot it went in - see Inventory.slot_of_kind.
+	var ult := inventory.get_ultimate(
+		inventory.slot_of_kind(GadgetData.Kind.RECON_BOW)) if inventory else null
 	if ult == null:
 		return
 	# At rest the bow shows the shot it can actually take, not a full-power one
@@ -2177,7 +2196,9 @@ func _hide_arrow_flight() -> void:
 
 
 func _loose_arrow(power: float) -> void:
-	var ult := inventory.ultimate if inventory else null
+	# By what it is, not by which slot it went in - see Inventory.slot_of_kind.
+	var ult := inventory.get_ultimate(
+		inventory.slot_of_kind(GadgetData.Kind.RECON_BOW)) if inventory else null
 	if ult == null:
 		bow_out = false
 		return

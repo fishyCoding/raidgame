@@ -25,7 +25,7 @@ signal changed()
 
 enum Slot { PRIMARY, SECONDARY }
 enum Wear { HELMET, VEST }
-## One ultimate, two throwables. The whole of your kit beyond guns and armour.
+## Two ultimates, two throwables. The whole of your kit beyond guns and armour.
 const THROWABLE_SLOTS := 2
 ## Five, and each one a single cell. A 1x1 grid refuses anything bigger on its
 ## own, so "only small things in pockets" needs no rule of its own.
@@ -36,8 +36,11 @@ var secondary: Item
 ## Worn armour. Not in a grid: it is on you, not in a bag.
 var helmet: Item
 var vest: Item
-## The charged gadget, and the two things you can throw.
-var ultimate: Item
+## The charged gadgets, and the two things you can throw. Two ultimate slots,
+## kept as a list for the same reason the throwables are: they are the same kind
+## of thing in the same kind of holder, and code that wants "the one that is a
+## bow" should be able to look rather than remember which hand it went in.
+var ultimates: Array[Item] = [null, null]
 var throwables: Array[Item] = [null, null]
 ## Five one-cell containers, each independent of the others.
 var pockets: Array[ItemGrid] = []
@@ -155,7 +158,7 @@ func backpack_overflow(item: Item) -> Array[Item]:
 func holds(item: Item) -> bool:
 	if item == null:
 		return false
-	if item in [primary, secondary, helmet, vest, ultimate, backpack_item]:
+	if item in [primary, secondary, helmet, vest, backpack_item] or ultimates.has(item):
 		return true
 	if throwables.has(item):
 		return true
@@ -216,9 +219,38 @@ func set_throwable(index: int, item: Item) -> void:
 	changed.emit()
 
 
-func set_ultimate(item: Item) -> void:
-	ultimate = item
+func set_ultimate(item: Item, index := 0) -> void:
+	ultimates[clampi(index, 0, ultimates.size() - 1)] = item
 	changed.emit()
+
+
+## The ultimate in a slot, or null. Bounds-checked, because the callers are
+## screens and input handlers that count from whatever the player pressed.
+func get_ultimate(index: int) -> Item:
+	if index < 0 or index >= ultimates.size():
+		return null
+	return ultimates[index]
+
+
+## The first slot holding a gadget of this kind, or -1.
+##
+## What the gameplay actually wants to ask. A bow behaves like a bow whichever
+## slot it went into, and making every caller remember which one it was is how
+## the second slot would quietly only work for one of them.
+func slot_of_kind(kind: int) -> int:
+	for i in ultimates.size():
+		var item: Item = ultimates[i]
+		if item and item.gadget and item.gadget.kind == kind:
+			return i
+	return -1
+
+
+## The first empty ultimate slot, or -1 when both are full.
+func free_ultimate_slot() -> int:
+	for i in ultimates.size():
+		if ultimates[i] == null:
+			return i
+	return -1
 
 
 ## Whether a piece of armour belongs in that worn slot.
@@ -256,7 +288,7 @@ func all_weapons() -> Array[Item]:
 ## Everything on the body, worn or stowed - what looting walks through.
 func all_items() -> Array[Item]:
 	var list: Array[Item] = []
-	for item in [primary, secondary, helmet, vest, ultimate, backpack_item]:
+	for item in ([primary, secondary, helmet, vest, backpack_item] + ultimates):
 		if item:
 			list.append(item)
 	for item in throwables:
@@ -287,8 +319,8 @@ func store(item: Item) -> bool:
 		if get_worn(where) == null:
 			set_worn(where, item)
 			return true
-	if item.is_ultimate() and ultimate == null:
-		set_ultimate(item)
+	if item.is_ultimate() and free_ultimate_slot() >= 0:
+		set_ultimate(item, free_ultimate_slot())
 		return true
 	# A bag goes on your back if your back is empty, and into the bag you are
 	# already wearing otherwise - a spare pack is loot like anything else.
@@ -364,8 +396,8 @@ func remove_item(item: Item) -> void:
 		helmet = null
 	elif vest == item:
 		vest = null
-	elif ultimate == item:
-		ultimate = null
+	elif ultimates.has(item):
+		ultimates[ultimates.find(item)] = null
 	elif backpack_item == item:
 		# The bag leaves with everything still inside it.
 		backpack_item = null
@@ -489,8 +521,8 @@ func is_empty() -> bool:
 func to_wire() -> Dictionary:
 	var out := {}
 	for named in [["primary", primary], ["secondary", secondary],
-			["helmet", helmet], ["vest", vest], ["ultimate", ultimate],
-			["backpack", backpack_item]]:
+			["helmet", helmet], ["vest", vest], ["ultimate", ultimates[0]],
+			["ultimate_2", ultimates[1]], ["backpack", backpack_item]]:
 		var item := named[1] as Item
 		if item:
 			out[named[0]] = item.to_wire()
@@ -513,7 +545,8 @@ static func from_wire(wire: Dictionary) -> Inventory:
 	kit.secondary = _wired(wire, "secondary")
 	kit.helmet = _wired(wire, "helmet")
 	kit.vest = _wired(wire, "vest")
-	kit.ultimate = _wired(wire, "ultimate")
+	kit.ultimates[0] = _wired(wire, "ultimate")
+	kit.ultimates[1] = _wired(wire, "ultimate_2")
 	# Assigned rather than put on with set_backpack(). The bag arrives with its
 	# contents already laid out in known cells, and set_backpack repacks whatever
 	# it is handed - which would quietly rearrange a body's pack into a different

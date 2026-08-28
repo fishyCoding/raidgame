@@ -27,6 +27,9 @@ var touch_aim_point := Vector2.INF
 ## Set by a swipe across the pad, and the direction it went. Consumed on read,
 ## the same as the projection's send - a swipe is an event, and an event left
 ## lying around fires again on the next frame that looks at it.
+## Set for one frame by the second ULT pill on the pad.
+var touch_ultimate_2 := false
+
 var touch_dash := false
 var touch_dash_way := Vector2.ZERO
 
@@ -502,6 +505,13 @@ func is_surgical_just_pressed() -> bool:
 ## True on the frame the ultimate is fired (Q, for now).
 func is_ultimate_just_pressed() -> bool:
 	return Input.is_action_just_pressed(&"ultimate")
+
+
+## The second ultimate slot. Its own button rather than a switch between the two,
+## because both are things you reach for in a hurry and a cycle you have to think
+## about is a cycle you get wrong.
+func is_ultimate_2_just_pressed() -> bool:
+	return touch_ultimate_2 or Input.is_action_just_pressed(&"ultimate_2")
 
 
 ## True on the frame throwable `slot` is started (G and T, for now).

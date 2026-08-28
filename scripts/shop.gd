@@ -88,7 +88,8 @@ const SLOTS := [
 	{"id": "helmet", "label": "HELMET", "list": "helmet"},
 	{"id": "vest", "label": "VEST", "list": "vest"},
 	{"id": "backpack", "label": "BACKPACK", "list": "backpack"},
-	{"id": "ultimate", "label": "ULTIMATE", "list": "ultimate"},
+	{"id": "ultimate", "label": "ULTIMATE 1", "list": "ultimate"},
+	{"id": "ultimate2", "label": "ULTIMATE 2", "list": "ultimate"},
 	{"id": "throw0", "label": "THROW 1", "list": "throw"},
 	{"id": "throw1", "label": "THROW 2", "list": "throw"},
 ]
@@ -267,7 +268,8 @@ func _slot_item(id: String) -> Item:
 		"helmet": return _inventory.helmet
 		"vest": return _inventory.vest
 		"backpack": return _inventory.backpack_item
-		"ultimate": return _inventory.ultimate
+		"ultimate": return _inventory.get_ultimate(0)
+		"ultimate2": return _inventory.get_ultimate(1)
 		"throw0": return _inventory.get_throwable(0)
 		"throw1": return _inventory.get_throwable(1)
 	return null
@@ -289,7 +291,9 @@ func _set_slot_item(id: String, item: Item) -> bool:
 		"backpack":
 			return _inventory.set_backpack(item)
 		"ultimate":
-			_inventory.set_ultimate(item)
+			_inventory.set_ultimate(item, 0)
+		"ultimate2":
+			_inventory.set_ultimate(item, 1)
 		"throw0":
 			_inventory.set_throwable(0, item)
 		"throw1":

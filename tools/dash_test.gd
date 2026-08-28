@@ -231,6 +231,41 @@ func _run() -> void:
 	await physics_frame
 	_check(_input.is_fire_held() == false, "the trigger comes back when disarmed")
 
+	# --- two ultimate slots, both live ---------------------------------------
+	#
+	# The failure worth guarding against is the second slot being a place to put
+	# something you can never use: carried, charged, shown, and wired to nothing.
+	var kit: Object = player.inventory
+	var second: Object = maker.from_gadget(load("res://resources/gadgets/overload.tres"))
+	second.charge = 1.0
+	kit.set_ultimate(second, 1)
+	player.dashes_left = 0
+	player.dash_ready = false
+	await physics_frame
+	print("-- slot 1 %s, slot 2 %s" % [
+		kit.get_ultimate(0).gadget.short_name, kit.get_ultimate(1).gadget.short_name])
+	_check(kit.get_ultimate(0) != kit.get_ultimate(1), "the two slots hold different things")
+
+	# The second slot's own button has to reach the second slot's gadget.
+	player.overload_left = 0.0
+	player._use_ultimate(1)
+	await physics_frame
+	print("-- used slot 2: overload running for %.1fs, charge %.2f" % [
+		player.overload_left, second.charge])
+	_check(player.overload_left > 0.0, "the second slot's button fires the second gadget")
+	_check(second.charge < 1.0, "and spends that slot's own meter")
+
+	# Both meters fill, not just the one last used. A slot that never charges is
+	# a slot you can use exactly once.
+	kit.get_ultimate(0).charge = 0.0
+	second.charge = 0.0
+	for i in 30:
+		await physics_frame
+	print("-- after a moment: slot 1 %.3f, slot 2 %.3f" % [
+		kit.get_ultimate(0).charge, second.charge])
+	_check(kit.get_ultimate(0).charge > 0.0, "the first slot charges")
+	_check(second.charge > 0.0, "and so does the second")
+
 	# --- the pad turns a drag into a swipe -----------------------------------
 	var pad: Control = main.get_node("HUD/TouchControls")
 	_input.touch_dash = false
