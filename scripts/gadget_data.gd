@@ -8,7 +8,7 @@ extends Resource
 ## that recharge over the course of a raid. Both are bought before you go in,
 ## which is what makes the shop a decision rather than a shopping list.
 
-enum Kind { FRAG, SMOKE, OVERLOAD, RECON_BOW, PROJECTION, FLASH }
+enum Kind { FRAG, SMOKE, OVERLOAD, RECON_BOW, PROJECTION, FLASH, DASH }
 enum Class { THROWABLE, ULTIMATE }
 
 @export var display_name := "Gadget"
@@ -35,6 +35,11 @@ enum Class { THROWABLE, ULTIMATE }
 @export var active_time := 8.0
 ## How many rounds the effect can absorb before it comes apart (PROJECTION).
 @export var hit_points := 3
+## How many dashes casting it gives you. Spent one at a time and kept until they
+## are, rather than running out on a clock: two dashes you are saving is a plan,
+## and two dashes evaporating while you wait for the right moment is a tax on
+## thinking.
+@export var dashes := 2
 
 @export_group("Look")
 @export var tint := Color(0.8, 0.8, 0.85)

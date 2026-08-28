@@ -328,6 +328,22 @@ const ARC_STEPS := 90
 ## storeys of this level, so a click into the open middle of a room still
 ## finds the ground under it.
 const GROUND_HUNT := 900.0
+
+## The dash: how fast, and for how long.
+##
+## Short and quick rather than long and floaty. It is a way out of somewhere you
+## should not be standing, and a dash you can be shot out of the middle of is
+## not that.
+const DASH_SPEED := 980.0
+const DASH_TIME := 0.16
+
+## What counts as a mouse swipe: this far across the screen, this quickly.
+##
+## Deliberately a hard flick. Only watched for while you actually have dashes,
+## but within that window the mouse is also how you aim, and a dash you did not
+## ask for spends something you paid for.
+const FLICK_MIN := 250.0
+const FLICK_MS := 170
 ## What the bow's flight line is drawn in. The same blue as a recon sweep and
 ## a recon ping, because a blue circle on the ground already means "this is
 ## about to be scanned" and the preview is a promise of exactly that.
@@ -514,6 +530,15 @@ var flash_from := Vector2.INF
 ##
 ## Not a charge that has been spent - entering this costs nothing and leaving it
 ## costs nothing. The charge goes when you actually click somewhere.
+## Dashes in hand, and the one being taken. Kept until they are spent rather
+## than running out on a clock - see GadgetData.dashes.
+var dashes_left := 0
+var _dash_left := 0.0
+var _dash_way := Vector2.ZERO
+## Where the mouse was when the current flick window opened.
+var _flick_at := Vector2.INF
+var _flick_ms := 0
+
 var projection_aiming := false
 ## Where the pointer is asking for while aiming, in world space.
 var projection_mark := Vector2.INF
@@ -884,7 +909,11 @@ func _physics_process(delta: float) -> void:
 	# ground friction, and the jump step applies its own full gravity on top of
 	# the scaled sag that makes the swing. Steering is handled in _reel_in, so
 	# you can still move - it just goes through the rope.
-	if not is_grappling():
+	_update_dash(delta)
+	# A dash owns the velocity while it lasts, the same way the grapple does.
+	# Running would drag it back to walking pace within a frame, and the jump
+	# step would put gravity back on top of a move that is meant to be flat.
+	if not is_grappling() and not is_dashing():
 		_update_run(delta)
 
 	_bleed_injuries(delta)
@@ -901,7 +930,7 @@ func _physics_process(delta: float) -> void:
 	if not is_downed:
 		_charge_ultimate(delta)
 		_update_focus(delta)
-		if not is_grappling():
+		if not is_grappling() and not is_dashing():
 			_update_jump(delta)
 		_update_weapon()
 	_update_reticle()
@@ -1657,6 +1686,71 @@ func _update_run(delta: float) -> void:
 		velocity.x = move_toward(velocity.x, input_axis * speed_cap, accel * delta)
 
 
+## Whether a dash is in flight right now.
+func is_dashing() -> bool:
+	return _dash_left > 0.0
+
+
+## Two dashes, spent by swiping.
+##
+## Works in mid-air on purpose, and that is most of what it is for: the moment
+## you want to be somewhere else is usually the moment you have already left the
+## floor and committed to a jump you regret.
+func _update_dash(delta: float) -> void:
+	if _dash_left > 0.0:
+		_dash_left = maxf(_dash_left - delta, 0.0)
+		# Held flat for the whole dash - no gravity, no friction, no steering.
+		# Anything else and a dash upwards sags into a hop and a dash sideways
+		# reads as a stumble.
+		velocity = _dash_way * DASH_SPEED
+		return
+	# Read before the check that there is anything to spend, and thrown away if
+	# there is not. A swipe is an event: left sitting in the input it would fire
+	# the instant the next charge arrived, so casting the ultimate would spend a
+	# dash on a gesture made half a minute earlier.
+	var way := PlayerInput.take_dash()
+	if way.is_zero_approx():
+		way = _mouse_flick()
+	if way.is_zero_approx():
+		return
+	if dashes_left <= 0 or is_downed or riding or is_grappling():
+		return
+
+	_dash_way = way.normalized()
+	_dash_left = DASH_TIME
+	dashes_left -= 1
+	facing = 1 if _dash_way.x >= 0.0 else -1
+	_say_loot("DASH - %d left" % dashes_left if dashes_left > 0 else "DASH - last one")
+	if _audio:
+		_audio.reload_finished(global_position)
+
+
+## A hard flick of the mouse, as the desktop half of a swipe.
+##
+## Measured in screen pixels rather than world ones, because it is a gesture made
+## with a hand on a desk - how far the mouse went should not depend on how far
+## the camera happens to be zoomed out.
+##
+## The window slides: every FLICK_MS the anchor is dropped where the pointer is
+## and the measuring starts again. Without that, a slow drag across the screen
+## eventually covers the distance and dashes you somewhere you were only looking.
+func _mouse_flick() -> Vector2:
+	if PlayerInput.is_touch():
+		return Vector2.ZERO
+	var now := Time.get_ticks_msec()
+	var here := get_viewport().get_mouse_position()
+	if not _flick_at.is_finite() or now - _flick_ms > FLICK_MS:
+		_flick_at = here
+		_flick_ms = now
+		return Vector2.ZERO
+	var went := here - _flick_at
+	if went.length() < FLICK_MIN:
+		return Vector2.ZERO
+	_flick_at = here
+	_flick_ms = now
+	return went
+
+
 func _update_jump(delta: float) -> void:
 	if PlayerInput.is_jump_just_pressed():
 		_buffer_timer = jump_buffer_time
@@ -1780,6 +1874,11 @@ func _use_ultimate() -> void:
 		GadgetData.Kind.OVERLOAD:
 			overload_left = ult.gadget.active_time
 			_say_loot("OVERLOAD")
+		GadgetData.Kind.DASH:
+			dashes_left = ult.gadget.dashes
+			_say_loot("SLIPSTREAM - swipe to dash, %d of them" % dashes_left
+				if PlayerInput.is_touch()
+				else "SLIPSTREAM - flick the mouse to dash, %d of them" % dashes_left)
 		GadgetData.Kind.RECON_BOW:
 			# Q only brings the bow out. The charge is not spent until an arrow
 			# actually leaves it, so thinking better of the shot costs nothing.

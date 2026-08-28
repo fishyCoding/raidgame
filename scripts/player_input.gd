@@ -24,6 +24,12 @@ const STICK_DEADZONE := 0.25
 ## is placed, not pointed. Vector2.INF means "not set, use the cursor".
 var touch_aim_point := Vector2.INF
 
+## Set by a swipe across the pad, and the direction it went. Consumed on read,
+## the same as the projection's send - a swipe is an event, and an event left
+## lying around fires again on the next frame that looks at it.
+var touch_dash := false
+var touch_dash_way := Vector2.ZERO
+
 ## Where a thumb has dragged the projection's marker, or INF while nobody is
 ## placing one.
 ##
@@ -456,6 +462,20 @@ func is_throw_just_pressed(slot: int) -> bool:
 ## True while that throw key is held - grenades are wound up, not tapped.
 func is_throw_held(slot: int) -> bool:
 	return Input.is_action_pressed("throw_%d" % (slot + 1))
+
+
+## The way a swipe went, or zero if nobody swiped.
+##
+## Touch only. The desktop half of this is a mouse flick, which Player watches
+## for itself - it needs the screen position and the arming state, and both of
+## those are the character's business rather than the input map's.
+func take_dash() -> Vector2:
+	if not touch_dash:
+		return Vector2.ZERO
+	touch_dash = false
+	var way := touch_dash_way
+	touch_dash_way = Vector2.ZERO
+	return way
 
 
 ## True on the frame a thumb confirms where a projection should go. Consumed on

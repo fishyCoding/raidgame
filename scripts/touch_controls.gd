@@ -38,6 +38,15 @@ const STICK_DEAD := 0.16
 
 ## How far down the stick has to be pushed before it counts as crouching.
 const CROUCH_PUSH := 0.62
+
+## What counts as a swipe: this far, this fast, on a touch that is not driving
+## anything else.
+##
+## Only the steering half of the screen. The far side is the aim surface, where
+## dragging already means turning to look at something - a flick there is how you
+## snap onto somebody, and it must not also throw you across the room.
+const SWIPE_MIN := 170.0
+const SWIPE_MS := 420
 ## How far outside the drawn ring still counts as grabbing it. Thumbs are wide
 ## and the ring is a picture, not a target.
 const STICK_GRAB := 1.55
@@ -222,6 +231,9 @@ static func all_pills() -> Array:
 
 ## Which pointer is driving what. -2 means nobody; a touch index otherwise, and
 ## -1 for the mouse standing in for a finger on a desktop.
+## Touches that landed on nothing, watched in case they turn into a swipe.
+var _swipes := {}
+
 var _move_id := -2
 var _move_vec := Vector2.ZERO
 ## The pointer currently dragging to aim, and where it was a moment ago. It may
@@ -706,6 +718,11 @@ func _pointer(id: int, at: Vector2, down: bool) -> bool:
 	if at.x > size.x * 0.5 and _aim_id == -2:
 		_take_aim(id, at)
 		return true
+
+	# Landed on nothing. Held on to in case it becomes a swipe, which is how you
+	# dash. Not claimed - a touch that turns out to be nothing should stay
+	# nothing, and claiming it here would swallow presses the game wants.
+	_swipes[id] = {"from": at, "at": Time.get_ticks_msec()}
 	return false
 
 
@@ -756,10 +773,35 @@ func _drag(id: int, at: Vector2) -> bool:
 		PlayerInput.add_aim_motion((at - _aim_last) * AIM_DRAG)
 		_aim_last = at
 		ours = true
+	if not ours:
+		_watch_for_swipe(id, at)
 	return ours
 
 
+## A touch that is not driving anything, going somewhere in a hurry.
+##
+## Both halves of the test matter. Far enough, so resting a thumb and shifting it
+## is not a dash; and quick enough, so slowly dragging a finger across the glass
+## while doing something else is not either.
+func _watch_for_swipe(id: int, at: Vector2) -> void:
+	if not _swipes.has(id):
+		return
+	var start: Dictionary = _swipes[id]
+	var went: Vector2 = at - (start.from as Vector2)
+	if went.length() < SWIPE_MIN:
+		return
+	if Time.get_ticks_msec() - int(start.at) > SWIPE_MS:
+		# Too slow to be a flick. Dropped rather than restarted, so a long
+		# wandering drag cannot eventually qualify by accident.
+		_swipes.erase(id)
+		return
+	_swipes.erase(id)
+	PlayerInput.touch_dash = true
+	PlayerInput.touch_dash_way = went.normalized()
+
+
 func _lift(id: int) -> bool:
+	_swipes.erase(id)
 	var ours := false
 	if id == _move_id:
 		_move_id = -2

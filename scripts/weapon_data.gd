@@ -216,22 +216,46 @@ func get_base_spread() -> float:
 
 # --- recoil (the climb) -------------------------------------------------------
 
+## Applied on top of every weapon's own numbers, so guns read closer to lasers.
+##
+## Deliberately here rather than typed into seven .tres files. Scaling the dials
+## in one place keeps what each gun is *relative* to the others - a sniper still
+## climbs four times an SMG, they are both just calmer - and leaves the numbers
+## a designer reads on the resource meaning what they say.
+const RECOIL_SCALE := 0.5
+const STABILITY_SCALE := 2.0
+
+
+## The recoil dial as the curves below see it.
+func _climb() -> float:
+	return recoil * RECOIL_SCALE
+
+
+## The stability dial as the curves below see it.
+##
+## Held inside the range the curves interpolate across. Past 100 the lerps run
+## off the end of their own curve and come back with negative scatter, which is
+## not "extremely stable", it is a cone that inverts.
+func _steadiness() -> float:
+	return minf(stability * STABILITY_SCALE, 100.0)
+
+
 ## Upward aim kick per shot, in radians. The whole of the recoil stat: point the
 ## gun higher, every shot, by an amount you can predict and correct for.
 func get_kick_per_shot() -> float:
-	return deg_to_rad(lerpf(0.25, 6.0, recoil * 0.01)) * kick_scale
+	return deg_to_rad(lerpf(0.25, 6.0, _climb() * 0.01)) * kick_scale
 
 
 ## Ceiling on accumulated climb, so a long burst tops out instead of pointing at
 ## the sky. Set high enough that a full magazine walks the reticle well clear of
 ## where it started - the climb is meant to be fought, not shrugged off.
 func get_max_kick() -> float:
-	return deg_to_rad(lerpf(4.0, 42.0, recoil * 0.01)) * kick_scale
+	return deg_to_rad(lerpf(4.0, 42.0, _climb() * 0.01)) * kick_scale
 
 
 ## Shove applied to the shooter, px/s of horizontal velocity.
 func get_knockback() -> float:
-	return lerpf(0.0, 42.0, recoil * 0.01) * kick_scale
+	return lerpf(0.0, 42.0, _climb() * 0.01) * kick_scale
 
 
 
@@ -243,30 +267,30 @@ func get_knockback() -> float:
 ## place, while a stable one barely moves the picture. Scaled by shake_scale, so
 ## a heavy round can hit hard without also being sprayed all over the place.
 func get_shake() -> float:
-	return lerpf(9.5, 0.8, stability * 0.01) * shake_scale
+	return lerpf(9.5, 0.8, _steadiness() * 0.01) * shake_scale
 
 
 ## Cone growth per shot. Low stability is what makes a burst wander off on its
 ## own instead of simply climbing.
 func get_bloom_per_shot() -> float:
-	return deg_to_rad(lerpf(0.95, 0.04, stability * 0.01))
+	return deg_to_rad(lerpf(0.95, 0.04, _steadiness() * 0.01))
 
 
 ## Ceiling on accumulated scatter, so spraying plateaus instead of exploding.
 func get_max_bloom() -> float:
-	return deg_to_rad(lerpf(4.8, 0.45, stability * 0.01))
+	return deg_to_rad(lerpf(4.8, 0.45, _steadiness() * 0.01))
 
 
 ## Bloom decay, radians per second.
 func get_bloom_recovery() -> float:
-	return deg_to_rad(lerpf(3.0, 30.0, stability * 0.01))
+	return deg_to_rad(lerpf(3.0, 30.0, _steadiness() * 0.01))
 
 
 ## Kick recovery rate for exponential settling, 1/seconds. Kept low on purpose:
 ## a muzzle that snaps back the instant you stop firing costs you nothing, so
 ## the climb has to hang around long enough to be worth fighting.
 func get_kick_recovery() -> float:
-	return lerpf(0.9, 4.5, stability * 0.01)
+	return lerpf(0.9, 4.5, _steadiness() * 0.01)
 
 
 ## Grace period after the last shot before recovery starts, so a burst does not
