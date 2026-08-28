@@ -223,7 +223,13 @@ func get_base_spread() -> float:
 ## climbs four times an SMG, they are both just calmer - and leaves the numbers
 ## a designer reads on the resource meaning what they say.
 const RECOIL_SCALE := 0.5
-const STABILITY_SCALE := 2.0
+const STABILITY_SCALE := 1.7
+
+## Screen shake is scaled on its own, upward, and reads the raw stability dial
+## rather than the steadied one. Calming the guns quietened the picture along
+## with them, and a gun that barely moves the screen stops reading as a gun -
+## the shot loses the weight the climb used to give it.
+const SHAKE_BOOST := 1.7
 
 
 ## The recoil dial as the curves below see it.
@@ -267,7 +273,7 @@ func get_knockback() -> float:
 ## place, while a stable one barely moves the picture. Scaled by shake_scale, so
 ## a heavy round can hit hard without also being sprayed all over the place.
 func get_shake() -> float:
-	return lerpf(9.5, 0.8, _steadiness() * 0.01) * shake_scale
+	return lerpf(9.5, 0.8, stability * 0.01) * shake_scale * SHAKE_BOOST
 
 
 ## Cone growth per shot. Low stability is what makes a burst wander off on its

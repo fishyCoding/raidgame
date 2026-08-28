@@ -9,9 +9,14 @@ extends Node2D
 ## ultimate - which is the price of it being an ultimate rather than a gadget.
 
 ## Muzzle velocity, pixels per second.
-@export var speed := 1500.0
+@export var speed := 3000.0
 ## Arrows drop. Not much, but enough that a long shot has to be aimed high.
-@export var gravity := 260.0
+## Well over four times what it was, because the arrow is now twice as fast and
+## speed flattens an arc hard: at double the speed a shot crosses the same
+## ground in half the time, so the same gravity would only pull it a quarter as
+## far down. Restoring the old arc alone would have taken four times this; past
+## that is the deeper arc asked for.
+@export var gravity := 1600.0
 
 var velocity := Vector2.ZERO
 var data: GadgetData

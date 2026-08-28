@@ -334,8 +334,14 @@ const GROUND_HUNT := 900.0
 ## Short and quick rather than long and floaty. It is a way out of somewhere you
 ## should not be standing, and a dash you can be shot out of the middle of is
 ## not that.
-const DASH_SPEED := 980.0
-const DASH_TIME := 0.16
+##
+## The ground covered is more than these two multiplied together, because the
+## speed is not taken off you when the dash ends - you carry out of it for a few
+## frames. The first pass covered nearly three hundred pixels, which crossed most
+## rooms in one gesture and made the rest of the movement in the game beside the
+## point.
+const DASH_SPEED := 720.0
+const DASH_TIME := 0.13
 
 ## What counts as a mouse swipe: this far across the screen, this quickly.
 ##
@@ -903,13 +909,27 @@ func _physics_process(delta: float) -> void:
 	_update_crouch(delta)
 	_update_loot(delta)
 	_update_inventory_keys()
-	_update_aim(delta)
+	# Decided before aiming is, so the very frame a dash begins is already a
+	# frame you are not aiming on. Left below, the flick that started it got one
+	# last turn of the camera in on its way past.
+	_update_dash(delta)
+	# Not while dashing. The gesture that starts a dash is a flick of the mouse or
+	# a thumb across the glass, and both of those are also how you aim - so the
+	# dash was throwing your aim across the room along with your body. For the
+	# tenth of a second it lasts, the dash owns the controls: no aiming, no
+	# steering, no shooting yourself somewhere you did not mean to look.
+	#
+	# The pending motion is drained rather than left alone, or the whole flick
+	# would arrive in one lump the frame the dash finishes.
+	if is_dashing():
+		var _swallowed := PlayerInput.consume_aim_motion()
+	else:
+		_update_aim(delta)
 	_update_stow(delta)
 	# On the line, _reel_in owns the velocity: running would fight the pull with
 	# ground friction, and the jump step applies its own full gravity on top of
 	# the scaled sag that makes the swing. Steering is handled in _reel_in, so
 	# you can still move - it just goes through the rope.
-	_update_dash(delta)
 	# A dash owns the velocity while it lasts, the same way the grapple does.
 	# Running would drag it back to walking pace within a frame, and the jump
 	# step would put gravity back on top of a move that is meant to be flat.
