@@ -78,7 +78,7 @@ static func report_hit(_tree: SceneTree, headshot: bool, killed: bool) -> void:
 ## Works out what a hit does. `at` is where the round landed in world space,
 ## `centre` and `height` describe the body it landed on.
 static func resolve(amount: float, at: Vector2, centre: Vector2, height: float,
-		kit: Inventory, pierce := 0.0) -> Result:
+		kit: Inventory, pierce := 0.0, wear_scale := 1.0) -> Result:
 	var result := Result.new()
 	result.headshot = at.y <= centre.y - height * 0.5 + height * HEAD_FRACTION
 
@@ -117,6 +117,7 @@ static func resolve(amount: float, at: Vector2, centre: Vector2, height: float,
 	# Charged on the round that arrived. A plate is a thing that gets destroyed
 	# by being shot, and it gets destroyed at the rate it is being shot - not at
 	# the rate it is still managing to help.
-	var wear := amount * ARMOR_WEAR * (HELMET_WEAR if result.headshot else 1.0)
+	var wear := (amount * ARMOR_WEAR * maxf(wear_scale, 0.0)
+		* (HELMET_WEAR if result.headshot else 1.0))
 	worn.durability = maxf(worn.durability - wear, 0.0)
 	return result

@@ -90,9 +90,39 @@ func _run() -> void:
 	var pack: ItemGrid = player.inventory.backpack
 	_check("the medkit fits in the pack",
 		pack.place(Item.from_medkit(3), Vector2i.ZERO))
+
+	# Kits are not instant any more, and the waiting is the mechanic rather
+	# than a delay in front of it: reaching for one is a bet that nobody is
+	# looking at you. So this checks the bet as well as the payout.
+	var hurt: float = player.health
 	player._use_medkit()
 	await physics_frame
-	_check("a medkit puts health back", player.health > player.injury_floor_health)
+	_check("reaching for a medkit does not patch you up on its own",
+		player.health == hurt)
+	_check("it puts you on the clock instead",
+		player.is_using() and is_equal_approx(player.use_total, player.MEDKIT_TIME))
+
+	# Both hands are busy. Driven through _update_run with the move axis held
+	# down rather than by reading the constant back, because what is being
+	# checked is that the body does not move, not that a number is zero.
+	player.velocity.x = 0.0
+	var moved_from: float = player.global_position.x
+	for i in 12:
+		await physics_frame
+	_check("and you cannot walk out of it",
+		absf(player.global_position.x - moved_from) < 1.0)
+
+	# Shot half way through it. Nothing spent, nothing gained.
+	player.take_damage(1.0, player.global_position, Vector2.RIGHT)
+	await physics_frame
+	_check("a round landing on you stops it", not player.is_using())
+	_check("and the medkit is still in the bag", pack.items.size() == 1)
+
+	hurt = player.health
+	player._use_medkit()
+	_run_clock(player, player.MEDKIT_TIME)
+	await physics_frame
+	_check("a medkit puts health back", player.health > hurt)
 	_check("but leaves the wound open", player.injuries == 1)
 
 	# --- a surgical kit closes them all -------------------------------------
@@ -100,11 +130,13 @@ func _run() -> void:
 	var kit := Item.from_surgical(2)
 	_check("the surgical kit fits in the pack", pack.place(kit, Vector2i(0, 2)))
 	player._use_surgical()
+	_run_clock(player, player.SURGICAL_TIME)
 	await physics_frame
 	_check("a surgical kit closes every wound at once", player.injuries == 0)
 	_check("and spends one use", kit.count == 1)
 
 	player._use_surgical()
+	_run_clock(player, player.SURGICAL_TIME)
 	await physics_frame
 	_check("with nothing to treat it refuses rather than spending a use",
 		kit.count == 1)
@@ -170,6 +202,15 @@ func _run() -> void:
 func _wait(frames: int) -> void:
 	for i in frames:
 		await physics_frame
+
+
+## Runs a kit's clock out by hand.
+##
+## Driven rather than waited for: eight seconds of real frames is eight seconds
+## of test, and what is being checked is what happens at the end of the clock,
+## not the frame rate it counted down at.
+func _run_clock(player: Node, seconds: float) -> void:
+	player._tick_use(seconds + 0.01)
 
 
 func _check(what: String, ok: bool) -> void:

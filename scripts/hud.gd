@@ -48,10 +48,17 @@ const MARGIN := 20.0
 ## Inside this, a scope is not throwing you a glint - it is a man in the room
 ## with you.
 const GLINT_MIN_RANGE := 620.0
-## How near his aim has to be to you before the glass shows, radians.
-const GLINT_AIM_CONE := 0.10
-## And how near yours has to be to him before you catch it.
-const GLINT_LOOK_CONE := 0.38
+## How near his aim has to be to you before the glass shows, radians. Was 0.10,
+## about six degrees, which meant the mark appeared at roughly the moment he was
+## ready to fire - technically fair and useless in practice, because the thing
+## you want is not to be told you are being shot, it is a chance not to be.
+const GLINT_AIM_CONE := 0.22
+## And how near yours has to be to him before you catch it. Wide enough that
+## sweeping a skyline finds it, rather than requiring you to have already
+## guessed which window he is in.
+const GLINT_LOOK_CONE := 0.85
+## How far in from the edge an off-screen glint is pinned.
+const GLINT_MARGIN := 26.0
 
 var _player: Player
 var _weapon: Weapon
@@ -506,15 +513,24 @@ func _draw_using(bar: Rect2) -> void:
 ## price of the shot is that taking it puts a mark on the map for exactly the
 ## person who is in a position to do something about it, and only for them.
 ##
-## Not clamped to the screen edge the way a recon ping is, and that is the same
-## rule stated from the other side: a ping is intelligence, and arrives wherever
-## you are looking; a glint is light, and only reaches you if you were already
-## looking the right way.
+## Pinned to the edge of the screen when he is off it, the way a recon ping is.
+## It used to be dropped in that case, on the theory that a glint is light and
+## has to reach your eye - which was tidy and made the mechanic worthless in the
+## one situation it exists for. The camera pulls *back* while you are aiming, so
+## a rifle far enough away to be dangerous is routinely outside the frame, and a
+## warning you only get once the man is already on screen is not a warning.
+##
+## What replaces the on-screen test is a real one: the line between the two of
+## you has to be clear. Light travels in straight lines, so a scope behind a
+## wall, inside smoke, or on the far side of a screen throws you nothing - which
+## the old version got wrong in the more alarming direction, marking snipers
+## through solid geometry.
 func _draw_sniper_glints() -> void:
 	if _player == null or not _player.is_alive:
 		return
 	var canvas := get_viewport().get_canvas_transform()
 	var clock := Time.get_ticks_msec() * 0.001
+	var vision := get_tree().get_first_node_in_group(&"vision_system")
 
 	for node in get_tree().get_nodes_in_group(&"player"):
 		var them := node as Player
@@ -529,15 +545,29 @@ func _draw_sniper_glints() -> void:
 				GLINT_MIN_RANGE, GLINT_AIM_CONE, GLINT_LOOK_CONE):
 			continue
 
-		var at := canvas * them.global_position
-		if at.x < 0.0 or at.x > size.x or at.y < 0.0 or at.y > size.y:
+		# Light travels in straight lines. Asked of the vision system rather
+		# than worked out here, and asked with line_is_clear rather than is_seen,
+		# because is_seen gives up past the corner of the screen and this mark
+		# is at its most useful well beyond that.
+		if vision != null and not vision.line_is_clear(
+				_player.global_position, them.global_position):
 			continue
+
+		var at := canvas * them.global_position
+		var off_screen := (at.x < GLINT_MARGIN or at.x > size.x - GLINT_MARGIN
+			or at.y < GLINT_MARGIN or at.y > size.y - GLINT_MARGIN)
+		at.x = clampf(at.x, GLINT_MARGIN, size.x - GLINT_MARGIN)
+		at.y = clampf(at.y, GLINT_MARGIN, size.y - GLINT_MARGIN)
 
 		# Off and on rather than a steady lamp: glass catches the light as it
 		# moves, and a mark that blinks is one you notice in the corner of a
 		# screen you are already busy reading.
 		var pulse := 0.45 + 0.55 * absf(sin(clock * 7.0))
-		var tint := Color(GLINT.r, GLINT.g, GLINT.b, GLINT.a * pulse)
+		# Dimmer against the edge, because a pinned mark is a bearing rather
+		# than a place: it says which way he is, and pretending to a position it
+		# does not have would send you looking at the wrong window.
+		var reach := GLINT.a * pulse * (0.62 if off_screen else 1.0)
+		var tint := Color(GLINT.r, GLINT.g, GLINT.b, reach)
 		var arm := 7.0 + 4.0 * pulse
 		draw_line(at - Vector2(arm, 0.0), at + Vector2(arm, 0.0), tint, 1.0, true)
 		draw_line(at - Vector2(0.0, arm), at + Vector2(0.0, arm), tint, 1.0, true)

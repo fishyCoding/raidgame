@@ -16,9 +16,20 @@ extends SceneTree
 ## obvious way reports that nine of its nine cases show no glint and calls that
 ## a pass. Hence both the load below and the guard in _want.
 
-const MIN_RANGE := 620.0
-const AIM_CONE := 0.10
-const LOOK_CONE := 0.38
+## The values the HUD actually ships, read off it rather than copied. A test
+## that carries its own numbers keeps passing while the game is tuned out from
+## under it, which is the failure mode this file is least able to afford: every
+## case below is about the *shape* of the rule, and the shape only means
+## anything against the cones really in use.
+## Filled in _init, after a frame has passed. Not from a variable initialiser:
+## those run before the autoloads are on the root, hud.gd names them, and it
+## compiles with "Identifier not found: Net" - which is survivable here only
+## because a fallback would be waiting, and a fallback is the one thing this
+## must not have. A test quietly measuring numbers the game no longer uses is
+## worse than no test.
+var MIN_RANGE := 0.0
+var AIM_CONE := 0.0
+var LOOK_CONE := 0.0
 
 var _failures: Array[String] = []
 ## An instance of player.gd, because statics are reached through one.
@@ -29,6 +40,18 @@ func _init() -> void:
 	# One frame, so the autoloads player.gd names are on the root before it is
 	# compiled. See the note above.
 	await process_frame
+
+	var hud: GDScript = load("res://scripts/hud.gd")
+	var shipped: Dictionary = hud.get_script_constant_map() if hud else {}
+	for name in ["GLINT_MIN_RANGE", "GLINT_AIM_CONE", "GLINT_LOOK_CONE"]:
+		if not shipped.has(name):
+			print("FAIL - hud.gd has no %s; the cones moved or the file did" % name)
+			quit(1)
+			return
+	MIN_RANGE = float(shipped["GLINT_MIN_RANGE"])
+	AIM_CONE = float(shipped["GLINT_AIM_CONE"])
+	LOOK_CONE = float(shipped["GLINT_LOOK_CONE"])
+
 	var script: GDScript = load("res://scripts/player.gd")
 	if script == null or not script.has_method(&"glint_shows"):
 		print("FAIL - player.gd did not compile, or has no glint_shows on it")
@@ -66,6 +89,15 @@ func _init() -> void:
 
 	_player.free()
 
+	# The asymmetry is the mechanic and not a coincidence of tuning: he has to
+	# have picked you out, you only have to be looking his way. Widen his cone
+	# past yours and the mark starts appearing for people he is not aiming at.
+	_want_true("his cone is tighter than yours", AIM_CONE < LOOK_CONE)
+	_want_true("and neither of them is a full circle", LOOK_CONE < PI)
+	_want_true("a glint has a minimum range", MIN_RANGE > 0.0)
+	print("  ..   shipped cones: his %.2f rad, yours %.2f rad, from %.0f px"
+		% [AIM_CONE, LOOK_CONE, MIN_RANGE])
+
 	if _failures.is_empty():
 		print("OK - the glint is mutual")
 	else:
@@ -73,6 +105,14 @@ func _init() -> void:
 			print("FAIL - %s" % line)
 		print("FAILED %d check(s)" % _failures.size())
 	quit(0 if _failures.is_empty() else 1)
+
+
+func _want_true(what: String, ok: bool) -> void:
+	if ok:
+		print("  ok   %-46s" % what)
+	else:
+		_failures.append(what)
+		print("  FAIL %-46s" % what)
 
 
 func _want(what: String, expected: bool, sniper_at: Vector2, sniper_aim: float,

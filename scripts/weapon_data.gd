@@ -106,6 +106,21 @@ extends Resource
 ## Zero on everything that was here before it existed, so nothing already in the
 ## game changed the day it arrived.
 @export_range(0.0, 1.0) var armor_pierce := 0.0
+
+## How hard this round is on the plate it hits, as a multiple of the wear every
+## round does. 1 is ordinary; 0 barely marks it; 2 tears it apart.
+##
+## The other half of what a round does about armour, and deliberately a separate
+## dial from armor_pierce. Piercing is about *this* round getting through - it
+## ignores the plate. This is about the plate afterwards, which is a different
+## question and often the opposite answer: a submachine gun round is stopped by
+## a vest and does not do much to it either, while a machine gun belt chews the
+## plate to pieces on its way to being stopped by it.
+##
+## It travels with the shot, the same way piercing does and for the same reason:
+## the machine working out what happened to your armour is yours, not the one
+## holding the gun. See Net.armor_wear.
+@export_range(0.0, 4.0) var armor_wear_scale := 1.0
 @export var bullet_range := 2000.0
 
 @export_group("Range")

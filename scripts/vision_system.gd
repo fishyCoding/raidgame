@@ -97,6 +97,35 @@ func _physics_process(_delta: float) -> void:
 			scenery.visible = lit
 
 
+## Whether a straight line between two points is clear of everything that stops
+## light: geometry, smoke and screens.
+##
+## Deliberately not _can_see and deliberately not is_seen. Both of those measure
+## a *body* - they sample its outline, and they give up past _sight_reach, which
+## is the corner of the screen plus a margin. This is asked about points, at any
+## distance, by things that need to know whether two places can see each other
+## rather than whether something is on screen. The sniper glint is the first
+## caller: the whole value of it is that it reaches you from further away than
+## you can see, so a reach cut-off would have quietly deleted the mechanic at
+## exactly the ranges it is for.
+func line_is_clear(from: Vector2, to: Vector2) -> bool:
+	# The eye is only being used for the world it stands in - the line itself is
+	# given. No eye means no session to ask about, and permissive is the right
+	# way to be wrong: a mark that shows when it should not is a player looking
+	# at the wrong window, and one that never shows is a mechanic that silently
+	# does not exist.
+	if not _resolve_eye():
+		return true
+	var space := _eye.get_world_2d().direct_space_state
+	var query := PhysicsRayQueryParameters2D.create(from, to)
+	query.collision_mask = SIGHT_MASK
+	if not space.intersect_ray(query).is_empty():
+		return false
+	if Smoke.blocks_sight(get_tree(), from, to):
+		return false
+	return not Screen.blocks_sight(get_tree(), from, to)
+
+
 ## True if anything currently has line of sight on this node.
 ## Nodes revealed by a recon shot stay drawn even with no line of sight to them,
 ## until their reveal runs out.

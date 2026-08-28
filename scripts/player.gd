@@ -345,9 +345,14 @@ const SCOPED_AT := 0.8
 const MEDKIT_TIME := 4.5
 const SURGICAL_TIME := 8.0
 const REPAIR_TIME := 6.0
-## Top speed while you are using something. Not nailed to the floor - movement
-## is the floor of this game - but not running either.
-const USING_SPEED_SCALE := 0.45
+## You do not move at all while a kit is open. Both hands are busy.
+##
+## This was 45% for a while, on the grounds that movement is the floor of this
+## game and taking it away entirely is a heavy thing to do. It is the right
+## heavy thing: a heal you can walk out of a fight with is a heal with no
+## decision in it, and the cost that makes a kit worth carrying is being unable
+## to answer anything for the seconds it takes. Standing still is the price.
+const USING_SPEED_SCALE := 0.0
 
 ## What is in your hands right now, if anything.
 enum Using { NONE, MEDKIT, SURGICAL, REPAIR }
@@ -1819,8 +1824,13 @@ func _update_run(delta: float) -> void:
 	# anything and not ramped: a wound is not a stance you are holding, it is
 	# just true until somebody patches it.
 	speed_cap *= injury_speed_multiplier()
-	if using != Using.NONE:
+	# Rooted, not merely slowed. The cap alone would still let whatever speed you
+	# were already carrying ride out under it, so the input is dropped too and
+	# ground friction is left to bring you to a stop - which reads as planting
+	# your feet rather than as hitting a wall.
+	if is_using():
 		speed_cap *= USING_SPEED_SCALE
+		input_axis = 0.0
 	# A crawl replaces the crouch scale rather than stacking on it, so the speed
 	# is a number you can reason about instead of two fractions multiplied.
 	if is_downed:
@@ -2711,6 +2721,11 @@ func _begin_use(what: Using, seconds: float, announcement: String) -> void:
 	_say_loot(announcement)
 
 
+## Whether a kit is in your hands right now.
+func is_using() -> bool:
+	return using != Using.NONE
+
+
 ## How far through the kit you are, 0 to 1. What the HUD draws.
 func use_progress() -> float:
 	if using == Using.NONE or use_total <= 0.0:
@@ -3183,7 +3198,7 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 	# the alternative is moving health onto a second, host-owned synchroniser.
 	if Net.is_networked() and not is_local():
 		Net.tell_owner_hit(get_multiplayer_authority(), amount, at, direction,
-			Net.attributing_to, Net.piercing)
+			Net.attributing_to, Net.piercing, Net.armor_wear)
 		return
 	if not is_alive or _invulnerable > 0.0:
 		return
@@ -3228,7 +3243,7 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 	var height: float = (_shape.shape as RectangleShape2D).size.y
 	var kit: Inventory = inventory if is_shielded() else null
 	var hit := Damage.resolve(amount, at, global_position + _shape.position, height,
-		kit, Net.piercing)
+		kit, Net.piercing, Net.armor_wear)
 	last_hit_headshot = hit.headshot
 
 	amount = hit.amount

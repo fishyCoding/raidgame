@@ -217,14 +217,111 @@ func _init() -> void:
 	# the SMG enough that both killed a plated man quicker than the AR did. The
 	# benchmark being outrun by the guns it is meant to anchor is how a model
 	# stops meaning anything.
+	# The SMG is out of this comparison now, on purpose, and it is worth being
+	# clear that this is a reversal rather than an oversight.
+	#
+	# The rule below was written because the LMG and the SMG both used to kill a
+	# plated man quicker than the assault rifle, which made the benchmark
+	# meaningless. It stands for the LMG. The SMG was deliberately given the
+	# close fight instead: armour dies to volume of fire now, and 940 rounds a
+	# minute is what volume of fire means - so a submachine gun that could not
+	# out-trade a rifle inside a room had nothing left that was its own.
+	#
+	# What it pays for that is pinned underneath, and it is a real price: it
+	# keeps far less of itself at range than the rifle does, so the trade is
+	# "wins the room, loses the corridor" rather than "wins".
 	var ar_ttk := float(armored - 1) * ar.get_shot_interval()
-	for other_name in ["smg", "lmg"]:
+	for other_name in ["lmg"]:
 		var other: WeaponData = load("res://resources/weapons/%s.tres" % other_name)
 		var other_rounds := _rounds_to_kill(damage, other, "medium_vest", false)
 		var other_ttk := float(other_rounds - 1) * other.get_shot_interval()
 		if other_ttk <= ar_ttk:
 			_failures.append("%s kills a plated man in %.0f ms, at or under the AR's %.0f"
 				% [other_name, other_ttk * 1000.0, ar_ttk * 1000.0])
+
+	# --- the SMG kills fastest, and pays for it in reach and in plate --------
+	#
+	# Three properties, and the gun is the three of them together. Take any one
+	# away and it is either the best weapon in the game or pointless.
+	var smg: WeaponData = load("res://resources/weapons/smg.tres")
+	print("\n-- the submachine gun's bargain --")
+
+	# One: nothing kills quicker, plated or not. Measured against every other
+	# gun rather than against the rifle alone, because "fastest" is a claim
+	# about the whole shelf.
+	var smg_vested := float(_rounds_to_kill(damage, smg, "medium_vest", false) - 1) \
+		* smg.get_shot_interval()
+	var smg_bare := float(_rounds_to_kill(damage, smg, "", false) - 1) \
+		* smg.get_shot_interval()
+	for other_name in ["assault_rifle", "lmg", "pistol", "shotgun", "sniper"]:
+		var other: WeaponData = load("res://resources/weapons/%s.tres" % other_name)
+		var vested := float(_rounds_to_kill(damage, other, "medium_vest", false) - 1) \
+			* other.get_shot_interval()
+		if smg_vested >= vested:
+			_failures.append("the %s kills a plated man as fast as the SMG (%.0f ms against %.0f)"
+				% [other_name, vested * 1000.0, smg_vested * 1000.0])
+		# A gun that kills in one round has no time-to-kill to compare - the
+		# shotgun's naked column is 0 ms and means "one shot", not "instant".
+		var bare_rounds := _rounds_to_kill(damage, other, "", false)
+		if bare_rounds > 1 and smg_bare >= float(bare_rounds - 1) * other.get_shot_interval():
+			_failures.append("the %s kills a bare man as fast as the SMG" % other_name)
+	_eq("SMG time to kill, medium vest (ms)", smg_vested * 1000.0, 128.0, 1.0)
+	_eq("SMG time to kill, nothing on (ms)", smg_bare * 1000.0, 64.0, 1.0)
+
+	# Two: it gives up the corridor. Its rounds stop existing before the rifle's
+	# curve has even finished falling.
+	if smg.get_damage_at(9999.0) >= ar.get_damage_at(9999.0) * 0.75:
+		_failures.append("the SMG keeps too much of itself at range")
+	if smg.falloff_end >= ar.falloff_end or smg.bullet_range >= ar.bullet_range:
+		_failures.append("the SMG outreaches the rifle it is not allowed to outreach")
+	print("  ok   %-42s %.0f at range vs %.0f, and stops at %.0fpx"
+		% ["gives up the corridor", smg.get_damage_at(9999.0),
+			ar.get_damage_at(9999.0), smg.bullet_range])
+
+	# Three: it cannot break armour. A vest it is shooting keeps working, which
+	# is the whole reason wearing one still means something against the fastest
+	# gun on the shelf.
+	if smg.armor_wear_scale >= 1.0:
+		_failures.append("the SMG is no longer soft on plate")
+	var smg_kit: Inventory = _kit("medium_vest", 1)
+	var smg_plate: Item = smg_kit.get_worn(Inventory.Wear.VEST)
+	for i in 3:
+		damage.resolve(smg.damage, Vector2.ZERO, Vector2.ZERO, BODY_HEIGHT, smg_kit,
+			smg.armor_pierce, smg.armor_wear_scale)
+	print("  ok   %-42s %.0f/%.0f left" % ["and barely marks a vest",
+		smg_plate.durability, smg_plate.armor.max_durability])
+
+	# --- the machine gun takes the plate apart -------------------------------
+	#
+	# The opposite gun, built out of the same two dials pointed the other way:
+	# it goes through what is there and destroys what it goes through. Slow to
+	# kill, and the reason the man you are shooting has nothing left when your
+	# team arrives.
+	var lmg: WeaponData = load("res://resources/weapons/lmg.tres")
+	print("\n-- the machine gun against a plate --")
+	var lmg_kit: Inventory = _kit("heavy_vest", 1)
+	var lmg_plate: Item = lmg_kit.get_worn(Inventory.Wear.VEST)
+	var rounds_to_strip := 0
+	while lmg_plate.durability > 0.0 and rounds_to_strip < 40:
+		rounds_to_strip += 1
+		damage.resolve(lmg.damage, Vector2.ZERO, Vector2.ZERO, BODY_HEIGHT, lmg_kit,
+			lmg.armor_pierce, lmg.armor_wear_scale)
+	_eq("LMG rounds to strip a Plate Carrier", float(rounds_to_strip), 3.0)
+	if lmg.armor_wear_scale <= 2.0 or lmg.armor_pierce <= 0.0:
+		_failures.append("the LMG has stopped being the gun that eats armour")
+	# The rifle on the same plate, for the contrast that makes it mean anything.
+	var ar_kit: Inventory = _kit("heavy_vest", 1)
+	var ar_plate: Item = ar_kit.get_worn(Inventory.Wear.VEST)
+	var ar_strip := 0
+	while ar_plate.durability > 0.0 and ar_strip < 40:
+		ar_strip += 1
+		damage.resolve(ar.damage, Vector2.ZERO, Vector2.ZERO, BODY_HEIGHT, ar_kit,
+			ar.armor_pierce, ar.armor_wear_scale)
+	if ar_strip <= rounds_to_strip:
+		_failures.append("the rifle strips a plate as fast as the machine gun")
+	else:
+		print("  ok   %-42s %d rounds against the LMG's %d"
+			% ["where the rifle needs", ar_strip, rounds_to_strip])
 
 	# --- every other gun measured the same way ------------------------------
 	print("")
@@ -303,7 +400,7 @@ func _rounds_to_kill(damage: RefCounted, gun: WeaponData, armor_name: String,
 		rounds += 1
 		for pellet in gun.pellets:
 			var result = damage.resolve(gun.damage, at, centre, BODY_HEIGHT, kit,
-				gun.armor_pierce)
+				gun.armor_pierce, gun.armor_wear_scale)
 			health -= result.amount
 	return rounds
 

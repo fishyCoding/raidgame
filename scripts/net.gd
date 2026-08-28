@@ -119,6 +119,10 @@ var attributing_to := 0
 ## in the game would have to grow a parameter otherwise, including the ones on
 ## screens and ghosts that have no armour to think about.
 var piercing := 0.0
+## How hard the round being resolved is on armour, as a multiple. Set around the
+## damage call and read back out exactly the way piercing is - see the note
+## above it, which applies here word for word.
+var armor_wear := 1.0
 
 
 func _ready() -> void:
@@ -1491,13 +1495,13 @@ func deals_damage() -> bool:
 ## every machine from the moment it starts and has been exchanging rounds and
 ## match state since before anybody had a body.
 func tell_owner_hit(owner_id: int, amount: float, at: Vector2, direction: Vector2,
-		from: int, pierce := 0.0) -> void:
-	_hit_body.rpc_id(owner_id, owner_id, amount, at, direction, from, pierce)
+		from: int, pierce := 0.0, wear := 1.0) -> void:
+	_hit_body.rpc_id(owner_id, owner_id, amount, at, direction, from, pierce, wear)
 
 
 @rpc("any_peer", "reliable")
 func _hit_body(owner_id: int, amount: float, at: Vector2, direction: Vector2,
-		from: int, pierce: float) -> void:
+		from: int, pierce: float, wear: float) -> void:
 	# Only the host resolves damage, so only the host may say this.
 	if multiplayer.get_remote_sender_id() != 1:
 		return
@@ -1509,8 +1513,10 @@ func _hit_body(owner_id: int, amount: float, at: Vector2, direction: Vector2,
 	# holding the gun - so it has to come along rather than be looked up.
 	attributing_to = from
 	piercing = pierce
+	armor_wear = wear
 	body.take_damage(amount, at, direction)
 	piercing = 0.0
+	armor_wear = 1.0
 	attributing_to = 0
 
 
