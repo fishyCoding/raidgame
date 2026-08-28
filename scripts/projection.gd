@@ -1590,10 +1590,17 @@ func hit(at: Vector2, direction: Vector2) -> void:
 	# the absence of a tick on your own screen would be no decoy at all - and it
 	# is the same call a real body makes, through the same route, so the mark
 	# arrives from the same place with the same timing.
-	var height := size.y
-	var top := sight_centre().y - height * 0.5
-	var headshot := at.y <= top + height * Damage.HEAD_FRACTION
-	Damage.report_hit(get_tree(), headshot, hits >= max_hits)
+	#
+	# Unless they are the one who cast it. Shooting your own ghost is not a hit
+	# on anybody, and the tick for it was a lie in the one direction that costs
+	# nothing to tell the truth in: you already know what you are looking at, so
+	# there is no decoy to give away by staying quiet. What it was doing was
+	# handing out hit confirmations for shooting your own equipment.
+	if Net.attributing_to != get_multiplayer_authority():
+		var height := size.y
+		var top := sight_centre().y - height * 0.5
+		var headshot := at.y <= top + height * Damage.HEAD_FRACTION
+		Damage.report_hit(get_tree(), headshot, hits >= max_hits)
 
 	if hits >= max_hits:
 		_finish()

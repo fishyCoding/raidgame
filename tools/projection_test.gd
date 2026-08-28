@@ -205,6 +205,9 @@ func _run() -> void:
 	print("  gone after the tear finished: %s" % not is_instance_valid(ghost))
 	_check_that(not is_instance_valid(ghost), "and then it is gone")
 
+	print("\n-- and shooting one is a hit, unless it is yours --")
+	await _check_hitmarker(main, player)
+
 	print("\n-- it lures rather than hides --")
 	_check_bait(main, player)
 
@@ -1253,6 +1256,70 @@ func _wait_for(done: Callable, frames: int) -> void:
 		if done.call():
 			return
 		await physics_frame
+
+
+## Shooting a ghost gives whoever fired their tick - and shooting your own does
+## not.
+##
+## The tick is most of what makes the gadget work. A decoy you could tell from a
+## person by the absence of a hitmarker on your own screen would be no decoy at
+## all: you would learn the tell once and never be fooled again. So a round into
+## somebody else's ghost has to land exactly as a round into a body does.
+##
+## Your own is the one case where there is nothing to protect. You already know
+## what you are looking at, so staying quiet gives nothing away - and a tick
+## there was a hit confirmation for shooting your own equipment.
+##
+## Watched at the reticle, which is where a hitmarker actually ends up, rather
+## than by counting calls: what is under test is whether the player sees a mark.
+func _check_hitmarker(main: Node, player: Node2D) -> void:
+	var net: Node = root.get_node("Net")
+	var reticle: Node = player.get_node("Overlay/Reticle")
+	var ghost: Node2D = _fresh_ghost(main, player)
+	if ghost == null:
+		_check_that(false, "the check needs a ghost to shoot")
+		return
+
+	# Somebody else's round. Peer 0 is nobody in particular, which is all this
+	# needs - what matters is that it is not the caster.
+	reticle._mark = 0
+	net.attributing_to = 9
+	ghost.hit(ghost.sight_centre(), Vector2.RIGHT)
+	net.attributing_to = 0
+	var theirs: int = reticle._mark
+	print("  a stranger's round: reticle mark %d" % theirs)
+	_check_that(theirs != 0, "a round into somebody else's ghost has to tick")
+
+	# And the caster's own, into the same body.
+	reticle._mark = 0
+	net.attributing_to = ghost.get_multiplayer_authority()
+	ghost.hit(ghost.sight_centre(), Vector2.RIGHT)
+	net.attributing_to = 0
+	var mine: int = reticle._mark
+	print("  the caster's own round: reticle mark %d" % mine)
+	_check_that(mine == 0, "but shooting your own ghost must not")
+
+	# Put the world back. A ghost left standing here is not a tidiness problem -
+	# the next section clicks to cast one and checks that the click spends the
+	# charge, and a click with a ghost already out is a *redirect*, which is free
+	# on purpose. Leaving this one up failed that check from two sections away.
+	ghost.name = "%s_spent" % ghost.name
+	ghost.queue_free()
+	await physics_frame
+
+
+## A ghost with all its hit points, cast fresh so a check can shoot it without
+## inheriting whatever the last one did to it.
+func _fresh_ghost(main: Node, player: Node2D) -> Node2D:
+	var standing := _the_ghost()
+	if standing:
+		standing.name = "%s_spent" % standing.name
+		standing.queue_free()
+	player._cast_projection(load(GADGET), player.global_position)
+	var made := _the_ghost()
+	if made:
+		made.life_left = 90.0
+	return made
 
 
 ## This peer's own ghost, by name rather than by group.
