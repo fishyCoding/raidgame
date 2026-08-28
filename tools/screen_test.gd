@@ -43,6 +43,8 @@ func _run() -> void:
 	print("-- guards still in the level: %d" % left)
 	_check(left == 0, "the guards are off, as asked")
 
+	_check_ropes(self)
+
 	# --- a screen goes up, anchored ------------------------------------------
 	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
 	var ult: Object = maker.from_gadget(load("res://resources/gadgets/screen.tres"))
@@ -106,6 +108,8 @@ func _run() -> void:
 		return
 
 	var sheet: Node2D = sheets[0]
+	var sheet_from: Vector2 = sheet._from
+	var sheet_to: Vector2 = sheet._to
 	var made: float = (sheet._from as Vector2).distance_to(sheet._to)
 	print("-- the sheet that went up spans %.0f px" % made)
 	_check(made <= cap + 1.0, "and never longer than its reach allows")
@@ -147,6 +151,54 @@ func _run() -> void:
 	_check(not audio_src.contains("collision_mask"),
 		"sound is not occluded by anything, screens included")
 
+	# --- the click that sets it must not also shoot it -----------------------
+	#
+	# A view closes on the press, so on the very next frame the button is not
+	# "just pressed" any more, it is held - and a held trigger fires. The click
+	# that set a screen down was therefore also the shot that destroyed it.
+	#
+	# Held across several frames here, the way a real finger holds a mouse
+	# button, because releasing it inside one frame is precisely what hid this.
+	sheet.take_damage(1.0, mid_of(sheet), Vector2.RIGHT)
+	await physics_frame
+	ult.charge = 1.0
+	Input.action_press(&"ultimate")
+	await physics_frame
+	Input.action_release(&"ultimate")
+	for i in 3:
+		await physics_frame
+	_aim_at(player, player.global_position + Vector2(80.0, -20.0))
+	await physics_frame
+	Input.action_press(&"fire")
+	await physics_frame
+	Input.action_release(&"fire")
+	await physics_frame
+	_aim_at(player, player.global_position + Vector2(80.0, -220.0))
+	await physics_frame
+
+	# The finger goes down and stays down.
+	var rounds_before := main.get_node("Bullets").get_child_count()
+	Input.action_press(&"fire")
+	for i in 20:
+		await physics_frame
+	Input.action_release(&"fire")
+	await physics_frame
+	var standing := get_nodes_in_group(&"screen").size()
+	var rounds := main.get_node("Bullets").get_child_count() - rounds_before
+	print("-- placed with the button held: %d screens standing, %d rounds fired" % [
+		standing, rounds])
+	_check(standing == 1, "a screen survives the click that placed it")
+	_check(rounds == 0, "and that click does not fire the gun")
+	for node in get_nodes_in_group(&"screen"):
+		node.queue_free()
+	await physics_frame
+
+	# Put one back for the checks below. Through the tree, not by name: a
+	# --script tool compiles without the autoloads.
+	net.raise_screen(sheet_from, sheet_to, 1)
+	await physics_frame
+	sheet = get_nodes_in_group(&"screen")[0]
+
 	# --- and it is solid -----------------------------------------------------
 	#
 	# Walking into it has to stop you. Checked by moving a body at it rather than
@@ -175,6 +227,11 @@ func _run() -> void:
 	_check(after == 0, "a single hit takes it down")
 
 	_finish()
+
+
+## The middle of a sheet.
+func mid_of(sheet: Node2D) -> Vector2:
+	return ((sheet._from as Vector2) + (sheet._to as Vector2)) * 0.5
 
 
 ## Points at a spot in the world.
@@ -206,3 +263,26 @@ func _check(ok: bool, what: String) -> void:
 		print("  FAIL  %s" % what)
 	else:
 		print("  ok    %s" % what)
+
+
+## Ziplines are scenery the dark swallows, not bodies the recon arrow paints.
+##
+## Checked as its own thing because the two groups are easy to confuse and the
+## consequence of confusing them is quiet: put a rope in "hideable" and every
+## cable on the map grows a recon diamond the first time somebody fires an arrow.
+func _check_ropes(tree: SceneTree) -> void:
+	var ropes := tree.get_nodes_in_group(&"zipline")
+	var shadowed := 0
+	var painted := 0
+	for rope in ropes:
+		if (rope as Node).is_in_group(&"shadowed"):
+			shadowed += 1
+		if (rope as Node).is_in_group(&"hideable"):
+			painted += 1
+	print("-- ropes: %d, in shadow: %d, in the recon set: %d" % [
+		ropes.size(), shadowed, painted])
+	_check(ropes.size() > 0, "there are ropes to check")
+	_check(shadowed == ropes.size(), "every rope is hidden by the dark")
+	_check(painted == 0, "and none of them are things the recon arrow paints")
+	_check(ropes.is_empty() or (ropes[0] as Node).has_method(&"sight_points"),
+		"a rope says where to look for it, being long and thin")

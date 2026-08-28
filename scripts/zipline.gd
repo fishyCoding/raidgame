@@ -87,6 +87,11 @@ var _watch_timer := 0.0
 
 func _ready() -> void:
 	add_to_group(&"zipline")
+	# Swallowed by the dark like everything else. A cable is the most useful
+	# thing on the map to know about - it is how you leave a floor in a hurry -
+	# and one drawn through unlit rooms hands you the whole route out of a place
+	# you have never been.
+	add_to_group(&"shadowed")
 	# The editor draws a cable nobody is riding, so it has no reason to look.
 	set_process(not Engine.is_editor_hint())
 
@@ -196,6 +201,23 @@ func in_reach(from: Vector2) -> bool:
 ## Clamps a position to the cable, so a rider cannot slide off the end.
 func clamp_to_cable(at: Vector2) -> Vector2:
 	return closest_point(at)
+
+
+## Where to look for a cable, for line of sight.
+##
+## Walked along its length rather than answered with one point. A rope is long
+## and thin: whether you can see it is a question about every part of it, and
+## testing only the anchor would flick the whole thing in and out of existence
+## as the far end passed behind a wall.
+func sight_points() -> Array[Vector2]:
+	var top := world_top()
+	var bottom := world_bottom()
+	var points: Array[Vector2] = [top, bottom]
+	var span := top.distance_to(bottom)
+	var steps := clampi(int(span / 64.0), 1, 24)
+	for i in range(1, steps):
+		points.append(top.lerp(bottom, float(i) / float(steps)))
+	return points
 
 
 ## The nearest cable in reach of a point, or null.

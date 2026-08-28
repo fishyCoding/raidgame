@@ -84,6 +84,18 @@ func _physics_process(_delta: float) -> void:
 		else:
 			lost.emit(node_2d)
 
+	# Scenery that the dark should swallow too. Its own group rather than
+	# "hideable", which means "a body that can be revealed" - the recon arrow
+	# paints those and pins a marker to each, and a diamond hovering over every
+	# rope on the map is not what that gadget is for.
+	for node in get_tree().get_nodes_in_group(&"shadowed"):
+		var scenery := node as Node2D
+		if scenery == null:
+			continue
+		var lit := _can_see(space, origin, scenery)
+		if scenery.visible != lit:
+			scenery.visible = lit
+
 
 ## True if anything currently has line of sight on this node.
 ## Nodes revealed by a recon shot stay drawn even with no line of sight to them,
@@ -136,10 +148,17 @@ func _sight_reach() -> float:
 
 
 func _can_see(space: PhysicsDirectSpaceState2D, origin: Vector2, node: Node2D) -> bool:
-	if origin.distance_squared_to(node.global_position) > _reach * _reach:
+	# Long things are measured point by point. A body is small enough that its
+	# origin stands for all of it, but a cable is hundreds of pixels of rope: its
+	# origin is one end, and a rope whose near half is in plain view would be
+	# thrown out for having its far end out of range.
+	var long := node.has_method(&"sight_points")
+	if not long and origin.distance_squared_to(node.global_position) > _reach * _reach:
 		return false
 
 	for point in sample_points(node):
+		if long and origin.distance_squared_to(point) > _reach * _reach:
+			continue
 		var probe := point
 		var toward_eye := origin - point
 		if toward_eye.length() > probe_inset:
@@ -172,6 +191,10 @@ func _can_see(space: PhysicsDirectSpaceState2D, origin: Vector2, node: Node2D) -
 ## than about light, and must not use _can_see to do it: smoke hides you and does
 ## not stop a frag. See Grenade._reaches.
 func sample_points(node: Node2D) -> Array[Vector2]:
+	# Anything that is not shaped like a box says where to look for it itself.
+	if node.has_method(&"sight_points"):
+		return node.sight_points()
+
 	# Where the middle of the body actually is. A guard's box is centred on his
 	# origin, but a player's shrinks from the top as they crouch and crawl, so
 	# the origin stops being the centre of what is left - and sampling around it

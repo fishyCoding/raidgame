@@ -546,6 +546,15 @@ var _dash_left := 0.0
 var _dash_way := Vector2.ZERO
 ## Placing a screen. The first corner once it has been clicked, the second
 ## wherever the crosshair is, and whether the pair of them make a legal sheet.
+## Set when a placing view has just spent a trigger press. The gun stays quiet
+## until the button comes back up.
+##
+## Because a view closes on the press, and by the next frame the button is not
+## "just pressed" any more - it is *held*, and a held trigger fires. So the click
+## that set a screen down also shot it, which is a very funny way to lose a
+## gadget and a completely reasonable thing for the code to have done.
+var _trigger_spent := false
+
 var screen_aiming := false
 var screen_first := Vector2.INF
 var screen_to := Vector2.INF
@@ -1864,11 +1873,23 @@ func _update_weapon() -> void:
 
 	# The mouse belongs to the inventory screen while it is up, so the trigger is
 	# not read at all - clicking an item must never also fire the gun.
+	var pull := PlayerInput.is_fire_just_pressed() and not inventory_open
+	var hold := PlayerInput.is_fire_held() and not inventory_open
+	# One click, one job. Placing something eats the press; the gun then waits
+	# for the button to come back up rather than picking the same hold up as a
+	# shot of its own.
+	if _trigger_spent:
+		if hold:
+			pull = false
+			hold = false
+		else:
+			_trigger_spent = false
+
 	weapon.try_fire(
 		_muzzle.global_position,
 		aim_angle,
-		PlayerInput.is_fire_just_pressed() and not inventory_open,
-		PlayerInput.is_fire_held() and not inventory_open,
+		pull,
+		hold,
 		_get_move_factor(),
 		_get_air_factor(),
 	)
@@ -2033,6 +2054,7 @@ func _update_screen_aim() -> void:
 
 	if not PlayerInput.is_fire_just_pressed():
 		return
+	_trigger_spent = true
 	if not screen_first.is_finite():
 		screen_first = at
 		_say_loot("now the other end")
@@ -2149,6 +2171,8 @@ func _update_projection_aim() -> void:
 		return
 
 	if PlayerInput.is_fire_just_pressed() or PlayerInput.take_touch_projection_send():
+		# The same click must not also be a shot - see _trigger_spent.
+		_trigger_spent = true
 		_send_projection(projection_mark)
 
 
