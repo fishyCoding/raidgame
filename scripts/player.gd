@@ -1900,6 +1900,12 @@ func _update_weapon() -> void:
 func _charge_ultimate(delta: float) -> void:
 	overload_left = maxf(overload_left - delta, 0.0)
 	projection_left = maxf(projection_left - delta, 0.0)
+	if projection_left > 0.0 and not _projection_standing():
+		# Shot out early. The clock was only ever a guess at how long the ghost
+		# would last, and once it is down the guess is worth nothing - a readout
+		# counting off seconds of something that is already gone is worse than no
+		# readout, because it is the one number you would act on.
+		projection_left = 0.0
 	if inventory == null:
 		return
 	# Both slots fill at once, each at its own gadget's rate. Charging only the
@@ -1909,6 +1915,18 @@ func _charge_ultimate(delta: float) -> void:
 		if ult == null or ult.charge >= 1.0:
 			continue
 		ult.charge = minf(ult.charge + delta / maxf(ult.gadget.charge_time, 1.0), 1.0)
+
+
+## Whether this player's ghost is still out there walking about.
+##
+## Asked of the body rather than tracked here, the same way the HUD asks it for
+## the hit count: the ghost is spawned on its caster's own machine, so it is
+## sitting in the level already and a second copy of the fact would only get out
+## of step with it. Dying counts as gone - the death animation is the ghost
+## coming apart, and there is nothing left to redirect by then.
+func _projection_standing() -> bool:
+	var ghost := Net.projection_for(get_multiplayer_authority())
+	return ghost != null and ghost.dying_at <= 0.0
 
 
 ## Adds charge for doing something worth charging for - landing hits.

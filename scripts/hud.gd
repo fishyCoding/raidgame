@@ -780,6 +780,19 @@ func _to_screen(world: Vector2) -> Vector2:
 ## they tell you whether anybody has found it yet, which is the only thing that
 ## decides whether your own next move is safe.
 func _draw_projection() -> void:
+	# Asked of the ghost itself rather than tracked here. It is the caster's own
+	# machine that owns the body, so both the count and the fact that there still
+	# is a body are sitting in the level already and do not need a second copy
+	# kept in step with them.
+	#
+	# No body, no panel. The clock was a guess at how long the ghost had, and a
+	# ghost that has been shot out makes the guess a lie - so the whole readout
+	# goes rather than counting off seconds of something that is not there. The
+	# player is meant to be short of the panel, not reading a stopped one.
+	var ghost := Net.projection_for(Net.peer_id())
+	if ghost == null or ghost.dying_at > 0.0:
+		return
+
 	var left: float = _player.projection_left
 	var span := maxf(_overload_span, 0.01)
 
@@ -791,16 +804,9 @@ func _draw_projection() -> void:
 	draw_string(_font, box.position + Vector2(0.0, 20.0), "%.1fs" % left,
 		HORIZONTAL_ALIGNMENT_RIGHT, box.size.x - 14.0, 15, TEXT)
 
-	# Asked of the ghost itself rather than tracked here. It is the caster's own
-	# machine that owns the body, so the count is sitting in the level already
-	# and does not need a second copy kept in step with it.
-	var ghost := Net.projection_for(Net.peer_id())
 	var note := "walking, unshot"
 	var tint := DIM
-	if ghost == null:
-		note = "gone"
-		tint = LOW_AMMO
-	elif ghost.hits > 0:
+	if ghost.hits > 0:
 		var spare: int = maxi(ghost.max_hits - ghost.hits, 0)
 		note = "found - %d round%s left in it" % [spare, "" if spare == 1 else "s"]
 		tint = LOW_AMMO

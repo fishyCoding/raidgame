@@ -826,21 +826,35 @@ func _build_screen(top: Vector2, bottom: Vector2, by: int, id: int) -> Node:
 
 
 ## Takes one down everywhere. Only the host decides, the same as with damage.
-func break_screen(id: int) -> void:
-	_drop_screen_here(id)
+##
+## Where it was hit is passed in but deliberately not sent on. The sheet breaks
+## up around the point of impact, and it would be tempting to put that on the
+## wire so every copy came apart identically - except that they never do anyway:
+## the pieces are rolled per machine, so the only thing the extra argument would
+## buy is a changed rpc signature, and a changed signature on this node is the
+## one thing that cannot ship on its own. A client still running the last
+## release would reject the call, and a screen that is never taken down on a
+## client is a permanent invisible wall. Copies elsewhere break from the middle,
+## which nobody can tell apart from a shatter they did not cause.
+func break_screen(id: int, at := Vector2.INF) -> void:
+	_drop_screen_here(id, at)
 	if is_networked() and is_host:
 		_drop_screen.rpc(id)
 
 
 @rpc("authority", "reliable")
 func _drop_screen(id: int) -> void:
-	_drop_screen_here(id)
+	_drop_screen_here(id, Vector2.INF)
 
 
-func _drop_screen_here(id: int) -> void:
+func _drop_screen_here(id: int, at: Vector2) -> void:
 	for node in get_tree().get_nodes_in_group(&"screen"):
 		if is_instance_valid(node) and int(node.get(&"id")) == id:
-			node.queue_free()
+			# Not freed here. The sheet leaves the group and its collision layer
+			# the moment it is asked to break, so it has already stopped being a
+			# screen by the time this returns; what is left is the animation, and
+			# it frees itself at the end of it.
+			node.shatter(at)
 
 
 @rpc("any_peer", "reliable")

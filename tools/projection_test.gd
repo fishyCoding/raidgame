@@ -155,6 +155,13 @@ func _run() -> void:
 	print("\n-- three rounds and it is gone --")
 	_check_that(is_instance_valid(ghost), "still up before anybody shoots it")
 	_check_that(ghost.max_hits == 3, "the gadget says three")
+	# The caster's clock is wound forward the same way the body's was. Both were
+	# started by the one cast and the checks above have eaten the whole of it, so
+	# without this the readout would already be off for the ordinary reason and
+	# the check underneath would be proving nothing.
+	player.projection_left = 90.0
+	await physics_frame
+	_check_that(player.projection_left > 0.0, "the readout is up while it walks")
 	for shot in ghost.max_hits:
 		ghost.take_damage(40.0, ghost.sight_centre(), Vector2.RIGHT)
 		await physics_frame
@@ -176,6 +183,14 @@ func _run() -> void:
 			_check_that(not ghost.gone, "it does not give up before the third")
 
 	_check_that(ghost.gone, "the third round finishes it")
+
+	# And the panel goes with it. What the readout is for is deciding whether the
+	# next move is safe, and seconds counting off a ghost that is already down is
+	# the one number a player would act on and be wrong about.
+	await physics_frame
+	print("  readout after the third round: %.1fs" % player.projection_left)
+	_check_that(player.projection_left <= 0.0,
+		"a ghost that is shot out takes its clock off the screen with it")
 	# It does not vanish on the frame it dies - it comes apart over half a
 	# second, which is the whole point of the animation.
 	_check_that(is_instance_valid(ghost), "the glitch has to be watchable, not instant")

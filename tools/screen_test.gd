@@ -226,6 +226,26 @@ func _run() -> void:
 	print("-- after one hit, screens left: %d" % after)
 	_check(after == 0, "a single hit takes it down")
 
+	# --- and it comes apart where everybody can see it -----------------------
+	#
+	# Down and gone are not the same thing. It stops hiding anybody on the frame
+	# it is hit - that is what the count above says - but it stays in the tree a
+	# little longer to break up, because the person who shot it has to be told
+	# that what they shot was a picture rather than a wall.
+	print("-- while it breaks: still here=%s, %.2fs of it left, %d pieces" % [
+		is_instance_valid(sheet), sheet._breaking, sheet._shards.size()])
+	_check(is_instance_valid(sheet) and sheet._breaking > 0.0,
+		"the break has to be watchable, not instant")
+	_check(sheet._shards.size() > 1, "and it goes into pieces rather than fading")
+	_check(not sheets_script.blocks_sight(self, one, two),
+		"but it hides nobody while the pieces fall")
+	for i in 240:
+		await physics_frame
+		if not is_instance_valid(sheet):
+			break
+	print("-- gone once the pieces had fallen: %s" % not is_instance_valid(sheet))
+	_check(not is_instance_valid(sheet), "and then it frees itself")
+
 	_finish()
 
 
