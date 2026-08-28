@@ -101,6 +101,7 @@ const CATALOGUE := {
 		{"kind": "weapon", "path": "res://resources/weapons/smg.tres", "price": 900},
 		{"kind": "weapon", "path": "res://resources/weapons/assault_rifle.tres", "price": 1500},
 		{"kind": "weapon", "path": "res://resources/weapons/shotgun.tres", "price": 1200},
+		{"kind": "weapon", "path": "res://resources/weapons/slug_shotgun.tres", "price": 1700},
 		{"kind": "weapon", "path": "res://resources/weapons/lmg.tres", "price": 2200},
 		{"kind": "weapon", "path": "res://resources/weapons/sniper.tres", "price": 2600},
 	],

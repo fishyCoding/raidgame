@@ -2961,7 +2961,7 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 	# the alternative is moving health onto a second, host-owned synchroniser.
 	if Net.is_networked() and not is_local():
 		Net.tell_owner_hit(get_multiplayer_authority(), amount, at, direction,
-			Net.attributing_to)
+			Net.attributing_to, Net.piercing)
 		return
 	if not is_alive or _invulnerable > 0.0:
 		return
@@ -3005,7 +3005,8 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 	# cells they take up.
 	var height: float = (_shape.shape as RectangleShape2D).size.y
 	var kit: Inventory = inventory if is_shielded() else null
-	var hit := Damage.resolve(amount, at, global_position + _shape.position, height, kit)
+	var hit := Damage.resolve(amount, at, global_position + _shape.position, height,
+		kit, Net.piercing)
 	last_hit_headshot = hit.headshot
 
 	amount = hit.amount

@@ -30,6 +30,8 @@ extends SceneTree
 
 const SHOTGUN := "res://resources/weapons/shotgun.tres"
 const PROJECTION := "res://resources/gadgets/projection.tres"
+const SLUG := "res://resources/weapons/slug_shotgun.tres"
+const PLATE := "res://resources/armor/heavy_vest.tres"
 
 var _net: Node
 var _main: Node
@@ -121,6 +123,7 @@ func _run() -> void:
 	await _screen(mine, theirs)
 	await _buckshot(mine, theirs)
 	await _ghost_ping(mine, theirs)
+	await _slug_through_a_plate(mine, theirs)
 
 	_say("PASS" if _ok else "FAIL")
 	await _wait(30)
@@ -287,6 +290,86 @@ func _ghost_ping(mine: Node2D, theirs: Node2D) -> void:
 	var self_tick: bool = reticle._mark != 0
 	_say("reticle after the caster shot their own ghost: %s" % self_tick)
 	_check(not self_tick, "nobody is told anything for shooting their own ghost")
+
+
+## A slug ignores most of a plate, and the plate is on the other machine.
+##
+## This is the hop worth checking. What a round does to armour is a fact about
+## the round, and the machine holding the gun is not the machine that works the
+## plate out - a body decides for itself what a hit did to it, because health
+## replicates outwards from its owner. So the piercing has to travel with the
+## shot, and if it does not, a slug arrives as an ordinary round and the plate
+## eats two thirds of it.
+##
+## Measured against the same round fired without it rather than against a
+## remembered number: what matters is the difference, and a health bar has other
+## things happening to it.
+func _slug_through_a_plate(mine: Node2D, theirs: Node2D) -> void:
+	_say("-- a slug through a plate --")
+	# Reached through the tree, never by name. A --script tool compiles without
+	# the autoloads, and one Net in a new section is enough to fail the whole
+	# file - which is exactly how this section first ran, or rather did not.
+	var slug := load(SLUG) as WeaponData
+	var vest := load(PLATE) as ArmorData
+
+	# The client wears the plate, and the host does the shooting - so every
+	# number in this crosses the wire on its way to being decided.
+	if not _hosting:
+		if mine.inventory == null:
+			mine.inventory = Inventory.new()
+			mine.weapon.set_inventory(mine.inventory)
+		mine.inventory.set_worn(Inventory.Wear.VEST, Item.from_armor(vest))
+		mine.health = mine.max_health
+		# Owning a plate is not wearing one. A vest only counts while the plates
+		# are actually up - Player.take_damage passes a null kit otherwise, which
+		# is the whole point of the V key - and the ramp takes a moment, so this
+		# waits for shield rather than for armored.
+		mine.armored = true
+	await _wait(60)
+
+	if not _hosting:
+		_check(mine.inventory.get_worn(Inventory.Wear.VEST) != null,
+			"the plate is actually on for this")
+		_check(mine.is_shielded(), "and the plates are up, or armour does nothing")
+
+	# An ordinary round of the same size first, for the comparison.
+	if _hosting:
+		_net.attributing_to = _net.peer_id()
+		_net.piercing = 0.0
+		theirs.take_damage(slug.damage, theirs.sight_centre() + Vector2(0.0, 12.0),
+			Vector2.RIGHT)
+		_net.piercing = 0.0
+		_net.attributing_to = 0
+	await _wait(30)
+	var plain := 0.0
+	if not _hosting:
+		plain = mine.max_health - mine.health
+		mine.health = mine.max_health
+		# A fresh plate for the second round. The first one spent durability on
+		# what it stopped, and comparing a worn plate against a new one would be
+		# measuring the wear rather than the piercing.
+		mine.inventory.set_worn(Inventory.Wear.VEST, Item.from_armor(vest))
+		mine._invulnerable = 0.0
+	await _wait(20)
+
+	if _hosting:
+		_net.attributing_to = _net.peer_id()
+		_net.piercing = slug.armor_pierce
+		theirs.take_damage(slug.damage, theirs.sight_centre() + Vector2(0.0, 12.0),
+			Vector2.RIGHT)
+		_net.piercing = 0.0
+		_net.attributing_to = 0
+	await _wait(30)
+	if _hosting:
+		_say("(the shooting end - the numbers are read on the other machine)")
+		return
+
+	var pierced: float = mine.max_health - mine.health
+	_say("a %.0f round through a plate: %.0f plain, %.0f as a slug" % [
+		slug.damage, plain, pierced])
+	_check(plain > 0.0 and pierced > 0.0, "both rounds have to have landed")
+	_check(pierced > plain * 1.5,
+		"the slug's piercing crosses the wire with the shot")
 
 
 func _wait(frames: int) -> void:

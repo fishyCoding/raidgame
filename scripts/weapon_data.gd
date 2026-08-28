@@ -94,6 +94,18 @@ extends Resource
 @export_range(0.0, 12.0) var pellet_spread := 2.5
 @export var damage := 26.0
 @export var bullet_speed := 2800.0
+## How much of a plate this round ignores, 0 to 1.
+##
+## The only way to be good against armour. Protection is a fraction, so a plate
+## takes the same *proportion* off a slug as it does off a pellet - which means
+## no amount of damage on the sheet makes a gun an armour gun, and a shotgun
+## firing nine small pieces is in exactly the same position as one firing a big
+## one. This is the dial that changes that: it thins the plate rather than
+## fattening the round.
+##
+## Zero on everything that was here before it existed, so nothing already in the
+## game changed the day it arrived.
+@export_range(0.0, 1.0) var armor_pierce := 0.0
 @export var bullet_range := 2000.0
 
 @export_group("Range")

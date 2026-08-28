@@ -637,7 +637,8 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 	# unhelmeted guard takes 102 from a rifle round and a guard has 90. He still
 	# drops to one round through the head, and now a helmet buys him a specific
 	# amount of not-dropping rather than a yes.
-	var hit := Damage.resolve(amount, at, global_position, size.y, weapon.inventory)
+	var hit := Damage.resolve(amount, at, global_position, size.y, weapon.inventory,
+		Net.piercing)
 	amount = hit.amount
 	_health = maxf(_health - amount, 0.0)
 	_health_fill.scale.x = _health / max_health

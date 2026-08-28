@@ -111,8 +111,10 @@ func _physics_process(delta: float) -> void:
 			# Set around the call rather than threaded through it: everything
 			# downstream that wants to know who fired reads it from here.
 			Net.attributing_to = shooter_id
+			Net.piercing = _data.armor_pierce
 			body.take_damage(_data.get_damage_at(flight) * damage_scale,
 				hit.position, direction)
+			Net.piercing = 0.0
 			Net.attributing_to = 0
 		queue_free()
 		return

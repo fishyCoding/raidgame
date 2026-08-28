@@ -55,7 +55,7 @@ static func report_hit(_tree: SceneTree, headshot: bool, killed: bool) -> void:
 ## Works out what a hit does. `at` is where the round landed in world space,
 ## `centre` and `height` describe the body it landed on.
 static func resolve(amount: float, at: Vector2, centre: Vector2, height: float,
-		kit: Inventory) -> Result:
+		kit: Inventory, pierce := 0.0) -> Result:
 	var result := Result.new()
 	result.headshot = at.y <= centre.y - height * 0.5 + height * HEAD_FRACTION
 
@@ -88,7 +88,7 @@ static func resolve(amount: float, at: Vector2, centre: Vector2, height: float,
 	# it at the rate it is actually working. The four rounds hold up across a
 	# magazine, and a plate still wears out - just over a fight rather than over
 	# a burst.
-	var stopped := worn.armor.absorbed(amount, worn.durability)
+	var stopped := worn.armor.absorbed(amount, worn.durability, pierce)
 	result.armor_hit = worn
 	result.amount = amount - stopped
 	var wear := stopped * (HELMET_WEAR if result.headshot else 1.0)

@@ -112,6 +112,13 @@ var _insertion := {}
 ## three places that can cause damage, and it is safe because resolving a hit is
 ## synchronous - nothing else runs between here and report_hit.
 var attributing_to := 0
+## How much of a plate the round being resolved ignores, 0 to 1.
+##
+## Set around the damage call and read back out by whoever works the hit out,
+## exactly the way attributing_to is and for the same reason: every take_damage
+## in the game would have to grow a parameter otherwise, including the ones on
+## screens and ghosts that have no armour to think about.
+var piercing := 0.0
 
 
 func _ready() -> void:
@@ -1484,21 +1491,26 @@ func deals_damage() -> bool:
 ## every machine from the moment it starts and has been exchanging rounds and
 ## match state since before anybody had a body.
 func tell_owner_hit(owner_id: int, amount: float, at: Vector2, direction: Vector2,
-		from: int) -> void:
-	_hit_body.rpc_id(owner_id, owner_id, amount, at, direction, from)
+		from: int, pierce := 0.0) -> void:
+	_hit_body.rpc_id(owner_id, owner_id, amount, at, direction, from, pierce)
 
 
 @rpc("any_peer", "reliable")
 func _hit_body(owner_id: int, amount: float, at: Vector2, direction: Vector2,
-		from: int) -> void:
+		from: int, pierce: float) -> void:
 	# Only the host resolves damage, so only the host may say this.
 	if multiplayer.get_remote_sender_id() != 1:
 		return
 	var body := player_for(owner_id)
 	if body == null:
 		return
+	# The round travels with the shot. What it does to a plate is a fact about
+	# the round, and the machine that works the plate out is not the machine
+	# holding the gun - so it has to come along rather than be looked up.
 	attributing_to = from
+	piercing = pierce
 	body.take_damage(amount, at, direction)
+	piercing = 0.0
 	attributing_to = 0
 
 

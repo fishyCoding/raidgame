@@ -78,6 +78,35 @@ func _init() -> void:
 	_eq("AR headshots to kill, heavy helmet",
 		float(_rounds_to_kill(damage, ar, "heavy_helmet", true)), 3.0)
 
+	# --- piercing, which is the only thing that beats a plate -----------------
+	#
+	# Protection is a fraction, so a plate takes the same *proportion* off a big
+	# round as off a small one and no amount of damage on the sheet ever gets you
+	# through it faster. That is the whole reason the shotgun felt useless
+	# against armour and the reason raising its damage would not have fixed it.
+	# Piercing thins the plate instead, and it is the round that carries it.
+	var slug := load("res://resources/weapons/slug_shotgun.tres") as WeaponData
+	var plate := load("res://resources/armor/heavy_vest.tres") as ArmorData
+	var full := plate.max_durability
+	print("\n-- a slug against a plate carrier --")
+	_eq("plain round of the slug's size, through a plate",
+		slug.damage - plate.absorbed(slug.damage, full), 29.64, 0.1)
+	_eq("the same round as a slug",
+		slug.damage - plate.absorbed(slug.damage, full, slug.armor_pierce),
+		59.62, 0.1)
+	_eq("and untouched with no plate in the way", slug.damage, 78.0)
+	# Two body shots whatever they are wearing is the gun's whole identity, and
+	# it is the number worth pinning: the plate changes what it costs you to get
+	# there, not whether you get there.
+	_eq("slug body shots to kill through a plate",
+		float(_rounds_to_kill(damage, slug, "heavy_vest", false)), 2.0)
+	_eq("slug body shots to kill with no plate",
+		float(_rounds_to_kill(damage, slug, "", false)), 2.0)
+	# And nothing that was here before it existed moved. Piercing defaults to
+	# zero, so an ordinary round meets the plate it always met.
+	_eq("the rifle is untouched by any of this",
+		ar.armor_pierce, 0.0)
+
 	# Armour has to survive the fight it is priced for. It used to be charged
 	# the whole incoming round rather than the part it stopped, which left a
 	# medium vest scrap after three rifle rounds - so the four-round kill above
@@ -173,7 +202,8 @@ func _rounds_to_kill(damage: RefCounted, gun: WeaponData, armor_name: String,
 	while health > 0.0 and rounds < 200:
 		rounds += 1
 		for pellet in gun.pellets:
-			var result = damage.resolve(gun.damage, at, centre, BODY_HEIGHT, kit)
+			var result = damage.resolve(gun.damage, at, centre, BODY_HEIGHT, kit,
+				gun.armor_pierce)
 			health -= result.amount
 	return rounds
 

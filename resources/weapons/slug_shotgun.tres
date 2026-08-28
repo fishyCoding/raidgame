@@ -1,0 +1,33 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapon_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+display_name = "Slug Shotgun"
+short_name = "SLUG"
+accuracy = 74.0
+handling = 50.0
+recoil = 74.0
+stability = 40.0
+rounds_per_minute = 55.0
+automatic = false
+pellets = 1
+damage = 78.0
+armor_pierce = 0.62
+bullet_speed = 4200.0
+bullet_range = 1400.0
+falloff_start = 220.0
+falloff_end = 700.0
+min_damage_factor = 0.5
+grid_size = Vector2i(4, 2)
+ammo_type = &"12g"
+mag_size = 5
+reserve_ammo = 30
+reload_time = 3.3
+ads_zoom = 1.0
+ads_spread_scale = 0.4
+ads_lead_scale = 0.9
+bullet_color = Color(1, 0.87, 0.72, 1)
+bullet_length = 11.0
+bullet_width = 3.0

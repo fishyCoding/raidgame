@@ -43,14 +43,23 @@ enum Slot { HEAD, BODY }
 @export var tint := Color(0.55, 0.62, 0.7)
 
 
-## Damage that gets through this piece at its current durability. Armour thins
-## out as it breaks rather than failing all at once, so the last few points are
-## still worth something.
-func absorbed(amount: float, durability: float) -> float:
+## Damage this piece stops at its current durability. Armour thins out as it
+## breaks rather than failing all at once, so the last few points are still worth
+## something.
+##
+## `pierce` is what the round does about the plate rather than what the plate
+## does about the round: 0 is an ordinary bullet and the piece works as
+## advertised, 1 goes through as though it were not being worn. It scales the
+## protection rather than the damage, which is the distinction that matters -
+## protection here is a *fraction*, so a bigger round is cut by exactly the same
+## proportion as a small one and no amount of raw damage will ever get you
+## through a plate any faster. Beating armour has to be a property of the round.
+func absorbed(amount: float, durability: float, pierce := 0.0) -> float:
 	if not is_sound(durability):
 		return 0.0
 	var condition := clampf(durability / maxf(max_durability, 1.0), 0.0, 1.0)
-	return amount * protection * lerpf(0.35, 1.0, condition)
+	var stops := protection * (1.0 - clampf(pierce, 0.0, 1.0))
+	return amount * stops * lerpf(0.35, 1.0, condition)
 
 
 ## True while there is enough of this piece left to be worth wearing.
