@@ -538,6 +538,9 @@ var flash_from := Vector2.INF
 ## Dashes in hand, and the one being taken. Kept until they are spent rather
 ## than running out on a clock - see GadgetData.dashes.
 var dashes_left := 0
+## Armed for a dash: the mouse is a dash stick, the trigger is dead, and the next
+## drag or swipe spends one. Q switches it on and off.
+var dash_ready := false
 var _dash_left := 0.0
 var _dash_way := Vector2.ZERO
 var projection_aiming := false
@@ -1719,23 +1722,42 @@ func _update_dash(delta: float) -> void:
 		# reads as a stumble.
 		velocity = _dash_way * DASH_SPEED
 		return
-	# Read before the check that there is anything to spend, and thrown away if
-	# there is not. A swipe is an event: left sitting in the input it would fire
-	# the instant the next charge arrived, so casting the ultimate would spend a
-	# dash on a gesture made half a minute earlier.
+	if dashes_left <= 0 or is_downed or riding or is_grappling():
+		dash_ready = false
+		PlayerInput.dash_arming = false
+		return
+
+	# Only while armed.
+	#
+	# Unarmed, the gesture is indistinguishable from aiming - whipping a mouse
+	# across a target to snap onto somebody is the same motion as a dash drag, so
+	# the game could not tell which you meant and guessed wrong at the worst
+	# possible moment. Q is what makes it deliberate, and while it is on the
+	# mouse belongs to the dash rather than to the crosshair.
+	PlayerInput.dash_arming = dash_ready
+	if not dash_ready:
+		# Anything the pad has already banked is dropped, so a swipe made while
+		# unarmed cannot go off later.
+		var _stale := PlayerInput.take_dash()
+		return
+
 	var way := PlayerInput.take_dash()
 	if way.is_zero_approx():
 		way = _mouse_drag()
 	if way.is_zero_approx():
 		return
-	if dashes_left <= 0 or is_downed or riding or is_grappling():
-		return
 
 	_dash_way = way.normalized()
 	_dash_left = DASH_TIME
 	dashes_left -= 1
+	# One press, one dash. Left armed, the drag that started this one carries
+	# straight on into the next and spends both in a single gesture - which is
+	# exactly what it did. Press Q again for the second.
+	dash_ready = false
+	PlayerInput.dash_arming = false
 	facing = 1 if _dash_way.x >= 0.0 else -1
-	_say_loot("DASH - %d left" % dashes_left if dashes_left > 0 else "DASH - last one")
+	_say_loot("DASH - Q again for the last one" if dashes_left > 0
+		else "DASH - that was the last")
 	if _audio:
 		_audio.reload_finished(global_position)
 
@@ -1866,12 +1888,17 @@ func _use_ultimate() -> void:
 			_say_loot("ultimate at %d%%" % roundi(ult.charge * 100.0))
 		return
 
+	# Dashes already in hand: Q is the switch for them, not a second cast. On to
+	# line one up, off to put the mouse back on the crosshair - so changing your
+	# mind costs nothing, and one press cannot spend two.
+	if ult.gadget.kind == GadgetData.Kind.DASH and dashes_left > 0:
+		dash_ready = not dash_ready
+		_say_loot("DASH ready - drag to go, %d left" % dashes_left
+			if dash_ready else "dash put away, %d left" % dashes_left)
+		return
+
 	if ult.charge < 1.0:
-		# Quiet while you still have dashes in hand. Holding this button is how
-		# you dash, so the meter would otherwise announce itself every time you
-		# reached for one.
-		if dashes_left <= 0:
-			_say_loot("ultimate at %d%%" % roundi(ult.charge * 100.0))
+		_say_loot("ultimate at %d%%" % roundi(ult.charge * 100.0))
 		return
 
 	var keep_charge := ult.charge
@@ -1882,6 +1909,9 @@ func _use_ultimate() -> void:
 			_say_loot("OVERLOAD")
 		GadgetData.Kind.DASH:
 			dashes_left = ult.gadget.dashes
+			# Armed by the cast, so the press that buys them is also the press
+			# that readies the first one.
+			dash_ready = true
 			_say_loot("SLIPSTREAM - swipe to dash, %d of them" % dashes_left
 				if PlayerInput.is_touch()
 				else "SLIPSTREAM - flick the mouse to dash, %d of them" % dashes_left)

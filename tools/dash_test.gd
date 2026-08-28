@@ -12,6 +12,7 @@ var _ok := true
 ## Reached through the tree, not by name: a --script tool compiles without the
 ## autoloads, so naming PlayerInput fails the whole file.
 var _input: Node
+var player_ref: Node2D
 
 
 func _initialize() -> void:
@@ -36,6 +37,7 @@ func _run() -> void:
 	await physics_frame
 
 	_input = root.get_node("PlayerInput")
+	player_ref = net.local_player
 	var player: Node2D = net.local_player
 	if player == null:
 		print("no character - cannot run")
@@ -55,6 +57,7 @@ func _run() -> void:
 	await physics_frame
 	print("-- cast: %d dashes, charge %.2f" % [player.dashes_left, ult.charge])
 	_check(player.dashes_left == 2, "casting it gives you two dashes")
+	_check(player.dash_ready, "and arms the first one")
 	_check(ult.charge < 1.0, "and spends the meter")
 
 	# --- a swipe moves you ---------------------------------------------------
@@ -142,8 +145,10 @@ func _run() -> void:
 	# uses, which certainly works in the game. So the single line this cannot
 	# reach is the line aiming already proves, and everything downstream of it is
 	# under test here - the threshold, the held button, and the spend.
-	ult.charge = 1.0
-	player._use_ultimate()
+	# Given straight rather than cast for. Q is a switch once you have dashes in
+	# hand, so calling _use_ultimate here would toggle the arming rather than
+	# hand out a fresh pair - which is the behaviour under test two blocks down.
+	player.dashes_left = 2
 	while not player.is_on_floor():
 		await physics_frame
 	for i in 30:
@@ -151,8 +156,11 @@ func _run() -> void:
 
 	var mouse_way := _open_way(player)
 	var mouse_from: Vector2 = player.global_position
-	# Holding the ultimate is what turns the mouse into a dash stick.
-	Input.action_press(&"ultimate")
+	# Armed, and given a frame to be armed in. Arming deliberately throws away
+	# anything drawn beforehand, so a drag stuffed in on the same frame is wiped
+	# before it can be read - which is right in the game and a trap in a test.
+	player.dash_ready = true
+	await physics_frame
 	for i in 4:
 		_input._drag_went += Vector2(mouse_way * 120.0, 0.0)
 	for i in 18:
@@ -174,14 +182,54 @@ func _run() -> void:
 		absf(player.global_position.x - calm_from.x), player.dashes_left])
 	_check(player.dashes_left == 1, "a twitch of the mouse must not spend a dash")
 
-	# And with the button let go, no amount of dragging is a dash.
-	Input.action_release(&"ultimate")
+	# And unarmed, no amount of dragging is a dash.
+	player.dash_ready = false
 	await physics_frame
 	_input._drag_went = Vector2(mouse_way * 600.0, 0.0)
 	for i in 12:
 		await physics_frame
 	print("-- dragged with the button up: %d dashes left" % player.dashes_left)
-	_check(player.dashes_left == 1, "dragging without holding the ultimate does nothing")
+	_check(player.dashes_left == 1, "dragging while unarmed does nothing")
+
+	# --- one press, one dash -------------------------------------------------
+	#
+	# The second dash used to go off during the first: the drag that started one
+	# kept accumulating past the threshold and immediately bought another, so a
+	# single gesture spent both.
+	player.dash_ready = true
+	await physics_frame
+	var had: int = player.dashes_left
+	var pair_way := _open_way(player)
+	_input._drag_went = Vector2(pair_way * 900.0, 0.0)
+	for i in 4:
+		await physics_frame
+	# Counted against what it started with rather than against a number written
+	# here, so this block does not care what the ones above it spent.
+	_check(player.dashes_left == had - 1, "the drag spends a dash")
+	# Keep dragging hard, the way a hand still moving would.
+	for i in 3:
+		_input._drag_went += Vector2(pair_way * 400.0, 0.0)
+	for i in 20:
+		await physics_frame
+	print("-- kept dragging after the dash: %d dashes left (had %d), armed=%s" % [
+		player.dashes_left, had, player.dash_ready])
+	_check(player.dashes_left == had - 1, "and only one, however long the drag goes on")
+	_check(not player.dash_ready, "and puts the dash away afterwards")
+
+	# --- and the trigger is dead while armed ---------------------------------
+	player.dashes_left = 1
+	player.dash_ready = true
+	await physics_frame
+	Input.action_press(&"fire")
+	await physics_frame
+	print("-- fire while armed: held=%s, edge=%s" % [
+		_input.is_fire_held(), _input.is_fire_just_pressed()])
+	_check(not _input.is_fire_held(), "you cannot shoot while lined up for a dash")
+	_check(not _input.is_fire_just_pressed(), "and the trigger edge is swallowed too")
+	Input.action_release(&"fire")
+	player.dash_ready = false
+	await physics_frame
+	_check(_input.is_fire_held() == false, "the trigger comes back when disarmed")
 
 	# --- the pad turns a drag into a swipe -----------------------------------
 	var pad: Control = main.get_node("HUD/TouchControls")
@@ -227,6 +275,8 @@ func _open_way(player: Node2D) -> float:
 
 ## One swipe, and the frames for it to play out.
 func _swipe(way: Vector2) -> void:
+	# Armed first. Q is a switch now, and a swipe with it off is just a swipe.
+	player_ref.dash_ready = player_ref.dashes_left > 0
 	_input.touch_dash = true
 	_input.touch_dash_way = way
 	for i in 18:

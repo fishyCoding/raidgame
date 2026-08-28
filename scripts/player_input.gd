@@ -241,11 +241,11 @@ func _ready() -> void:
 func _input(event: InputEvent) -> void:
 	var motion := event as InputEventMouseMotion
 	if motion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		# Holding the ultimate turns the mouse into a dash stick. The motion is
-		# taken *instead of* being given to the aim, not as well as: the whole
-		# point of having to hold something is that the drag is unmistakably a
-		# dash and not a shot you were lining up.
-		if Input.is_action_pressed(&"ultimate"):
+		# Armed for a dash, the mouse is a dash stick. The motion is taken
+		# *instead of* being given to the aim, not as well as: the point of
+		# arming is that the drag is unmistakably a dash rather than a shot you
+		# were lining up.
+		if dash_arming:
 			_drag_went += motion.relative
 		else:
 			_mouse_motion += motion.relative
@@ -259,6 +259,17 @@ func _input(event: InputEvent) -> void:
 ## That is exactly why the first version of the dash did nothing on PC.
 var _drag_went := Vector2.ZERO
 
+## Set by the character while it is armed for a dash. Everything that reads the
+## mouse asks this first: the drag belongs to the dash, and the trigger is dead,
+## for as long as it is true.
+var dash_arming := false:
+	set(value):
+		if dash_arming == value:
+			return
+		dash_arming = value
+		# Nothing drawn under one arming carries into the next.
+		_drag_went = Vector2.ZERO
+
 
 ## The drag so far, once it is long enough to mean it, and nothing before then.
 ## Cleared on the way out, so one hold cannot spend two dashes without the mouse
@@ -266,7 +277,7 @@ var _drag_went := Vector2.ZERO
 ## The flick, if there has been one worth calling a swipe, and nothing otherwise.
 ## Cleared on the way out, so one gesture cannot spend two dashes.
 func take_mouse_drag(least: float) -> Vector2:
-	if not Input.is_action_pressed(&"ultimate"):
+	if not dash_arming:
 		return Vector2.ZERO
 	if _drag_went.length() < least:
 		return Vector2.ZERO
@@ -277,10 +288,7 @@ func take_mouse_drag(least: float) -> Vector2:
 
 func _process(_delta: float) -> void:
 	_update_mouse_mode()
-	# Letting go throws away whatever was drawn but not spent, so a half gesture
-	# cannot sit around and combine with the next one.
-	if Input.is_action_just_released(&"ultimate"):
-		_drag_went = Vector2.ZERO
+
 
 
 ## Whether a pointer is wanted right now: paused, or some screen is up that you
@@ -415,11 +423,18 @@ func is_down_held() -> bool:
 
 
 func is_fire_just_pressed() -> bool:
+	# Nothing fires while a dash is lined up. The mouse is doing something else
+	# entirely, and a shot let off into the floor because you were about to dash
+	# is a shot you did not choose to take.
+	if dash_arming:
+		return false
 	var touch_edge := touch_fire_held and not _touch_fire_prev
 	return touch_edge or Input.is_action_just_pressed(&"fire")
 
 
 func is_fire_held() -> bool:
+	if dash_arming:
+		return false
 	return touch_fire_held or Input.is_action_pressed(&"fire")
 
 
