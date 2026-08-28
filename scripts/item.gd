@@ -12,7 +12,8 @@ extends RefCounted
 ## rounds is one cell whatever the calibre, because what limits ammunition is
 ## the stack size, not the footprint.
 
-enum Kind { WEAPON, AMMO, ARMOR, MEDKIT, THROWABLE, ULTIMATE, BACKPACK, REVIVE, SURGICAL }
+enum Kind { WEAPON, AMMO, ARMOR, MEDKIT, THROWABLE, ULTIMATE, BACKPACK, REVIVE,
+	SURGICAL, REPAIR }
 
 ## Rounds per stack, by calibre. Fat rifle rounds stack smaller than pistol
 ## ammunition, which is what makes carrying a sniper rifle expensive in space
@@ -33,8 +34,14 @@ var weapon: WeaponData
 var armor: ArmorData
 ## Durability left (ARMOR) - armour is spent, not permanent.
 var durability := 0.0
-## Health restored per use (MEDKIT).
+## Health restored per use (MEDKIT, SURGICAL), or durability put back into a
+## piece of armour (REPAIR). One field because it is one idea - how much this
+## use is worth - and the kind already says what it is worth it to.
 var heal := 0.0
+## Which piece a repair kit answers for (REPAIR). A plate kit will not fix a
+## helmet: they are different items on the shelf and the whole point of them is
+## that you decided in the menu which of the two you expected to lose.
+var repair_slot := ArmorData.Slot.BODY
 ## Set for throwables and ultimates, null otherwise.
 var gadget: GadgetData
 ## Set for backpacks, null otherwise.
@@ -113,6 +120,24 @@ static func from_surgical(uses := 2) -> Item:
 	return item
 
 
+## A repair kit for one kind of armour.
+##
+## Armour is a consumable now - four rifle rounds take a Kevlar vest to nothing -
+## and a consumable you cannot top up is just a shorter fight. This is the
+## answer to that, and it is deliberately not a better vest: it costs cells in
+## the bag, it costs seconds you spend standing still, and it puts back a fixed
+## amount rather than filling the bar, so a plate you have been living behind
+## all raid is never quite new again.
+static func from_repair(slot: int, uses := 2, per_use := 90.0) -> Item:
+	var item := Item.new()
+	item.kind = Kind.REPAIR
+	item.repair_slot = slot
+	item.size = Vector2i(2, 1) if slot == ArmorData.Slot.BODY else Vector2i(1, 1)
+	item.count = uses
+	item.heal = per_use
+	return item
+
+
 ## A stim you can stick in yourself on the floor. One use puts you back on your
 ## feet at full health.
 ##
@@ -185,6 +210,9 @@ func to_wire() -> Dictionary:
 		out["charge"] = charge
 	elif is_medkit() or is_surgical():
 		out["heal"] = heal
+	elif is_repair():
+		out["heal"] = heal
+		out["repair_slot"] = int(repair_slot)
 	elif is_ammo():
 		out["ammo"] = String(ammo_type)
 	elif is_backpack() and contents:
@@ -236,6 +264,9 @@ static func from_wire(wire: Dictionary) -> Item:
 		Kind.SURGICAL:
 			item = Item.from_surgical(count_in)
 			item.heal = wire.get("heal", 25.0)
+		Kind.REPAIR:
+			item = Item.from_repair(int(wire.get("repair_slot", ArmorData.Slot.BODY)),
+				count_in, wire.get("heal", 90.0))
 
 	if item == null:
 		return null
@@ -266,6 +297,10 @@ func is_revive() -> bool:
 
 func is_surgical() -> bool:
 	return kind == Kind.SURGICAL
+
+
+func is_repair() -> bool:
+	return kind == Kind.REPAIR
 
 
 func is_throwable() -> bool:
@@ -305,6 +340,8 @@ func title() -> String:
 		return "MEDKIT"
 	if is_surgical():
 		return "SURGICAL"
+	if is_repair():
+		return "PLATE KIT" if repair_slot == ArmorData.Slot.BODY else "HELMET KIT"
 	if is_revive():
 		return "STIM"
 	if is_backpack():
@@ -324,6 +361,8 @@ func label() -> String:
 		return "MEDKIT x%d" % count
 	if is_surgical():
 		return "SURGICAL x%d" % count
+	if is_repair():
+		return "%s x%d" % [title(), count]
 	if is_revive():
 		return "STIM x%d" % count
 	if is_backpack():
@@ -355,6 +394,10 @@ func tint() -> Color:
 	# two in a hurry is exactly the mistake this system can produce.
 	if is_surgical():
 		return Color(0.48, 0.78, 0.88)
+	# The colour armour is drawn in, because that is the only thing it is for
+	# and a bag is read by colour before it is read by name.
+	if is_repair():
+		return Color(0.62, 0.68, 0.76)
 	if is_backpack():
 		return backpack.tint
 	if gadget:

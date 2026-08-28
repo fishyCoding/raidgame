@@ -512,6 +512,16 @@ func is_surgical_just_pressed() -> bool:
 	return Input.is_action_just_pressed(&"surgical")
 
 
+## True on the frame the repair key is pressed (J on a keyboard).
+##
+## One key for both repair kits. Which piece it works on is not a choice the
+## keyboard should be asking about - it is whichever of the two is closer to
+## being scrap and that you actually brought a kit for - so Player._use_repair
+## picks, and this only says "fix something".
+func is_repair_just_pressed() -> bool:
+	return Input.is_action_just_pressed(&"repair_kit")
+
+
 ## True on the frame the ultimate is fired (Q, for now).
 func is_ultimate_just_pressed() -> bool:
 	return Input.is_action_just_pressed(&"ultimate")

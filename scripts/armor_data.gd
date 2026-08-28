@@ -29,6 +29,12 @@ enum Slot { HEAD, BODY }
 ## Durability below this fraction and the piece is scrap: it stops nothing at
 ## all, and the cells it costs you are the only thing it is still doing.
 ##
+## Set to zero on everything in the shop now, and kept as a dial rather than
+## deleted. The cliff existed because the old absorption curve never got near
+## zero on its own, so something had to declare the piece finished; the curve
+## reaches nothing by itself now, and a plate that fades out is better than one
+## that switches off - you feel the rounds landing harder as it goes.
+##
 ## It used to mean something narrower - the point where a helmet stopped turning
 ## headshots aside - which only ever applied to helmets, and only because
 ## headshots were a yes-or-no rule. Now that both are damage, one failure point
@@ -44,8 +50,16 @@ enum Slot { HEAD, BODY }
 
 
 ## Damage this piece stops at its current durability. Armour thins out as it
-## breaks rather than failing all at once, so the last few points are still worth
-## something.
+## breaks rather than failing all at once, and by the end it is worth almost
+## nothing at all.
+##
+## The condition curve used to bottom out at 0.35, so a plate at death's door
+## still took a third off every round - which meant the bottom half of the bar
+## was quietly doing most of the work of the top half and there was never a
+## moment where you knew you were unprotected. It bottoms out at 0.06 now: a
+## nearly-dead plate stops about three percent of a rifle round, which is a
+## rounding error and reads as one. Low armour is no armour, said in the
+## model's own terms rather than by a cliff at a threshold.
 ##
 ## `pierce` is what the round does about the plate rather than what the plate
 ## does about the round: 0 is an ordinary bullet and the piece works as
@@ -59,7 +73,7 @@ func absorbed(amount: float, durability: float, pierce := 0.0) -> float:
 		return 0.0
 	var condition := clampf(durability / maxf(max_durability, 1.0), 0.0, 1.0)
 	var stops := protection * (1.0 - clampf(pierce, 0.0, 1.0))
-	return amount * stops * lerpf(0.35, 1.0, condition)
+	return amount * stops * lerpf(0.06, 1.0, condition)
 
 
 ## True while there is enough of this piece left to be worth wearing.

@@ -9,6 +9,6 @@ short_name = "HELM"
 slot = 0
 protection = 0.45
 max_durability = 60
-failure_point = 0.3
+failure_point = 0.0
 grid_size = Vector2i(2, 2)
 tint = Color(0.6, 0.66, 0.72, 1)

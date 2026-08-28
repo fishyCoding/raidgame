@@ -321,6 +321,7 @@ func _draw_health() -> void:
 		"%d HP" % roundi(_player.health), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, DIM)
 
 	_draw_injuries(bar)
+	_draw_using(bar)
 
 	if not _player.is_alive:
 		draw_string(_font, Vector2(bar.position.x, bar.position.y - 6.0), "DOWN",
@@ -472,6 +473,28 @@ func _draw_recon_pings() -> void:
 			tint, 1.5, true)
 		if off_screen:
 			draw_circle(at, 3.0, tint)
+
+
+## The kit in your hands, filling up. Drawn over the health bar rather than
+## beside it, because for as long as it is there it is the more urgent of the
+## two numbers: it is the seconds you are choosing to spend not shooting back.
+func _draw_using(bar: Rect2) -> void:
+	if _player.using == Player.Using.NONE:
+		return
+	var strip := Rect2(bar.position + Vector2(0.0, -22.0), Vector2(bar.size.x, 6.0))
+	draw_rect(strip, Color(0.1, 0.12, 0.15, 0.9))
+	draw_rect(Rect2(strip.position,
+		Vector2(strip.size.x * _player.use_progress(), strip.size.y)), GOOD)
+	var what := "PATCHING UP"
+	if _player.using == Player.Using.SURGICAL:
+		what = "STITCHING"
+	elif _player.using == Player.Using.REPAIR:
+		what = "REPAIRING"
+	draw_string(_font, strip.position + Vector2(0.0, -4.0), what,
+		HORIZONTAL_ALIGNMENT_LEFT, strip.size.x, 11, GOOD)
+	draw_string(_font, strip.position + Vector2(0.0, -4.0),
+		"%.1fs" % maxf(_player.use_left, 0.0),
+		HORIZONTAL_ALIGNMENT_RIGHT, strip.size.x, 11, DIM)
 
 
 ## A scope, pointed at you, from somewhere you happen to be looking.

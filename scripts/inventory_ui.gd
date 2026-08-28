@@ -311,9 +311,13 @@ func _draw_item(item: Item, at: Vector2, box: Vector2, alpha := 1.0) -> void:
 		# the question is only ever "is there anything left in it".
 		var bar := Rect2(at + Vector2(6.0, box.y - 12.0), Vector2(box.x - 12.0, 5.0))
 		draw_rect(bar, Color(0.16, 0.18, 0.22, alpha))
-		draw_rect(Rect2(bar.position, Vector2(bar.size.x * item.condition(), bar.size.y)),
-			Color(GOOD.r, GOOD.g, GOOD.b, alpha) if item.condition() > item.armor.failure_point
-			else Color(BAD.r, BAD.g, BAD.b, alpha))
+		# Coloured along the bar rather than switched at a threshold. Armour used
+		# to be scrap below a quarter and fine above it, so one line could say
+		# which; it fades out continuously now, and so does this.
+		var left := item.condition()
+		var shade := BAD.lerp(GOOD, clampf(left * 1.6, 0.0, 1.0))
+		draw_rect(Rect2(bar.position, Vector2(bar.size.x * left, bar.size.y)),
+			Color(shade.r, shade.g, shade.b, alpha))
 	elif item.is_medkit() or item.is_revive():
 		draw_string(font, at + Vector2(6.0, 20.0), item.title(),
 			HORIZONTAL_ALIGNMENT_LEFT, box.x - 8.0, 12, Color(TEXT, alpha))

@@ -25,8 +25,31 @@ const HEAD_FRACTION := 0.26
 ## helmet buys is no longer a binary; it is how many head hits you can eat.
 const HEADSHOT_MULTIPLIER := 2.0
 
-## Head hits chew through a helmet faster than body hits do a plate.
-const HELMET_WEAR := 1.6
+## How much durability a round costs the piece it lands on, per point of damage
+## that *arrived* - not per point it stopped.
+##
+## This reverses the note below, deliberately and with the reason changed. That
+## note is right that charging the incoming figure makes a plate wear out inside
+## the fight it was bought for; that is now the intent. Armour is a consumable
+## you spend and replace, not a property of your character, and the four-round
+## vest was really a five-fight vest - it left every gunfight with most of its
+## bar intact and nothing you could do about the bar either way.
+##
+## 0.75 is set from the benchmark: four assault rifle rounds take a Kevlar vest
+## from full to nothing (150 durability, 51 a round). The rest of the ladder
+## falls out of it - a Chest Rig lasts three, a Plate Carrier six.
+##
+## Charging what arrived rather than what was stopped also fixes a quieter
+## problem: a plate charged on absorption wears slower the worse it gets,
+## because it is stopping less, so it can never actually reach zero. It just
+## crawls toward the failure point and sits there. This one dies.
+const ARMOR_WEAR := 0.75
+
+## Head hits chew through a helmet faster than body hits do a plate. One now
+## rather than 1.6, because the wear above is charged on the round as it
+## arrived and a headshot has already been doubled by the time it gets here -
+## the multiplier is in the number already.
+const HELMET_WEAR := 1.0
 
 class Result extends RefCounted:
 	var amount := 0.0
@@ -91,6 +114,9 @@ static func resolve(amount: float, at: Vector2, centre: Vector2, height: float,
 	var stopped := worn.armor.absorbed(amount, worn.durability, pierce)
 	result.armor_hit = worn
 	result.amount = amount - stopped
-	var wear := stopped * (HELMET_WEAR if result.headshot else 1.0)
+	# Charged on the round that arrived. A plate is a thing that gets destroyed
+	# by being shot, and it gets destroyed at the rate it is being shot - not at
+	# the rate it is still managing to help.
+	var wear := amount * ARMOR_WEAR * (HELMET_WEAR if result.headshot else 1.0)
 	worn.durability = maxf(worn.durability - wear, 0.0)
 	return result

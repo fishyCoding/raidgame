@@ -59,9 +59,14 @@ extends CharacterBody2D
 ## you are just as injured - a cap keeps the slow from compounding into being
 ## unable to move at all.
 @export var injuries_max := 3
-## Top speed multiplier per injury, compounding. Three wounds and you are at
-## roughly three quarters pace.
-@export_range(0.5, 1.0) var injury_speed_scale := 0.92
+## Top speed multiplier per injury, compounding. One wound and you are at four
+## fifths pace; three and you are at half.
+##
+## It was 0.92, which put three wounds at three quarters - and three quarters of
+## a run is a thing you notice on a stopwatch and nowhere else. A wound is meant
+## to be the reason you break off and go looking for a surgical kit, and it can
+## only be that if being wounded is something you can feel under your hands.
+@export_range(0.5, 1.0) var injury_speed_scale := 0.8
 ## Health lost per second, per injury. Slow on purpose: this is a clock that
 ## makes you go and find a surgical kit, not a second way of being shot.
 @export var injury_bleed_per_second := 0.8
@@ -326,6 +331,26 @@ const RECON_BOLT_SCENE := preload("res://scenes/recon_bolt.tscn")
 ## window in which knowing about it is worth anything to the man on the other
 ## end of it.
 const SCOPED_AT := 0.8
+
+## What using a kit costs you, in seconds standing there doing it.
+##
+## They were instant, which made carrying one a question of cells and nothing
+## else: you took a rifle round, tapped H mid-stride, and the round had cost you
+## a keypress. A kit is meant to be a decision about whether you are safe enough
+## to use it, and the only thing that can make it one is time you can be shot
+## during.
+##
+## The surgical kit is the long one because it is the one that fixes the cause,
+## and a wound you can stitch in the open is not a wound worth carrying.
+const MEDKIT_TIME := 4.5
+const SURGICAL_TIME := 8.0
+const REPAIR_TIME := 6.0
+## Top speed while you are using something. Not nailed to the floor - movement
+## is the floor of this game - but not running either.
+const USING_SPEED_SCALE := 0.45
+
+## What is in your hands right now, if anything.
+enum Using { NONE, MEDKIT, SURGICAL, REPAIR }
 ## How far a grenade can be placed. Past this the throw simply falls short -
 ## you cannot lob one across the level, and holding the key longer will not help.
 const THROW_MAX_RANGE := 720.0
@@ -466,6 +491,12 @@ var shield := 0.0
 ## man who has been in something recently, and that is information worth having
 ## before you decide whether to take him on.
 var injuries := 0
+## The kit being used and how long is left of it. Local state, deliberately: it
+## is your own hands, nobody else needs the clock, and everything it can produce
+## - health, injuries, armour durability - already replicates on its own.
+var using := Using.NONE
+var use_left := 0.0
+var use_total := 0.0
 ## Which insertion point the host put this body at, or -1 to work it out here.
 ## Set by Net before the character enters the tree.
 var insertion_index := -1
@@ -1026,6 +1057,7 @@ func _physics_process(delta: float) -> void:
 		_update_run(delta)
 
 	_bleed_injuries(delta)
+	_tick_use(delta)
 
 	if is_downed:
 		_bleed_out(delta)
@@ -1787,6 +1819,8 @@ func _update_run(delta: float) -> void:
 	# anything and not ramped: a wound is not a stance you are holding, it is
 	# just true until somebody patches it.
 	speed_cap *= injury_speed_multiplier()
+	if using != Using.NONE:
+		speed_cap *= USING_SPEED_SCALE
 	# A crawl replaces the crouch scale rather than stacking on it, so the speed
 	# is a number you can reason about instead of two fractions multiplied.
 	if is_downed:
@@ -1912,6 +1946,8 @@ func _update_weapon() -> void:
 		_use_medkit()
 	if PlayerInput.is_surgical_just_pressed():
 		_use_surgical()
+	if PlayerInput.is_repair_just_pressed():
+		_use_repair()
 
 	# Debug: Y fills the meter, so an ultimate can be tried without playing a
 	# whole raid to charge it. If none is equipped it hands one over too -
@@ -2629,26 +2665,105 @@ func _simulate_throw(power: float) -> PackedVector2Array:
 	return points
 
 
-## Spends one use of the first medkit in the bags. Nothing fancy: standing
-## still to patch up is the cost, and running out is the danger.
+## Runs whatever kit is in your hands, and applies it when the clock runs out.
+##
+## The checks happen twice on purpose - once when you start, once when it lands.
+## Eight seconds is long enough for the reason you reached for the kit to stop
+## being true, and a surgical kit spent on wounds that closed while you were
+## kneeling is the scarcest item in the game thrown away by the clock rather
+## than by you.
+func _tick_use(delta: float) -> void:
+	if using == Using.NONE:
+		return
+	if not is_alive or is_downed:
+		_cancel_use("")
+		return
+	use_left -= delta
+	if use_left > 0.0:
+		return
+	var was := using
+	using = Using.NONE
+	match was:
+		Using.MEDKIT:
+			_finish_medkit()
+		Using.SURGICAL:
+			_finish_surgical()
+		Using.REPAIR:
+			_finish_repair()
+
+
+## Stops what you were doing, with nothing spent. Called by anything that means
+## you were not in a position to be doing it after all - a round landing on you
+## being the one that matters.
+func _cancel_use(why := "interrupted") -> void:
+	if using == Using.NONE:
+		return
+	using = Using.NONE
+	use_left = 0.0
+	if not why.is_empty():
+		_say_loot(why)
+
+
+func _begin_use(what: Using, seconds: float, announcement: String) -> void:
+	using = what
+	use_total = seconds
+	use_left = seconds
+	_say_loot(announcement)
+
+
+## How far through the kit you are, 0 to 1. What the HUD draws.
+func use_progress() -> float:
+	if using == Using.NONE or use_total <= 0.0:
+		return 0.0
+	return clampf(1.0 - use_left / use_total, 0.0, 1.0)
+
+
+## The first item in any bag that answers to the given test.
+func _first_of(test: StringName) -> Item:
+	if inventory == null:
+		return null
+	for grid in inventory.grids():
+		for item in grid.items:
+			if item.call(test):
+				return item
+	return null
+
+
+## Takes one use off a kit and drops it when it is empty.
+func _spend(item: Item) -> void:
+	item.count -= 1
+	if item.count > 0:
+		return
+	for grid in inventory.grids():
+		if grid.items.has(item):
+			grid.remove(item)
+			return
+
+
+## Spends one use of a medkit. Standing there doing it is the cost, and running
+## out is the danger.
 func _use_medkit() -> void:
+	if using != Using.NONE:
+		return
 	if health >= max_health:
 		_say_loot("already patched up")
 		return
-	for grid in inventory.grids():
-		for item in grid.items:
-			if not item.is_medkit():
-				continue
-			health = minf(health + item.heal, max_health)
-			item.count -= 1
-			if item.count <= 0:
-				grid.remove(item)
-			health_changed.emit(health, max_health)
-			_say_loot("patched up +%d" % roundi(item.heal))
-			if _audio:
-				_audio.reload_finished(global_position)
-			return
-	_say_loot("no medkit")
+	if _first_of(&"is_medkit") == null:
+		_say_loot("no medkit")
+		return
+	_begin_use(Using.MEDKIT, MEDKIT_TIME, "patching up...")
+
+
+func _finish_medkit() -> void:
+	var item := _first_of(&"is_medkit")
+	if item == null:
+		return
+	health = minf(health + item.heal, max_health)
+	_spend(item)
+	health_changed.emit(health, max_health)
+	_say_loot("patched up +%d" % roundi(item.heal))
+	if _audio:
+		_audio.reload_finished(global_position)
 
 
 ## Spends one use of a surgical kit: closes every wound and patches what the
@@ -2659,25 +2774,87 @@ func _use_medkit() -> void:
 ## refusal is the feature - if you wanted health back, the medkit is the item
 ## for that and it is in the same bag.
 func _use_surgical() -> void:
+	if using != Using.NONE:
+		return
 	if injuries <= 0:
 		_say_loot("nothing to stitch")
 		return
+	if _first_of(&"is_surgical") == null:
+		_say_loot("no surgical kit")
+		return
+	_begin_use(Using.SURGICAL, SURGICAL_TIME, "stitching...")
+
+
+func _finish_surgical() -> void:
+	if injuries <= 0:
+		return
+	var item := _first_of(&"is_surgical")
+	if item == null:
+		return
+	var closed := injuries
+	injuries = 0
+	health = minf(health + item.heal, max_health)
+	_spend(item)
+	health_changed.emit(health, max_health)
+	_say_loot("stitched up (%d closed)" % closed)
+	if _audio:
+		_audio.reload_finished(global_position)
+
+
+## Puts durability back into whichever piece needs it and has a kit for it.
+##
+## One key for both kits rather than one each. Which piece to repair is never a
+## decision worth a keypress - it is whichever one is nearly gone - so this takes
+## the worse of the two you can actually do something about. The decision stays
+## where it was made: in the menu, when you chose which kit to carry.
+func _use_repair() -> void:
+	if using != Using.NONE:
+		return
+	var worst := _worst_repairable()
+	if worst == null:
+		_say_loot("nothing to repair")
+		return
+	_begin_use(Using.REPAIR, REPAIR_TIME, "repairing %s..." % worst.armor.short_name)
+
+
+func _finish_repair() -> void:
+	var worn := _worst_repairable()
+	if worn == null:
+		return
+	var kit := _repair_kit_for(worn)
+	if kit == null:
+		return
+	worn.durability = minf(worn.durability + kit.heal, worn.armor.max_durability)
+	_spend(kit)
+	_say_loot("%s at %d%%" % [worn.armor.short_name, roundi(worn.condition() * 100.0)])
+	if _audio:
+		_audio.reload_finished(global_position)
+
+
+## The worn piece in the worse state that you are carrying a kit for, or null.
+func _worst_repairable() -> Item:
+	var best: Item = null
+	for wear in [Inventory.Wear.HELMET, Inventory.Wear.VEST]:
+		var worn: Item = inventory.get_worn(wear) if inventory else null
+		if worn == null or worn.armor == null:
+			continue
+		if worn.durability >= worn.armor.max_durability:
+			continue
+		if _repair_kit_for(worn) == null:
+			continue
+		if best == null or worn.condition() < best.condition():
+			best = worn
+	return best
+
+
+func _repair_kit_for(worn: Item) -> Item:
+	if inventory == null or worn == null or worn.armor == null:
+		return null
 	for grid in inventory.grids():
 		for item in grid.items:
-			if not item.is_surgical():
-				continue
-			var closed := injuries
-			injuries = 0
-			health = minf(health + item.heal, max_health)
-			item.count -= 1
-			if item.count <= 0:
-				grid.remove(item)
-			health_changed.emit(health, max_health)
-			_say_loot("stitched up (%d closed)" % closed)
-			if _audio:
-				_audio.reload_finished(global_position)
-			return
-	_say_loot("no surgical kit")
+			if item.is_repair() and item.repair_slot == worn.armor.slot:
+				return item
+	return null
 
 
 ## Sticks a stim in yourself and gets up, at full health.
@@ -3064,6 +3241,9 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 	# which is a second thing armour is quietly buying you, and the reason a
 	# plated man wins the trade he started.
 	weapon.take_flinch(amount)
+	# And whatever you were in the middle of. A kit is a bet that nobody is
+	# looking at you; this is the bet being called.
+	_cancel_use()
 
 	# A hit shoves you and rattles the camera, so incoming fire is felt even when
 	# the shooter is somewhere off screen.

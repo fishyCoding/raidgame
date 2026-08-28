@@ -9,10 +9,11 @@ extends SceneTree
 ##
 ## The benchmark, and the numbers every line below is defending:
 ##
-##   AR, 620 rpm, medium vest -> 26 a round, 4 rounds, 290 ms
-##   AR, medium helmet, head  -> 51 a round, 2 rounds
-##   AR, nothing on, body     -> 51 a round, 2 rounds
-##   AR, at the falloff floor -> 33 a round, from 1320 px out
+##   AR, 620 rpm, medium vest -> 30 a round, 3 rounds, 194 ms
+##   AR, medium helmet, head  -> 58 a round, 2 rounds
+##   AR, nothing on, body     -> 58 a round, 2 rounds
+##   AR, at the falloff floor -> 38 a round, from 1320 px out
+##   AR, four rounds          -> a Kevlar vest at nothing
 ##
 ## Loaded rather than named: `Damage` reaches Net, and naming it from a --script
 ## tool compiles it before the autoloads exist and breaks the class for the whole
@@ -39,7 +40,7 @@ func _init() -> void:
 
 	# --- the benchmark ------------------------------------------------------
 	_eq("AR rpm", ar.rounds_per_minute, 620.0)
-	_eq("AR raw damage", ar.damage, 51.0)
+	_eq("AR raw damage", ar.damage, 58.0)
 	# The range half of the benchmark, restated. It used to be "half damage at
 	# 480 px, ten player heights", which described a rifle that had given up
 	# most of what it did by twenty of them - so every fight worth having was
@@ -47,7 +48,7 @@ func _init() -> void:
 	# decoration. The window is out at 520-1320 now and the floor is 0.65, which
 	# is the same statement made about a gun that still works at the far end of
 	# a room it can see across.
-	_eq("AR damage at the falloff floor", ar.get_damage_at(9999.0), 33.15, 0.01)
+	_eq("AR damage at the falloff floor", ar.get_damage_at(9999.0), 37.70, 0.01)
 	_eq("AR floor reached at", ar.falloff_end, 1320.0)
 	_eq("AR floor in player heights", ar.falloff_end / BODY_HEIGHT, 27.5)
 	# Nothing is allowed to keep more of itself at range than the gun built for
@@ -62,14 +63,14 @@ func _init() -> void:
 				% closer)
 
 	var first_body := _first_hit(damage, ar.damage, _kit("medium_vest", 1), false)
-	_eq("AR first round through a medium vest", first_body, 26.0, 0.1)
+	_eq("AR first round through a medium vest", first_body, 29.58, 0.1)
 	var first_head := _first_hit(damage, ar.damage, _kit("medium_helmet", 0), true)
-	_eq("AR headshot through a medium helmet", first_head, 51.0, 0.1)
+	_eq("AR headshot through a medium helmet", first_head, 58.0, 0.1)
 
 	var armored := _rounds_to_kill(damage, ar, "medium_vest", false)
-	_eq("AR rounds to kill, medium vest", float(armored), 4.0)
+	_eq("AR rounds to kill, medium vest", float(armored), 3.0)
 	_eq("AR time to kill, medium vest (ms)",
-		float(armored - 1) * ar.get_shot_interval() * 1000.0, 290.0, 1.0)
+		float(armored - 1) * ar.get_shot_interval() * 1000.0, 194.0, 1.0)
 
 	var bare := _rounds_to_kill(damage, ar, "", false)
 	_eq("AR rounds to kill, no vest", float(bare), 2.0)
@@ -88,13 +89,13 @@ func _init() -> void:
 	# has to buy something you can count - a round, or a head hit - or the shop
 	# is selling a number that does not change the fight.
 	_eq("AR rounds to kill, light vest (the deploy loadout)",
-		float(_rounds_to_kill(damage, ar, "light_vest", false)), 4.0)
+		float(_rounds_to_kill(damage, ar, "light_vest", false)), 3.0)
 	_eq("AR rounds to kill, heavy vest",
-		float(_rounds_to_kill(damage, ar, "heavy_vest", false)), 5.0)
+		float(_rounds_to_kill(damage, ar, "heavy_vest", false)), 4.0)
 	_eq("AR headshots to kill, light helmet",
 		float(_rounds_to_kill(damage, ar, "light_helmet", true)), 2.0)
 	_eq("AR headshots to kill, heavy helmet",
-		float(_rounds_to_kill(damage, ar, "heavy_helmet", true)), 3.0)
+		float(_rounds_to_kill(damage, ar, "heavy_helmet", true)), 2.0)
 
 	# --- piercing, which is the only thing that beats a plate -----------------
 	#
@@ -108,11 +109,11 @@ func _init() -> void:
 	var full := plate.max_durability
 	print("\n-- a slug against a plate carrier --")
 	_eq("plain round of the slug's size, through a plate",
-		slug.damage - plate.absorbed(slug.damage, full), 29.64, 0.1)
+		slug.damage - plate.absorbed(slug.damage, full), 33.44, 0.1)
 	_eq("the same round as a slug",
 		slug.damage - plate.absorbed(slug.damage, full, slug.armor_pierce),
-		59.62, 0.1)
-	_eq("and untouched with no plate in the way", slug.damage, 78.0)
+		67.27, 0.1)
+	_eq("and untouched with no plate in the way", slug.damage, 88.0)
 	# Two body shots whatever they are wearing is the gun's whole identity, and
 	# it is the number worth pinning: the plate changes what it costs you to get
 	# there, not whether you get there.
@@ -184,21 +185,29 @@ func _init() -> void:
 		print("  ok   %-42s %.0f" % ["guard drops to one body shot inside %.0fpx"
 			% sniper.falloff_start, sniper.get_damage_at(sniper.falloff_start)])
 
-	# Armour has to survive the fight it is priced for. It used to be charged
-	# the whole incoming round rather than the part it stopped, which left a
-	# medium vest scrap after three rifle rounds - so the four-round kill above
-	# was only ever true of the first magazine, and nothing on screen said so.
+	# --- armour is a consumable, and this is the number that says so ---------
+	#
+	# The reverse of what used to be pinned here, and deliberately. A vest was
+	# charged only for the damage it actually stopped, which made it last about
+	# five fights: you finished nearly every gunfight with most of the bar left
+	# and no reason to think about it again. It is charged for the round as it
+	# arrives now, so four rifle rounds take a Kevlar vest from full to nothing -
+	# inside a single exchange, which is the point. What you are wearing is
+	# something you spend, and repair kits exist because of this line.
 	var vest: Inventory = _kit("medium_vest", 1)
 	var worn: Item = vest.get_worn(Inventory.Wear.VEST)
 	for i in 4:
 		damage.resolve(ar.damage, Vector2.ZERO, Vector2.ZERO, BODY_HEIGHT, vest)
-	if not worn.armor.is_sound(worn.durability):
-		_failures.append("a medium vest is scrap after the four rounds it is "
-			+ "meant to survive (%.0f of %.0f left)"
-			% [worn.durability, worn.armor.max_durability])
-	else:
-		print("  ok   %-42s %.0f/%.0f" % ["medium vest left after four rounds",
-			worn.durability, worn.armor.max_durability])
+	_eq("a Kevlar vest after four rifle rounds", worn.durability, 0.0, 0.01)
+
+	# And on the way down it stops being worth anything well before it is gone.
+	# Half a bar is not half a plate: the condition curve bottoms out near zero,
+	# so a vest at a fifth is stopping about a tenth of what a fresh one does.
+	var thin: Inventory = _kit("medium_vest", 1)
+	var thin_worn: Item = thin.get_worn(Inventory.Wear.VEST)
+	thin_worn.durability = thin_worn.armor.max_durability * 0.2
+	var through: float = _first_hit(damage, ar.damage, thin, false)
+	_eq("a fifth of a vest is nearly no vest", through, 51.0, 0.5)
 
 	# --- the benchmark has to actually be the benchmark ---------------------
 	#

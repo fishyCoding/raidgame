@@ -18,13 +18,20 @@ extends Control
 
 signal deployed()
 
-## Doubled from 4000 while the new damage model is being played in.
+## Doubled again, to 16000, and this one is scaffolding rather than balance.
 ##
 ## Kitting out now costs more than it did: there is a third armour tier to buy
 ## into and a surgical kit is a thing you want in the bag before you need it,
 ## and neither of those decisions is worth testing on a budget that only covers
-## one of them. A number to halve again once the loadouts have settled.
-const CREDITS := 8000
+## one of them. Armour is now a consumable that dies inside a single fight and
+## comes with repair kits to buy as well, so trying a loadout twice costs what
+## trying it once used to. This is a testing number: halve it, twice, once the
+## loadouts have settled.
+const CREDITS := 16000
+## Uses in one bought repair kit. Two, so a kit is a decision about one fight
+## rather than a subscription: armour that dies in four rounds and comes back
+## twice is still armour you run out of.
+const REPAIRS_PER_KIT := 2
 ## Uses in one bought stack of stims. Buy several stacks if a cell each is worth
 ## it to you - the pocket and the pack both sell them.
 const REVIVES_PER_STACK := 5
@@ -148,6 +155,7 @@ const CATALOGUE := {
 		# session rather than being rationed. This is a number to put back up
 		# once picking your fights matters again.
 		{"kind": "revive", "price": 10},
+		{"kind": "repair", "slot": "helmet", "price": 300},
 	],
 	## The pack takes anything that fits, including the things too big for a
 	## pocket - which is most of the reason to own one.
@@ -160,6 +168,8 @@ const CATALOGUE := {
 		{"kind": "medkit", "price": 350},
 		{"kind": "surgical", "price": 600},
 		{"kind": "revive", "price": 10},
+		{"kind": "repair", "slot": "vest", "price": 450},
+		{"kind": "repair", "slot": "helmet", "price": 300},
 	],
 }
 
@@ -568,6 +578,9 @@ func _make(entry: Dictionary) -> Item:
 			return Item.from_surgical(2)
 		"revive":
 			return Item.from_revive(REVIVES_PER_STACK)
+		"repair":
+			return Item.from_repair(ArmorData.Slot.BODY if entry.slot == "vest"
+				else ArmorData.Slot.HEAD, REPAIRS_PER_KIT)
 	return null
 
 
@@ -585,6 +598,13 @@ func _label(entry: Dictionary) -> String:
 			return "%s   x%d" % [entry.ammo, entry.rounds]
 		"revive":
 			return "Stim   x%d" % REVIVES_PER_STACK
+		"repair":
+			return ("Plate Repair Kit   x%d" if entry.slot == "vest"
+				else "Helmet Repair Kit   x%d") % REPAIRS_PER_KIT
+		# Named rather than left to the fallthrough below, which called it a
+		# medkit - the one mistake this pair of items exists to punish.
+		"surgical":
+			return "Surgical Kit   x2"
 	return "Medkit   x3"
 
 
@@ -614,7 +634,16 @@ func _detail(entry: Dictionary) -> String:
 			return "one stack, one cell"
 		"revive":
 			return "%d uses   get up at full health   one cell" % REVIVES_PER_STACK
-	return "three uses, 45 health each   2x1 cells"
+		"repair":
+			return ("%d uses   +%d durability each   %s   %s"
+				% [REPAIRS_PER_KIT, roundi(Item.from_repair(
+					ArmorData.Slot.BODY if entry.slot == "vest"
+					else ArmorData.Slot.HEAD).heal),
+					"vest only" if entry.slot == "vest" else "helmet only",
+					"2x1 cells" if entry.slot == "vest" else "one cell"])
+		"surgical":
+			return "two uses, closes every wound   %.0fs to use   2x2 cells" % Player.SURGICAL_TIME
+	return "three uses, 45 health each   %.0fs to use   2x1 cells" % Player.MEDKIT_TIME
 
 
 # --- drawing ------------------------------------------------------------------
