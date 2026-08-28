@@ -164,9 +164,14 @@ func _run() -> void:
 	_finish()
 
 
-## Points the crosshair at a spot in the world.
-func _aim_at(player: Node2D, spot: Vector2) -> void:
-	player._aim_reach = spot - player.global_position
+## Points at a spot in the world.
+##
+## Through PlayerInput.screen_point, which is the field a thumb would use. The
+## desktop path reads the real cursor and headless has none, and writing
+## touch_aim_point does not work either - the touch pad rewrites that every frame
+## it processes and quietly overrules a harness.
+func _aim_at(_player: Node2D, spot: Vector2) -> void:
+	_input.screen_point = spot
 
 
 ## One trigger press, seen by the placing view.

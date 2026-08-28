@@ -33,6 +33,11 @@ var touch_ultimate_2 := false
 var touch_dash := false
 var touch_dash_way := Vector2.ZERO
 
+## Where a screen is being placed from, when something other than the desktop
+## cursor is doing the placing - a thumb, or a test. INF leaves the cursor in
+## charge, which is the desktop case.
+var screen_point := Vector2.INF
+
 ## Where a thumb has dragged the projection's marker, or INF while nobody is
 ## placing one.
 ##
@@ -313,12 +318,17 @@ func wants_cursor() -> bool:
 	var alive: Variant = player.get(&"is_alive")
 	if typeof(alive) == TYPE_BOOL and not alive:
 		return true
-	# Placing a projection is done by clicking the level, so the pointer has to
-	# come back for it. Asked of the character rather than held here because it
-	# is the character's state - see Player.projection_aiming.
-	var aiming: Variant = player.get(&"projection_aiming")
-	if typeof(aiming) == TYPE_BOOL and aiming:
-		return true
+	# Placing something is done by clicking the level, so the pointer has to come
+	# back for it. Asked of the character rather than held here because it is the
+	# character's state - see Player.projection_aiming and Player.screen_aiming.
+	#
+	# Both of them, and any placed gadget added after: a captured mouse has no
+	# cursor and no position, so a placing view that forgets to free it is a view
+	# you cannot aim or click in at all. That has now been the same bug twice.
+	for placing in [&"projection_aiming", &"screen_aiming"]:
+		var aiming: Variant = player.get(placing)
+		if typeof(aiming) == TYPE_BOOL and aiming:
+			return true
 	for group in CURSOR_GROUPS:
 		for node in get_tree().get_nodes_in_group(group):
 			var control := node as CanvasItem

@@ -165,10 +165,18 @@ func _run() -> void:
 			if (guards.get_child(j) as Node2D).global_position.distance_to(guard_start[j]) > 1.0:
 				stirred[j] = true
 	var guards_moved := stirred.size()
-	_say("guards: %d thinking here (want 0), %d of %d moving (want some)" % [
-		thinking, guards_moved, guards.get_child_count()])
+	# Guards can be switched off for testing - see Enemy.GUARDS_ON. When they
+	# are, "none of them moved" is the level doing as it was told rather than the
+	# server sitting paused, so the check stands down instead of failing. It
+	# comes back the moment there are guards to watch, which is the point: this
+	# must not quietly stop testing the thing it exists for.
+	var patrolling: bool = (load("res://scripts/enemy.gd") as GDScript).get("GUARDS_ON")
+	var want := guards_moved > 0 if patrolling else guards.get_child_count() == 0
+	_say("guards: %d thinking here (want 0), %d of %d moving (%s)" % [
+		thinking, guards_moved, guards.get_child_count(),
+		"want some" if patrolling else "switched off, want none"])
 
-	var ok := i_moved > 20.0 and they_moved > 20.0 and thinking == 0 and guards_moved > 0
+	var ok := i_moved > 20.0 and they_moved > 20.0 and thinking == 0 and want
 	_say("PASS" if ok else "FAIL")
 	await _wait(20)
 	quit(0 if ok else 1)

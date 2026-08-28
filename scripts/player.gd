@@ -2045,7 +2045,16 @@ func _update_screen_aim() -> void:
 ## close. A sheet that ends a hand's width from the floor has a gap under it that
 ## somebody will see you through, and nobody clicking there meant to leave one.
 func _screen_point() -> Vector2:
-	var at := PlayerInput.get_aim_point(global_position, _aim_reach)
+	# The cursor, because placing frees the pointer - see
+	# PlayerInput._update_mouse_mode. While the mouse is captured it has no
+	# position to read and the crosshair is driven by relative motion instead;
+	# the moment the pointer comes back, that motion stops arriving and the
+	# crosshair stops moving. Reading the wrong one of those two is why the
+	# projection could not be aimed either, the first time.
+	var at := PlayerInput.screen_point
+	if not at.is_finite():
+		at = (PlayerInput.get_aim_point(global_position, _aim_reach)
+			if PlayerInput.is_touch() else get_global_mouse_position())
 	var space := get_world_2d().direct_space_state
 	var best := at
 	var best_gap := SCREEN_SNAP
@@ -2062,6 +2071,7 @@ func _screen_point() -> Vector2:
 
 func _cancel_screen_aim() -> void:
 	screen_aiming = false
+	PlayerInput.screen_point = Vector2.INF
 	screen_first = Vector2.INF
 	screen_to = Vector2.INF
 	screen_ok = false
