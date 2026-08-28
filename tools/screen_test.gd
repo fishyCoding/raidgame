@@ -38,10 +38,17 @@ func _run() -> void:
 		return
 	_input = root.get_node("PlayerInput")
 
-	# --- guards are off for testing ------------------------------------------
-	var left := main.get_node("Enemies").get_child_count()
-	print("-- guards still in the level: %d" % left)
-	_check(left == 0, "the guards are off, as asked")
+	# --- the guards are parked, not absent -----------------------------------
+	#
+	# They are back in a solo raid, which this is. Stopped rather than checked
+	# for: two of the measurements below count rounds in the level, and a guard
+	# firing at the far end of the yard adds to that count without having
+	# anything to do with what is being tested.
+	var guards := main.get_node("Enemies")
+	for guard in guards.get_children():
+		guard.set_physics_process(false)
+		guard.set_process(false)
+	print("-- guards in the level: %d, all parked" % guards.get_child_count())
 
 	await _check_ropes(self)
 

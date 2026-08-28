@@ -13,7 +13,7 @@ stability = 46.0
 rounds_per_minute = 55.0
 automatic = false
 pellets = 9
-pellet_spread = 2.2
+pellet_spread = 1.1
 damage = 13.0
 bullet_speed = 5200.0
 bullet_range = 480.0
@@ -29,6 +29,6 @@ ads_zoom = 1.0
 ads_spread_scale = 0.45
 ads_lead_scale = 0.8
 bullet_color = Color(1, 0.65098, 0.309804, 1)
-bullet_length = 18.0
-bullet_width = 2.5
+bullet_length = 5.0
+bullet_width = 1.0
 

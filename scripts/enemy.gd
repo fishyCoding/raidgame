@@ -115,9 +115,6 @@ const EYE_SEARCHING := Color(1.0, 0.72, 0.38)
 ## Solid geometry only, matching vision_system.gd: guards see under and over the
 ## one-way catwalks exactly as the player does, so cover means the same thing to
 ## both sides.
-## Whether guards exist at all. Temporary - see _ready.
-const GUARDS_ON := false
-
 const SIGHT_MASK := Layers.WORLD
 const SIDEARM := "res://resources/weapons/pistol.tres"
 const CHEST_RIG := "res://resources/backpacks/chest_rig.tres"
@@ -173,10 +170,21 @@ var net_alive := true
 
 
 func _ready() -> void:
-	# Off while the screen gadget is being tested. Eleven guards shooting at you
-	# is a lot of noise to debug a stealth tool through. One line, flipped back
-	# when the testing is done.
-	if not GUARDS_ON:
+	# Alone, yes. In a match, not yet.
+	#
+	# Temporary, and only for testing: a raid against other players is easier to
+	# work on with nothing else shooting at anybody, and eleven guards is a lot of
+	# noise to debug a netcode problem through. Playing alone gets the level it is
+	# supposed to have.
+	#
+	# Safe to decide here, and this is the one thing worth checking if it ever
+	# stops being true. is_networked() reads the multiplayer peer itself, and the
+	# peer is assigned by host(), join() or serve() *before* the level is loaded -
+	# the lobby dials first and opens the map second, deliberately, because doing
+	# it the other way tore down the socket mid-handshake. So every machine in a
+	# match answers this the same way on the same frame, and a level where one
+	# peer kept its guards and another did not is not a state this can reach.
+	if Net.is_networked():
 		queue_free()
 		return
 	collision_layer = Layers.ENEMY
