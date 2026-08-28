@@ -14,6 +14,10 @@ const GOOD := Color(0.42, 0.78, 0.6)
 const BAD := Color(0.85, 0.42, 0.42)
 const OVERLOAD := Color(1.0, 0.68, 0.28)
 const RECON := Color(0.55, 0.85, 0.95, 0.95)
+## A scope catching the light. Nearly white on purpose - every other marker on
+## this HUD is a tinted symbol you read, and this one is meant to be mistaken
+## for something in the world for the half second before you understand it.
+const GLINT := Color(0.92, 0.97, 1.0, 1.0)
 const PROJECTION := Color(0.62, 0.78, 1.0)
 ## The route line while a decoy is being placed. Red, and the only red on the
 ## screen that is not damage - it is a claim about where a body is going to walk,
@@ -40,6 +44,14 @@ const PANEL_FADE_AIMED := 0.25
 ## in the kit screen now - see shop.gd.
 const PANEL_SIZE := Vector2(300, 92)
 const MARGIN := 20.0
+
+## Inside this, a scope is not throwing you a glint - it is a man in the room
+## with you.
+const GLINT_MIN_RANGE := 620.0
+## How near his aim has to be to you before the glass shows, radians.
+const GLINT_AIM_CONE := 0.10
+## And how near yours has to be to him before you catch it.
+const GLINT_LOOK_CONE := 0.38
 
 var _player: Player
 var _weapon: Weapon
@@ -296,6 +308,7 @@ func _draw_health() -> void:
 	if _player.is_downed:
 		_draw_downed(bar)
 		_draw_recon_pings()
+		_draw_sniper_glints()
 		if _player.extracting:
 			_draw_extraction(_player.extracting)
 		_draw_flash()
@@ -322,6 +335,7 @@ func _draw_health() -> void:
 
 	_draw_grapple(bar)
 	_draw_recon_pings()
+	_draw_sniper_glints()
 	if _player.extracting:
 		_draw_extraction(_player.extracting)
 	_draw_flash()
@@ -458,6 +472,58 @@ func _draw_recon_pings() -> void:
 			tint, 1.5, true)
 		if off_screen:
 			draw_circle(at, 3.0, tint)
+
+
+## A scope, pointed at you, from somewhere you happen to be looking.
+##
+## Three things have to be true at once, and the third is what makes it a
+## mechanic rather than a warning light. They have to be looking down a scope
+## (Player.scoped, one replicated bit); they have to be looking at *you*; and you
+## have to be looking back at them. The sniper is not told any of this - the
+## price of the shot is that taking it puts a mark on the map for exactly the
+## person who is in a position to do something about it, and only for them.
+##
+## Not clamped to the screen edge the way a recon ping is, and that is the same
+## rule stated from the other side: a ping is intelligence, and arrives wherever
+## you are looking; a glint is light, and only reaches you if you were already
+## looking the right way.
+func _draw_sniper_glints() -> void:
+	if _player == null or not _player.is_alive:
+		return
+	var canvas := get_viewport().get_canvas_transform()
+	var clock := Time.get_ticks_msec() * 0.001
+
+	for node in get_tree().get_nodes_in_group(&"player"):
+		var them := node as Player
+		if them == null or them == _player or not them.scoped or not them.is_alive:
+			continue
+
+		# Close up there is no glint to catch, he has to have picked you out, and
+		# you have to be looking back - all three in Player.glint_shows, which is
+		# where they can be tested.
+		if not Player.glint_shows(them.global_position, them.aim_angle,
+				_player.global_position, _player.aim_angle,
+				GLINT_MIN_RANGE, GLINT_AIM_CONE, GLINT_LOOK_CONE):
+			continue
+
+		var at := canvas * them.global_position
+		if at.x < 0.0 or at.x > size.x or at.y < 0.0 or at.y > size.y:
+			continue
+
+		# Off and on rather than a steady lamp: glass catches the light as it
+		# moves, and a mark that blinks is one you notice in the corner of a
+		# screen you are already busy reading.
+		var pulse := 0.45 + 0.55 * absf(sin(clock * 7.0))
+		var tint := Color(GLINT.r, GLINT.g, GLINT.b, GLINT.a * pulse)
+		var arm := 7.0 + 4.0 * pulse
+		draw_line(at - Vector2(arm, 0.0), at + Vector2(arm, 0.0), tint, 1.0, true)
+		draw_line(at - Vector2(0.0, arm), at + Vector2(0.0, arm), tint, 1.0, true)
+		var corner := arm * 0.38
+		draw_line(at - Vector2(corner, corner), at + Vector2(corner, corner),
+			Color(tint.r, tint.g, tint.b, tint.a * 0.5), 1.0, true)
+		draw_line(at - Vector2(corner, -corner), at + Vector2(corner, -corner),
+			Color(tint.r, tint.g, tint.b, tint.a * 0.5), 1.0, true)
+		draw_circle(at, 2.0 + pulse, tint)
 
 
 ## You have been painted, and somebody is watching you through a wall right now.

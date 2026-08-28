@@ -20,6 +20,25 @@ signal shot_fired(recoil_shake: float, knockback: float)
 ## What the player starts with, and nothing more: everything else is looted.
 const STARTING_WEAPON := "res://resources/weapons/pistol.tres"
 
+## How far a round that lands on you throws your own aim off, in degrees per 100
+## damage that got through your armour. A rifle round to an unplated chest is 51
+## of it, so a little over a degree and a half - most of an assault rifle's whole
+## standing cone. Enough that a trade you were winning becomes a trade, and not
+## so much that being shot at once ends your ability to shoot back.
+const FLINCH_DEGREES_PER_100 := 3.0
+## Ceiling, so a burst that catches you does not stack into a cone you cannot
+## aim out of. Reached at about four rifle rounds.
+const FLINCH_MAX_DEGREES := 6.0
+## Degrees a second it washes out. "Directly after" is the whole mechanic: a
+## rifle round's worth is gone in under a fifth of a second, which is long
+## enough to spoil the shot you were in the middle of and short enough that the
+## fight is still yours to win.
+const FLINCH_RECOVERY_DEGREES := 9.0
+## How much of it aiming buys back. A sight steadies the gun; it does not steady
+## you, so this is deliberately a long way from the ads_spread_scale the rest of
+## the cone is multiplied by.
+const FLINCH_AIM_SCALE := 0.65
+
 ## What rounds from this weapon collide with. Enemies override it so their fire
 ## reaches the player instead of the practice dummies.
 @export_flags_2d_physics var hit_mask := Layers.PLAYER_SHOT
@@ -52,6 +71,16 @@ var focus := 0.0
 var bloom := 0.0
 ## Upward aim offset from firing, radians. Same idea, separate curve.
 var kick := 0.0
+## Extra cone from being shot, radians. Set by whoever holds the gun when a round
+## lands on them - see Player.take_damage - and washed out fast.
+##
+## Its own term rather than more bloom, and that is the whole point of it. Bloom
+## is multiplied by ads_spread_scale, so a scoped sniper divides everything in
+## that bucket by twenty and a man being shot at would have flinched by four
+## hundredths of a degree. Being hit is not a recoil problem and a sight cannot
+## brace you against it, so it is added after the sights have had their say and
+## only partly bought back by aiming.
+var flinch := 0.0
 
 var _cooldown := 0.0
 var _reload_left := 0.0
@@ -217,6 +246,11 @@ func tick(delta: float) -> void:
 		if _reload_left <= 0.0:
 			_finish_reload()
 
+	# Being shot washes out on its own clock, not the gun's: it is not recoil,
+	# so it does not wait on a recovery delay and it is not scaled by how steady
+	# the weapon is. Everything flinches alike and recovers alike.
+	flinch = maxf(flinch - deg_to_rad(FLINCH_RECOVERY_DEGREES) * delta, 0.0)
+
 	# Recoil only starts washing out once the gun has had a moment.
 	if _since_shot >= data.get_recovery_delay():
 		bloom = maxf(bloom - data.get_bloom_recovery() * delta, 0.0)
@@ -236,9 +270,23 @@ func get_spread(move_factor := 0.0, air_factor := 0.0) -> float:
 	# and a sight does much less about this one.
 	var airborne := data.get_move_penalty() * air_penalty_scale \
 		* clampf(air_factor, 0.0, 1.0)
-	return cone * lerpf(1.0, data.ads_spread_scale, aimed) \
-		+ penalty * lerpf(1.0, focus_move_penalty_scale, aimed) \
+	return (cone * lerpf(1.0, data.ads_spread_scale, aimed)
+		+ penalty * lerpf(1.0, focus_move_penalty_scale, aimed)
 		+ airborne * lerpf(1.0, focus_air_penalty_scale, aimed)
+		+ flinch * lerpf(1.0, FLINCH_AIM_SCALE, aimed))
+
+
+## A round landed on the holder. `amount` is what got through their armour,
+## because a plate that stopped most of it also stopped most of the shove.
+##
+## Called by the body that was hit rather than by whoever fired it, which is the
+## rule report_hit already follows and for the same reason: on a client, the
+## machine that knows a round landed on you is yours.
+func take_flinch(amount: float) -> void:
+	if amount <= 0.0:
+		return
+	flinch = minf(flinch + deg_to_rad(FLINCH_DEGREES_PER_100 * amount * 0.01),
+		deg_to_rad(FLINCH_MAX_DEGREES))
 
 
 func is_reloading() -> bool:

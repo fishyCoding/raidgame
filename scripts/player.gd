@@ -256,8 +256,13 @@ extends CharacterBody2D
 ## Camera zoom while the bow is merely out, and at a full draw. Below 1 pulls
 ## the view back: a reveal tool you cannot aim past the end of the room is no
 ## use, so the bow buys sight the moment it comes up and more as you pull it.
-@export_range(0.3, 1.0) var bow_zoom := 0.78
-@export_range(0.3, 1.0) var bow_zoom_full := 0.52
+##
+## It used to buy a great deal more - 0.78 falling to 0.52, which pulled back far
+## enough that a full draw was a free look at half the level whether or not you
+## ever loosed the arrow. That made the zoom the ultimate and the arrow a
+## formality. Enough to aim a lobbed shot across a room, and no further.
+@export_range(0.3, 1.0) var bow_zoom := 0.88
+@export_range(0.3, 1.0) var bow_zoom_full := 0.72
 ## And leans down range like a scope, scaled against the player's ads_lead.
 @export var bow_lead_scale := 2.4
 ## Below this much draw, letting go does not loose the arrow - it is a flinch,
@@ -315,6 +320,12 @@ extends CharacterBody2D
 const DROP_THROUGH_TIME := 0.2
 const GRENADE_SCENE := preload("res://scenes/grenade.tscn")
 const RECON_BOLT_SCENE := preload("res://scenes/recon_bolt.tscn")
+
+## How far into the sights a scope has to be before it gives you away. Not 1.0:
+## the glint should be up while you are settling onto the shot, which is the
+## window in which knowing about it is worth anything to the man on the other
+## end of it.
+const SCOPED_AT := 0.8
 ## How far a grenade can be placed. Past this the throw simply falls short -
 ## you cannot lob one across the level, and holding the key longer will not help.
 const THROW_MAX_RANGE := 720.0
@@ -421,6 +432,31 @@ var crouch := 0.0
 ## halfway up, where a dropped bool simply arrives a moment later and the ramp
 ## catches up on its own.
 var armored := false
+## Whether a scope pointed your way actually shows, given where both of you are
+## looking. Static and taking plain numbers, so the one place this is decided is
+## also a place a test can call - see tools/glint_test.gd.
+##
+## `sniper_aim` and `watcher_aim` are world angles, the same ones aim_angle
+## replicates. The asymmetry between the two cones is the mechanic: he has to
+## have picked you out, you only have to be looking his way.
+static func glint_shows(sniper_at: Vector2, sniper_aim: float, watcher_at: Vector2,
+		watcher_aim: float, min_range: float, aim_cone: float,
+		look_cone: float) -> bool:
+	var to_sniper := sniper_at - watcher_at
+	if to_sniper.length() < min_range:
+		return false
+	if absf(angle_difference(sniper_aim, (-to_sniper).angle())) > aim_cone:
+		return false
+	return absf(angle_difference(watcher_aim, to_sniper.angle())) <= look_cone
+
+
+## Whether this player is looking down a scope hard enough for it to show.
+##
+## Replicated, and the only thing anyone else is told about what you are
+## holding. It is what a glint is drawn from - see Hud._draw_sniper_glints - so
+## it is deliberately not "am I aiming": a rifle's irons do not catch the light
+## and a half-raised scope is not on your eye yet.
+var scoped := false
 ## 0 plates down, 1 plates up. Derived on every machine from `armored`, never
 ## sent - see _update_shield.
 var shield := 0.0
@@ -1545,6 +1581,15 @@ func _update_focus(delta: float) -> void:
 	var ramp := ads_time * (weapon.data.ads_speed_scale if weapon.data else 1.0)
 	focus = move_toward(focus, wanted, delta / maxf(ramp, 0.001))
 	weapon.focus = focus
+
+	# One bit for everyone else, worked out here because this is the machine that
+	# knows both halves of it - how far into the sights you are, and what glass
+	# you are looking through. Sent rather than derived at the other end for the
+	# reason `armored` is: nothing about the gun in your hands replicates, and a
+	# float stream of somebody else's focus to answer a yes-or-no question would
+	# be a poor trade. See Hud._draw_sniper_glints.
+	scoped = (focus >= SCOPED_AT and weapon.data != null
+		and weapon.data.scope_glint and is_alive and not is_downed)
 
 
 ## Total magnification right now: the player's own ADS push-in, multiplied by
@@ -3013,6 +3058,12 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 	health = maxf(health - amount, 0.0)
 	_invulnerable = invulnerable_time
 	health_changed.emit(health, max_health)
+
+	# Your own aim goes with it. Charged on what got through rather than on what
+	# arrived, so a plate that stopped the round also stopped most of the shove -
+	# which is a second thing armour is quietly buying you, and the reason a
+	# plated man wins the trade he started.
+	weapon.take_flinch(amount)
 
 	# A hit shoves you and rattles the camera, so incoming fire is felt even when
 	# the shooter is somewhere off screen.

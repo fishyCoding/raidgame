@@ -64,6 +64,9 @@ properties/12/replication_mode = 2
 properties/13/path = NodePath(".:dash_left")
 properties/13/spawn = true
 properties/13/replication_mode = 1
+properties/14/path = NodePath(".:scoped")
+properties/14/spawn = true
+properties/14/replication_mode = 2
 
 [node name="Player" type="CharacterBody2D" groups=["player"]]
 collision_layer = 4

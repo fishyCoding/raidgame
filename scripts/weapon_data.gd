@@ -139,6 +139,14 @@ extends Resource
 @export var reload_time := 2.1
 
 @export_group("Sights")
+## Whether this weapon's glass throws a glint back at whoever it is pointed at.
+##
+## Only true of a scope worth the name. It is the price of the sniper's reach:
+## the same lens that lets you take a shot from outside anyone's ability to
+## answer it is a mirror pointed at the person you are about to take it on, and
+## it only shows while you are actually looking down it. See Player.scoped and
+## Hud._draw_sniper_glints.
+@export var scope_glint := false
 ## Magnification while aimed, on top of the player's own ADS push-in. Above 1
 ## pushes the camera in for a closer look at a nearby target; BELOW 1 pulls it
 ## back so more of the level fits on screen.

@@ -641,6 +641,10 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 		Net.piercing)
 	amount = hit.amount
 	_health = maxf(_health - amount, 0.0)
+	# A guard being shot at shoots worse for it, same as you do. This is most of
+	# what makes shooting first worth anything against a rifle that outranges
+	# yours: the first round buys you the second.
+	weapon.take_flinch(amount)
 	_health_fill.scale.x = _health / max_health
 
 	# Being shot from out of nowhere still gives the position away.

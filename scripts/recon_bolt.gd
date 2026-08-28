@@ -31,9 +31,9 @@ extends Node2D
 ## restored the original arc at the new speed - everything past that is the curve
 ## being asked for.
 ##
-## For a sense of it: across the bow's 910 px reach the arrow now drops about
-## 110 px, against roughly 47 px before any of this. It is a lobbed shot that has
-## to be aimed above what you want to hit, not a flat one.
+## For a sense of it: across the bow's 640 px reach the arrow drops about 55 px.
+## It is a lobbed shot that has to be aimed above what you want to hit, not a
+## flat one.
 @export var gravity := 2400.0
 
 var velocity := Vector2.ZERO

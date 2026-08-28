@@ -12,7 +12,7 @@ extends SceneTree
 ##   AR, 620 rpm, medium vest -> 26 a round, 4 rounds, 290 ms
 ##   AR, medium helmet, head  -> 51 a round, 2 rounds
 ##   AR, nothing on, body     -> 51 a round, 2 rounds
-##   AR, half damage at       -> 480 px, ten player heights
+##   AR, at the falloff floor -> 33 a round, from 1320 px out
 ##
 ## Loaded rather than named: `Damage` reaches Net, and naming it from a --script
 ## tool compiles it before the autoloads exist and breaks the class for the whole
@@ -40,8 +40,26 @@ func _init() -> void:
 	# --- the benchmark ------------------------------------------------------
 	_eq("AR rpm", ar.rounds_per_minute, 620.0)
 	_eq("AR raw damage", ar.damage, 51.0)
-	_eq("AR half-damage range", ar.get_half_damage_range(), 480.0)
-	_eq("AR range in player heights", ar.get_half_damage_range() / BODY_HEIGHT, 10.0)
+	# The range half of the benchmark, restated. It used to be "half damage at
+	# 480 px, ten player heights", which described a rifle that had given up
+	# most of what it did by twenty of them - so every fight worth having was
+	# fought inside the first third of the curve and the rest of the map was
+	# decoration. The window is out at 520-1320 now and the floor is 0.65, which
+	# is the same statement made about a gun that still works at the far end of
+	# a room it can see across.
+	_eq("AR damage at the falloff floor", ar.get_damage_at(9999.0), 33.15, 0.01)
+	_eq("AR floor reached at", ar.falloff_end, 1320.0)
+	_eq("AR floor in player heights", ar.falloff_end / BODY_HEIGHT, 27.5)
+	# Nothing is allowed to keep more of itself at range than the gun built for
+	# range, which is the one ordering in the falloff table that is not a taste
+	# call: a scope you can be seen through has to buy something a rifle cannot.
+	for closer in ["assault_rifle", "smg", "lmg", "pistol", "shotgun"]:
+		var other: WeaponData = load("res://resources/weapons/%s.tres" % closer)
+		var sniper_floor: float = (load("res://resources/weapons/sniper.tres")
+			as WeaponData).min_damage_factor
+		if other.min_damage_factor >= sniper_floor:
+			_failures.append("%s keeps as much of itself at range as the sniper does"
+				% closer)
 
 	var first_body := _first_hit(damage, ar.damage, _kit("medium_vest", 1), false)
 	_eq("AR first round through a medium vest", first_body, 26.0, 0.1)
@@ -146,7 +164,7 @@ func _init() -> void:
 	# came down, and it is carrying one thing: an unhelmeted head is a one-shot
 	# at any range the bullet will travel. At 0.45 it stopped being one somewhere
 	# in the middle distance, which is the shot the gun exists to take.
-	_eq("sniper damage at the falloff floor", sniper.get_damage_at(9999.0), 57.0, 0.01)
+	_eq("sniper damage at the falloff floor", sniper.get_damage_at(9999.0), 71.25, 0.01)
 	var bare_head_far := sniper.get_damage_at(9999.0) * 2.0
 	if bare_head_far < HP:
 		_failures.append("a bare head survives a sniper round at the far end of "
@@ -163,8 +181,8 @@ func _init() -> void:
 		_failures.append("a sniper body shot no longer kills a guard even at "
 			+ "point blank (%.0f against 90)" % sniper.get_damage_at(sniper.falloff_start))
 	else:
-		print("  ok   %-42s %.0f" % ["guard drops to one body shot inside 900px",
-			sniper.get_damage_at(sniper.falloff_start)])
+		print("  ok   %-42s %.0f" % ["guard drops to one body shot inside %.0fpx"
+			% sniper.falloff_start, sniper.get_damage_at(sniper.falloff_start)])
 
 	# Armour has to survive the fight it is priced for. It used to be charged
 	# the whole incoming round rather than the part it stopped, which left a
