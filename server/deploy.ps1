@@ -73,17 +73,12 @@ ssh $Target $remote
 
 if ($Level) {
 	Write-Host "== holding open the '$Level' map"
-	$drop = @"
-set -e
-sudo mkdir -p /etc/systemd/system/raid-server.service.d
-sudo tee /etc/systemd/system/raid-server.service.d/level.conf >/dev/null <<'CONF'
-[Service]
-ExecStart=
-ExecStart=/opt/godot/godot --headless --path $GameDir -- --server=$Port --level=$Level
-CONF
-sudo systemctl daemon-reload
-"@
-	ssh $Target $drop
+	# Sent as base64 on one line. A here-string would be at the mercy of this
+	# file's own line endings by the time ssh hands it to bash, and a stray CR
+	# in `set -e` is a deploy that reports success and changes nothing.
+	$conf = "[Service]`nExecStart=`nExecStart=/opt/godot/godot --headless --path $GameDir -- --server=$Port --level=$Level`n"
+	$b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($conf))
+	ssh $Target "sudo mkdir -p /etc/systemd/system/raid-server.service.d && echo $b64 | base64 -d | sudo tee /etc/systemd/system/raid-server.service.d/level.conf >/dev/null && sudo systemctl daemon-reload && echo '   drop-in written'"
 }
 
 if (-not $NoRestart) {

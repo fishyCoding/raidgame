@@ -98,6 +98,26 @@ powershell -File server\deploy.ps1 -Target ubuntu@<public-ip>
 Packs the project, uploads it, imports it, and restarts the service. Run it
 again any time you change the game - it is the whole deploy.
 
+### Choosing the map
+
+```powershell
+powershell -File server\deploy.ps1 -Target ubuntu@<public-ip> -Level quarry
+```
+
+The server holds one map open and tells every peer which it is as they connect;
+clients load what they are told rather than guessing. `-Level` writes a systemd
+drop-in at `/etc/systemd/system/raid-server.service.d/level.conf`, so going back
+to the world is deleting that one file and `systemctl daemon-reload` - the unit
+setup.sh installed is never rewritten. Omit `-Level` and whatever is already set
+stays set.
+
+Check which one is up with `journalctl -u raid-server | grep 'holding open'`.
+
+> The `.ps1` files here send shell to the box as here-strings, so they must stay
+> on **LF** endings. A CRLF copy delivers `set -e\r` to bash, and the deploy then
+> reports success having changed nothing - the tell is `/tmp/raid.tar.gz` still
+> sitting there afterwards.
+
 ## 5. Play
 
 Start the game, click **JOIN**, type the public IP, press enter. On the server:
