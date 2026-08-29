@@ -2,11 +2,16 @@ extends Control
 
 ## The screen before the level: kit out, then queue.
 ##
-## There is one world and it is always up, so there is nothing here to decide
-## about where you are going - only what you are taking. You fill your slots,
-## press the button, and you are put into the next match that needs somebody.
-## Nobody hosts anybody and there is no address to type: a matchmaking button
-## that asks you for an IP is not matchmaking.
+## There is one world and it is always up, so the queue asks you nothing about
+## where you are going - only what you are taking. You fill your slots, press the
+## button, and you are put into the next match that needs somebody. Nobody hosts
+## anybody and there is no address to type: a matchmaking button that asks you
+## for an IP is not matchmaking.
+##
+## The map button is the exception, and it is not on that path. Maps that no
+## server is holding open can still be played alone, and going in alone is the
+## only way they can be played at all - so the button sits with the two that go
+## in alone and says nothing about the queue.
 ##
 ## It exists because of an ordering problem as much as for its own sake. The
 ## level opens a session as it loads - it has to, or a character never appears -
@@ -18,7 +23,6 @@ extends Control
 ## What is bought here is parked on Net, which is the only thing alive across the
 ## scene change, and handed to the body when the countdown ends.
 
-const MAIN_SCENE := "res://scenes/main.tscn"
 const SHOP_SCRIPT := preload("res://scripts/shop.gd")
 
 ## Where to dial. The compiled-in server unless the command line says otherwise.
@@ -28,6 +32,7 @@ var _port := Net.DEFAULT_PORT
 var _shop: Control
 var _status: Label
 var _controls: Button
+var _map: Button
 var _kit: Inventory
 
 
@@ -43,7 +48,11 @@ func _ready() -> void:
 ## clicking anything:
 ##
 ##   godot --path . -- --solo
+##   godot --path . -- --solo=quarry
 ##   godot --path . -- --join=127.0.0.1
+##
+## --solo takes a map, because the maps that are not the world can only be
+## reached that way and a headless test of one should not have to click.
 ##
 ## --join is also how you point the button at a server that is not the live one:
 ## it replaces the address and queues immediately, which is what testing against
@@ -59,7 +68,9 @@ func _take_orders_from_the_command_line() -> void:
 		if arg == "--server" or arg.begins_with("--server="):
 			_on_serve(int(arg.get_slice("=", 1)) if arg.contains("=") else Net.DEFAULT_PORT)
 			return
-		if arg == "--solo":
+		if arg == "--solo" or arg.begins_with("--solo="):
+			if arg.contains("="):
+				_choose_map(arg.get_slice("=", 1))
 			_on_solo()
 			return
 		if arg.begins_with("--port="):
@@ -126,6 +137,20 @@ func _build() -> void:
 	test.pressed.connect(_on_test_drive)
 	add_child(test)
 
+	# Which map the two buttons to the left of it open. Matchmaking is not on it:
+	# there is one world and the queue always goes there, so a map picker that
+	# looked like it applied to the big button would be lying about where you are
+	# about to be put.
+	_map = Button.new()
+	_map.flat = true
+	_map.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_map.position = Vector2(316.0, -62.0)
+	_map.custom_minimum_size = Vector2(180.0, 34.0)
+	_map.tooltip_text = "which map you go into on your own - matchmaking is always the yard"
+	_map.pressed.connect(_on_cycle_map)
+	add_child(_map)
+	_refresh_map_label()
+
 	# Cycles auto / touch / desktop and remembers the answer. On this screen
 	# rather than buried in a settings menu because the reason to touch it is to
 	# look at the on-screen controls on a PC, which you do constantly while they
@@ -191,10 +216,34 @@ func _refresh_controls_label() -> void:
 		_controls.text = "controls: %s" % PlayerInput.scheme_name()
 
 
+func _on_cycle_map() -> void:
+	Net.cycle_solo_level()
+	_refresh_map_label()
+
+
+## Picks a map by name, for the command line. Loose about how it is spelled -
+## see Net.level_named - and it says so and carries on if there is no such map,
+## because a typo in a launch argument should not cost you the launch.
+func _choose_map(wanted: String) -> void:
+	var found := Net.level_named(wanted)
+	if found < 0:
+		push_warning("no map called '%s' - staying on %s" % [wanted, Net.solo_name()])
+		return
+	Net.solo_level = found
+	_refresh_map_label()
+
+
+func _refresh_map_label() -> void:
+	if _map:
+		_map.text = "map: %s" % Net.solo_name()
+
+
+## Alone, on whichever map the button says. A real run: everything carried in
+## was bought at the counter, and the map is the only thing chosen for free.
 func _on_solo() -> void:
 	Net.staged_kit = _kit
 	Net.play_solo()
-	_enter_level()
+	_enter_level(Net.solo_scene())
 
 
 ## An empty level, one of you, everything already in your hands.
@@ -212,7 +261,7 @@ func _on_test_drive() -> void:
 	Net.staged_kit = _test_kit()
 	Net.test_drive = true
 	Net.play_solo()
-	_enter_level()
+	_enter_level(Net.solo_scene())
 
 
 ## One of everything, so nothing goes untested for want of affording it. Built by
@@ -244,13 +293,15 @@ func _on_serve(port: int) -> void:
 		push_error("could not open port %d - is something already on it?" % port)
 		get_tree().quit(1)
 		return
-	_enter_level()
+	# The world, whatever the menu was left on. A server holds open the map its
+	# clients are going to load, and that is only ever this one.
+	_enter_level(Net.WORLD)
 
 
 func _process(_delta: float) -> void:
 	if Net.in_session:
 		set_process(false)
-		_enter_level()
+		_enter_level(Net.WORLD)
 
 
 func _on_session_started(_as_host: bool) -> void:
@@ -266,5 +317,5 @@ func _say(text: String) -> void:
 		_status.text = text
 
 
-func _enter_level() -> void:
-	get_tree().change_scene_to_file(MAIN_SCENE)
+func _enter_level(scene: String) -> void:
+	get_tree().change_scene_to_file(scene)

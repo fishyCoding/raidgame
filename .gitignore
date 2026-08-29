@@ -5,6 +5,3 @@
 # Exported builds. The Windows build ships as a GitHub release asset - it is
 # 105 MB, over GitHub's 100 MB per-file push limit, so it cannot live here.
 build/
-
-# A map still being built. Tracked once by accident; kept out until it is ready.
-scenes/quarry.tscn

@@ -48,6 +48,21 @@ const MAX_PLAYERS := 4
 ## session with `-- --join=127.0.0.1` - see lobby.gd.
 const MATCHMAKING_HOST := "150.136.57.86"
 
+## The one world that address holds open. Matchmaking never asks which map,
+## because there is only ever this one on the other end of it.
+const WORLD := "res://scenes/main.tscn"
+
+## Every map you can open, in menu order, and what to call it on screen.
+##
+## The world is first: playing it alone is the same raid without the company.
+## Everything after it is solo only - a map that no server is holding open is
+## not somewhere two people can be matched into, and saying so in the menu is
+## better than a button that finds nobody forever.
+const LEVELS := [
+	{"name": "the yard", "scene": WORLD},
+	{"name": "the quarry", "scene": "res://scenes/quarry.tscn"},
+]
+
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const HOOK_SCENE := preload("res://scenes/grapple_hook.tscn")
 const PROJECTION_SCENE := preload("res://scenes/projection.tscn")
@@ -72,6 +87,13 @@ var staged_kit: Inventory = null
 ## run - a real raid that quietly skipped the briefing because of a button you
 ## pressed ten minutes ago would be a difficult thing to explain to yourself.
 var test_drive := false
+
+## Which of LEVELS the menu opens when you go in on your own.
+##
+## Parked here rather than on the menu because the menu does not survive a raid:
+## dying builds a fresh one, and a map you picked should outlive the run you
+## picked it for. The same reason staged_kit is here.
+var solo_level := 0
 
 ## True once host() or join() has succeeded. Single player counts: it is a
 ## session of one.
@@ -225,6 +247,33 @@ func play_solo() -> void:
 	in_session = true
 	is_host = true
 	session_started.emit(true)
+
+
+## Where playing alone goes, and what the menu calls it.
+func solo_scene() -> String:
+	return str(LEVELS[solo_level]["scene"])
+
+
+func solo_name() -> String:
+	return str(LEVELS[solo_level]["name"])
+
+
+## The next map along, wrapping. The menu's map button and nothing else.
+func cycle_solo_level() -> void:
+	solo_level = (solo_level + 1) % LEVELS.size()
+
+
+## The map whose name contains this text, or -1 for no such map. Loose on
+## purpose: the command line should be able to say `quarry` rather than having
+## to spell "the quarry" exactly the way the menu does.
+func level_named(text: String) -> int:
+	var wanted := text.strip_edges().to_lower()
+	if wanted.is_empty():
+		return -1
+	for i in LEVELS.size():
+		if str(LEVELS[i]["name"]).to_lower().contains(wanted):
+			return i
+	return -1
 
 
 func leave(reason := "left the session") -> void:
