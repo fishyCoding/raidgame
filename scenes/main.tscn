@@ -289,7 +289,7 @@ color = Color(0.231373, 0.278431, 0.341176, 1)
 [node name="YardCeiling9" parent="World" unique_id=919175633 instance=ExtResource("1_platform")]
 texture_filter = 4
 texture_repeat = 2
-position = Vector2(703, 156.99998)
+position = Vector2(684, 138)
 rotation = 1.5707964
 scale = Vector2(0.44095403, 1)
 size = Vector2(820, 24)

@@ -12,6 +12,11 @@
 param(
 	[Parameter(Mandatory = $true)][string]$Target,
 	[string]$GameDir = '/opt/raid',
+	# Which map the box holds open. Empty leaves whatever it is already set to.
+	# Written as a systemd drop-in rather than by rewriting the unit, so going
+	# back to the world is deleting one file rather than re-running setup.sh.
+	[string]$Level = '',
+	[int]$Port = 27015,
 	[switch]$NoRestart
 )
 
@@ -65,6 +70,21 @@ rm -f /tmp/raid.tar.gz
 HOME='$GameDir' XDG_CONFIG_HOME='$GameDir/.config' XDG_CACHE_HOME='$GameDir/.cache' XDG_DATA_HOME='$GameDir/.local/share' /opt/godot/godot --headless --path '$GameDir' --import
 "@
 ssh $Target $remote
+
+if ($Level) {
+	Write-Host "== holding open the '$Level' map"
+	$drop = @"
+set -e
+sudo mkdir -p /etc/systemd/system/raid-server.service.d
+sudo tee /etc/systemd/system/raid-server.service.d/level.conf >/dev/null <<'CONF'
+[Service]
+ExecStart=
+ExecStart=/opt/godot/godot --headless --path $GameDir -- --server=$Port --level=$Level
+CONF
+sudo systemctl daemon-reload
+"@
+	ssh $Target $drop
+}
 
 if (-not $NoRestart) {
 	Write-Host "== restarting"

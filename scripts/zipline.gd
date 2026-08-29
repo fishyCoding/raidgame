@@ -89,6 +89,41 @@ func _ready() -> void:
 	add_to_group(&"zipline")
 	# The editor draws a cable nobody is riding, so it has no reason to look.
 	set_process(not Engine.is_editor_hint())
+	if not Engine.is_editor_hint():
+		# Deferred: the level is still being built around us, and this moves the
+		# node to a different branch of it.
+		_lift_above_the_dark.call_deferred()
+
+
+## Puts the cable on the layer the ambient dark does not reach.
+##
+## A zipline is map knowledge, not news about anybody. It is in the same place
+## every raid, it was on the briefing map you were shown on the way in, and a
+## route you have already been told about is not worth hiding - a cable you
+## cannot see in an unlit room is a way up you have to walk over to find.
+##
+## A grapple line is the opposite of this and stays where it is: somebody else's
+## rope drawn across a dark room says where they are, which way they are going
+## and roughly how fast, none of it earned by looking. That one is in the
+## "shadowed" group and the dark takes it - see GrappleHook.
+##
+## The overlay is a CanvasLayer that follows the viewport, so world coordinates
+## still mean what they meant and the cable does not move a pixel; what stops
+## applying is the CanvasModulate on the layer below it. The cost is that a cable
+## now draws in front of the wall it used to pass behind, which is the same trade
+## every other thing on that layer has already made.
+func _lift_above_the_dark() -> void:
+	var overlay := get_tree().get_first_node_in_group(&"world_overlay") as CanvasLayer
+	var parent := get_parent()
+	if overlay == null or parent == null or parent == overlay:
+		return
+	# Kept as a transform rather than a position: the container a cable is filed
+	# under is not guaranteed to sit at the origin, and a level where it does not
+	# would otherwise slide every cable in it.
+	var was := global_transform
+	parent.remove_child(self)
+	overlay.add_child(self)
+	global_transform = was
 
 
 ## Watching for riders.

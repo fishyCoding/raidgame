@@ -104,6 +104,16 @@ texture = ExtResource("6_y7d88")
 size = Vector2(1350, 500)
 tint = Color(0.427451, 0.470588, 0.545098, 1)
 
+[node name="BackPanelYard13" parent="Backdrop" unique_id=1067065801 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1392.9999, -1817)
+scale = Vector2(-0.8673803, 0.8192807)
+texture = ExtResource("6_y7d88")
+size = Vector2(900, 400)
+tiled = true
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
 [node name="BackPanelYard12" parent="Backdrop" unique_id=1748636192 instance=ExtResource("3_hdcd5")]
 texture_filter = 4
 texture_repeat = 2
@@ -120,6 +130,24 @@ position = Vector2(-2890, -1097)
 scale = Vector2(-0.8673803, 0.8192807)
 texture = ExtResource("6_y7d88")
 size = Vector2(900, 1050)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackPanelYard15" parent="Backdrop" unique_id=1537506378 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4556, -1129.0001)
+scale = Vector2(-0.8673803, 0.8192807)
+texture = ExtResource("6_y7d88")
+size = Vector2(700, 330)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackPanelYard14" parent="Backdrop" unique_id=1498581381 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1698.9999, -169)
+scale = Vector2(-0.8673803, 0.8192807)
+texture = ExtResource("6_y7d88")
+size = Vector2(1000, 700)
 tint = Color(0.427451, 0.470588, 0.545098, 1)
 
 [node name="BackPanelControl" parent="Backdrop" unique_id=1745300916 instance=ExtResource("3_hdcd5")]
@@ -140,39 +168,158 @@ texture = ExtResource("7_2hhkm")
 size = Vector2(360, 360)
 tint = Color(0.427451, 0.470588, 0.545098, 1)
 
+[node name="BackPlant" parent="Backdrop" unique_id=1462540019 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3150, -3400)
+scale = Vector2(-1, 1)
+texture = ExtResource("6_y7d88")
+size = Vector2(1520, 640)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackSilo1" parent="Backdrop" unique_id=741167582 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2700, -1910)
+texture = ExtResource("6_y7d88")
+size = Vector2(376, 700)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackSilo2" parent="Backdrop" unique_id=1573876081 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3250, -1910)
+scale = Vector2(-1, 1)
+texture = ExtResource("6_y7d88")
+size = Vector2(376, 580)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackScreen" parent="Backdrop" unique_id=1756921098 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4100, -1900)
+texture = ExtResource("6_y7d88")
+size = Vector2(800, 400)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackPump" parent="Backdrop" unique_id=1429842152 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4000, -885)
+texture = ExtResource("5_63r5p")
+size = Vector2(180, 180)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackHaul" parent="Backdrop" unique_id=474333547 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3027, 633)
+scale = Vector2(-1, 1)
+texture = ExtResource("6_y7d88")
+size = Vector2(1050, 480)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackShed" parent="Backdrop" unique_id=1677520901 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2045, 1130)
+texture = ExtResource("6_y7d88")
+size = Vector2(600, 280)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackSump" parent="Backdrop" unique_id=1350523221 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3760, 2240)
+texture = ExtResource("6_y7d88")
+size = Vector2(760, 460)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackEastPav" parent="Backdrop" unique_id=1396781463 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(1209, -1097)
+texture = ExtResource("6_y7d88")
+size = Vector2(781, 860)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackEastPav2" parent="Backdrop" unique_id=1537240829 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3556, -521)
+texture = ExtResource("6_y7d88")
+size = Vector2(1100, 300)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackEastPav3" parent="Backdrop" unique_id=347336549 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4542, 45)
+texture = ExtResource("6_y7d88")
+size = Vector2(800, 440)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackPav" parent="Backdrop" unique_id=1319164395 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(1520, -2541)
+texture = ExtResource("6_y7d88")
+size = Vector2(1059, 410)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackShaft" parent="Backdrop" unique_id=1954101156 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-250, -500)
+texture = ExtResource("4_q66qn")
+size = Vector2(600, 1800)
+tiled = true
+tile_size = 240.0
+tint = Color(0.219608, 0.239216, 0.298039, 1)
+
+[node name="BackLowE" parent="Backdrop" unique_id=1933892896 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(700, 300)
+texture = ExtResource("6_y7d88")
+size = Vector2(1400, 900)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackBench" parent="Backdrop" unique_id=1467155296 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-2955, 398.00012)
+rotation = 0.47788185
+texture = ExtResource("6_y7d88")
+size = Vector2(1000, 800)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackWestHouse" parent="Backdrop" unique_id=958604863 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-2900, 300)
+scale = Vector2(-1, 1)
+texture = ExtResource("6_y7d88")
+size = Vector2(400, 240)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackFloorShed" parent="Backdrop" unique_id=1083937480 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1500, 1130)
+texture = ExtResource("6_y7d88")
+size = Vector2(500, 280)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="BackFloorShed2" parent="Backdrop" unique_id=1467065540 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-2158, 1191)
+texture = ExtResource("6_y7d88")
+size = Vector2(700, 140)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
 [node name="World" type="Node2D" parent="." unique_id=1808002648]
-
-[node name="ControlPart13" parent="World" unique_id=609256053 instance=ExtResource("8_i5su0")]
-texture_filter = 4
-texture_repeat = 2
-position = Vector2(-4211, -334)
-scale = Vector2(5.8934402, -0.54980445)
-size = Vector2(26, 116)
-color = Color(0.196078, 0.223529, 0.278431, 1)
-
-[node name="ControlPart18" parent="World" unique_id=1258648306 instance=ExtResource("8_i5su0")]
-texture_filter = 4
-texture_repeat = 2
-position = Vector2(-3937, -325)
-scale = Vector2(5.8934402, -0.54980445)
-size = Vector2(26, 116)
-color = Color(0.196078, 0.223529, 0.278431, 1)
-
-[node name="ControlPart19" parent="World" unique_id=2071449639 instance=ExtResource("8_i5su0")]
-texture_filter = 4
-texture_repeat = 2
-position = Vector2(-4057, -364)
-scale = Vector2(5.8934402, -0.54980445)
-size = Vector2(26, 116)
-color = Color(0.196078, 0.223529, 0.278431, 1)
-
-[node name="ControlDesk5" parent="World" unique_id=142867064 instance=ExtResource("8_i5su0")]
-texture_filter = 4
-texture_repeat = 2
-position = Vector2(-3625, 2957.0002)
-scale = Vector2(1.3680797, 0.89835685)
-size = Vector2(200, 24)
-color = Color(0.278431, 0.313726, 0.360784, 1)
 
 [node name="MastCeiling2" parent="World" unique_id=1325371114 instance=ExtResource("8_i5su0")]
 texture_filter = 4
@@ -277,6 +424,51 @@ rotation = 1.5707964
 size = Vector2(227.91382, 24)
 color = Color(0.231373, 0.278431, 0.341176, 1)
 
+[node name="MastCeiling68" parent="World" unique_id=516667495 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-991, -1815.3611)
+rotation = 1.5707964
+size = Vector2(338.63635, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling72" parent="World" unique_id=428821418 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1248, -1905.513)
+rotation = 1.5707964
+size = Vector2(164.21045, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling70" parent="World" unique_id=1539308837 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1122, -1977)
+size = Vector2(276.14844, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling71" parent="World" unique_id=444201640 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1122, -1977)
+size = Vector2(276.14844, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling73" parent="World" unique_id=1630883411 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1122, -1834)
+size = Vector2(276.14844, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling69" parent="World" unique_id=206682431 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1790, -1762)
+rotation = 1.5707964
+size = Vector2(227.91382, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
 [node name="MastCeiling6" parent="World" unique_id=1746893371 instance=ExtResource("8_i5su0")]
 texture_filter = 4
 texture_repeat = 2
@@ -287,8 +479,8 @@ color = Color(0.231373, 0.278431, 0.341176, 1)
 [node name="MastCeiling15" parent="World" unique_id=86200566 instance=ExtResource("8_i5su0")]
 texture_filter = 4
 texture_repeat = 2
-position = Vector2(3776.5234, 1871)
-size = Vector2(1692.1563, 24)
+position = Vector2(3495.9072, 1847)
+size = Vector2(1130.8145, 24)
 color = Color(0.231373, 0.278431, 0.341176, 1)
 
 [node name="MastCeiling18" parent="World" unique_id=1192680902 instance=ExtResource("8_i5su0")]
@@ -370,6 +562,13 @@ position = Vector2(-2354.664, -2333.9998)
 size = Vector2(1187.8418, 24)
 color = Color(0.231373, 0.278431, 0.341176, 1)
 
+[node name="MastCeiling67" parent="World" unique_id=1706893346 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1477.0416, -1657)
+size = Vector2(660.7517, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
 [node name="MastCeiling37" parent="World" unique_id=922474961 instance=ExtResource("8_i5su0")]
 texture_filter = 4
 texture_repeat = 2
@@ -387,8 +586,8 @@ color = Color(0.231373, 0.278431, 0.341176, 1)
 [node name="MastCeiling38" parent="World" unique_id=1167396351 instance=ExtResource("8_i5su0")]
 texture_filter = 4
 texture_repeat = 2
-position = Vector2(-3930, -1769)
-size = Vector2(225.40967, 24)
+position = Vector2(-3889.6665, -1769)
+size = Vector2(306.07617, 24)
 color = Color(0.231373, 0.278431, 0.341176, 1)
 
 [node name="MastCeiling43" parent="World" unique_id=80815891 instance=ExtResource("8_i5su0")]
@@ -415,8 +614,8 @@ color = Color(0.231373, 0.278431, 0.341176, 1)
 [node name="MastCeiling39" parent="World" unique_id=1677438460 instance=ExtResource("8_i5su0")]
 texture_filter = 4
 texture_repeat = 2
-position = Vector2(-4389.4033, -1458)
-size = Vector2(855.29395, 24)
+position = Vector2(-4198.8936, -1458)
+size = Vector2(1236.312, 24)
 color = Color(0.231373, 0.278431, 0.341176, 1)
 
 [node name="MastCeiling40" parent="World" unique_id=1043565258 instance=ExtResource("8_i5su0")]
@@ -429,8 +628,31 @@ color = Color(0.231373, 0.278431, 0.341176, 1)
 [node name="MastCeiling41" parent="World" unique_id=1045588481 instance=ExtResource("8_i5su0")]
 texture_filter = 4
 texture_repeat = 2
-position = Vector2(-4257, -995)
-size = Vector2(225.40967, 24)
+position = Vector2(-4352.891, -995)
+size = Vector2(417.19238, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling74" parent="World" unique_id=1884139596 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4540.974, -1259)
+size = Vector2(565.24316, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling75" parent="World" unique_id=1379150131 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4258.3525, -1181.9496)
+rotation = -1.5707964
+size = Vector2(154.10083, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling76" parent="World" unique_id=945353738 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4258.3525, -1181.9496)
+rotation = -1.5707964
+size = Vector2(154.10083, 24)
 color = Color(0.231373, 0.278431, 0.341176, 1)
 
 [node name="MastCeiling42" parent="World" unique_id=73569672 instance=ExtResource("8_i5su0")]
@@ -451,17 +673,17 @@ color = Color(0.231373, 0.278431, 0.341176, 1)
 [node name="MastCeiling13" parent="World" unique_id=1249090820 instance=ExtResource("8_i5su0")]
 texture_filter = 4
 texture_repeat = 2
-position = Vector2(5428, 1039.0001)
-rotation = 2.3561945
-size = Vector2(4664.246, 24)
+position = Vector2(4425.9434, 2046.6257)
+rotation = 2.3605185
+size = Vector2(1822.15, 24)
 color = Color(0.231373, 0.278431, 0.341176, 1)
 
 [node name="MastCeiling14" parent="World" unique_id=585967721 instance=ExtResource("8_i5su0")]
 texture_filter = 4
 texture_repeat = 2
-position = Vector2(3991, 2916)
-rotation = 0.7853982
-size = Vector2(4664.246, 24)
+position = Vector2(3069.503, 1977.7416)
+rotation = 0.7737463
+size = Vector2(2034.2908, 24)
 color = Color(0.231373, 0.278431, 0.341176, 1)
 
 [node name="MastCeiling8" parent="World" unique_id=2025808703 instance=ExtResource("8_i5su0")]
@@ -514,7 +736,7 @@ color = Color(0.231373, 0.278431, 0.341176, 1)
 [node name="MastCeiling23" parent="World" unique_id=816195562 instance=ExtResource("8_i5su0")]
 texture_filter = 4
 texture_repeat = 2
-position = Vector2(-2110, -2077)
+position = Vector2(-2042, -1983)
 size = Vector2(332.19287, 24)
 color = Color(0.231373, 0.278431, 0.341176, 1)
 
@@ -574,6 +796,20 @@ position = Vector2(-3450.029, -838)
 size = Vector2(326.9956, 24)
 color = Color(0.231373, 0.278431, 0.341176, 1)
 
+[node name="MastCeiling65" parent="World" unique_id=2020813385 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4011.105, -650)
+size = Vector2(442.78613, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="MastCeiling66" parent="World" unique_id=2013758023 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-4011, -652)
+size = Vector2(442.78613, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
 [node name="MastCeiling34" parent="World" unique_id=98051846 instance=ExtResource("8_i5su0")]
 texture_filter = 4
 texture_repeat = 2
@@ -584,9 +820,9 @@ color = Color(0.231373, 0.278431, 0.341176, 1)
 [node name="MastCeiling24" parent="World" unique_id=443308328 instance=ExtResource("8_i5su0")]
 texture_filter = 4
 texture_repeat = 2
-position = Vector2(-2374, -1969)
-rotation = -0.7853982
-size = Vector2(332.19287, 24)
+position = Vector2(-2340.492, -1915.6666)
+rotation = -0.40163586
+size = Vector2(328.0141, 24)
 color = Color(0.231373, 0.278431, 0.341176, 1)
 
 [node name="MastCeiling25" parent="World" unique_id=871161588 instance=ExtResource("8_i5su0")]
@@ -629,33 +865,1675 @@ rotation = 2.3561945
 size = Vector2(1170.6678, 24)
 color = Color(0.231373, 0.278431, 0.341176, 1)
 
-[node name="MastCeiling4" parent="World" unique_id=1633630238 instance=ExtResource("8_i5su0")]
+[node name="PlantFloor" parent="World" unique_id=292121917 instance=ExtResource("8_i5su0")]
 texture_filter = 4
 texture_repeat = 2
-position = Vector2(-4208, -301.99997)
-scale = Vector2(0.76391536, 0.73447883)
-size = Vector2(1300, 24)
+position = Vector2(3150, -3120)
+size = Vector2(1500, 24)
 color = Color(0.231373, 0.278431, 0.341176, 1)
 
+[node name="PlantDeck" parent="World" unique_id=259197761 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2950, -3420)
+size = Vector2(1100, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PlantWallW" parent="World" unique_id=1529473294 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2412, -3270)
+rotation = -1.5707963
+size = Vector2(300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PlantWallE" parent="World" unique_id=449249416 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3888, -3552.5)
+rotation = 1.5707963
+size = Vector2(345, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PlantSill" parent="World" unique_id=1174006574 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4050, -3060)
+size = Vector2(300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PlantRail" parent="World" unique_id=668577582 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3450, -3300)
+size = Vector2(300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PlantStack" parent="World" unique_id=30903323 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3560, -3176)
+size = Vector2(220, 88)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="PlantHopper" parent="World" unique_id=2145092467 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2620, -3190)
+size = Vector2(160, 116)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="GantryA" parent="World" unique_id=94351722 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4100, -2960)
+size = Vector2(440, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="GantryB" parent="World" unique_id=515454490 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3300, -2780)
+size = Vector2(700, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="GantryC" parent="World" unique_id=2139394389 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4150, -2600)
+size = Vector2(620, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="GantryD" parent="World" unique_id=1637148711 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2650, -2560)
+size = Vector2(560, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="GantryE" parent="World" unique_id=1154731426 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3450, -2380)
+size = Vector2(900, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="GantryStep" parent="World" unique_id=415196885 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4285, -2820)
+size = Vector2(210, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="GantryMast" parent="World" unique_id=1237883881 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2382, -2440)
+rotation = 1.5707963
+size = Vector2(240, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="Silo1Roof" parent="World" unique_id=1596727914 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2700, -2260)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="Silo1Floor" parent="World" unique_id=2092078838 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2700, -1560)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="Silo1WallW" parent="World" unique_id=512702089 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2512, -1910)
+rotation = 1.5707963
+size = Vector2(700, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="Silo1WallE" parent="World" unique_id=2092296847 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2888, -1990)
+rotation = 1.5707963
+size = Vector2(540, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="Silo1Ledge" parent="World" unique_id=337434716 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2620, -1880)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="Silo2Roof" parent="World" unique_id=172698329 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3250, -2200)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="Silo2Floor" parent="World" unique_id=1860063932 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3250, -1620)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="Silo2WallW" parent="World" unique_id=1738183593 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3062, -1990)
+rotation = 1.5707963
+size = Vector2(420, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="Silo2WallE" parent="World" unique_id=1621842054 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3438, -1910)
+rotation = 1.5707963
+size = Vector2(580, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="Silo2Ledge" parent="World" unique_id=788320908 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3340, -1880)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="SiloBridge" parent="World" unique_id=26345050 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2975, -1590)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ScreenRoof" parent="World" unique_id=1919391317 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4100, -2100)
+size = Vector2(800, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ScreenFloor" parent="World" unique_id=966390940 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3975, -1700)
+size = Vector2(1050, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ScreenWallE" parent="World" unique_id=1684403701 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4488, -1900)
+rotation = 1.5707963
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ScreenPartition" parent="World" unique_id=131516067 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4150, -2030)
+rotation = 1.5707963
+size = Vector2(140, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ScreenDeck" parent="World" unique_id=846214156 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4250, -1880)
+size = Vector2(300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ScreenGear" parent="World" unique_id=536406306 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3850, -1756)
+size = Vector2(180, 88)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ConveyorA" parent="World" unique_id=215397449 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2175, -1360)
+rotation = -0.1402496
+size = Vector2(858.4288, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ConveyorB" parent="World" unique_id=1564744862 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4100, -1440)
+size = Vector2(600, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="GalleryDeck" parent="World" unique_id=621697912 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3300, -1150)
+size = Vector2(1100, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="GalleryWall" parent="World" unique_id=687897983 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3838, -1246)
+rotation = -1.5707963
+size = Vector2(168, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="GalleryLedgeE" parent="World" unique_id=273011481 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4500, -1080)
+size = Vector2(500, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PumpRoof" parent="World" unique_id=2048634773 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4000, -980)
+size = Vector2(300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PumpFloor" parent="World" unique_id=919586030 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4000, -790)
+size = Vector2(300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PumpWallW" parent="World" unique_id=693607066 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3862, -885)
+rotation = 1.5707963
+size = Vector2(190, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PumpWallE" parent="World" unique_id=1554131194 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4138, -930)
+rotation = 1.5707963
+size = Vector2(100, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck1" parent="World" unique_id=1865530656 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2200, -600)
+size = Vector2(900, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck2" parent="World" unique_id=856154264 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3557.788, -380)
+size = Vector2(1115.5762, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck9" parent="World" unique_id=1116577319 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3373, -679)
+size = Vector2(726.47314, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck10" parent="World" unique_id=1682017472 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3009.764, -624.33984)
+rotation = 1.5707964
+size = Vector2(109.320496, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck11" parent="World" unique_id=2136375371 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4104, -491.82834)
+rotation = 1.5707964
+size = Vector2(238.97723, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck12" parent="World" unique_id=218208796 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4104, -493)
+rotation = 1.5707964
+size = Vector2(238.97723, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck3" parent="World" unique_id=1673592269 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4500, -160)
+size = Vector2(900, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck14" parent="World" unique_id=1304825109 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4820.7744, 49)
+size = Vector2(246.45166, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck15" parent="World" unique_id=653447046 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4257.7744, -19.838531)
+rotation = 1.5707964
+size = Vector2(278.32294, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck4" parent="World" unique_id=80523832 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2600, 60)
+size = Vector2(700, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck5" parent="World" unique_id=1633928191 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3761, 320)
+size = Vector2(978, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck6" parent="World" unique_id=1567244876 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2050, 560)
+size = Vector2(700, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck7" parent="World" unique_id=1709591025 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4600, 640)
+size = Vector2(800, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck13" parent="World" unique_id=873224232 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3803, 1160)
+size = Vector2(800, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck16" parent="World" unique_id=1628093397 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3954, 1405)
+size = Vector2(241.07349, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulDeck8" parent="World" unique_id=1775755264 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3100, 880)
+size = Vector2(900, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulMast" parent="World" unique_id=596328007 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2262, -14.426636)
+rotation = -1.5707964
+size = Vector2(148.85327, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulMast4" parent="World" unique_id=648123591 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2436, -260)
+size = Vector2(339.28198, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulMast5" parent="World" unique_id=1681941975 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2436, -260)
+size = Vector2(339.28198, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulMast3" parent="World" unique_id=621349466 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2280.6143, -94.30605)
+rotation = 3.1395285
+size = Vector2(296.6215, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulMast6" parent="World" unique_id=282227182 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2280.6143, -94.30605)
+rotation = 3.1395285
+size = Vector2(296.6215, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulMast2" parent="World" unique_id=511429210 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3538, 760)
+rotation = -1.5707963
+size = Vector2(240, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="HaulMast7" parent="World" unique_id=1760354885 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3678.8862, 639.9998)
+rotation = 3.1415927
+size = Vector2(281.77075, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="WallStep1" parent="World" unique_id=2025869987 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4395, 918)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="WallStep2" parent="World" unique_id=956938966 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4900, 1120)
+size = Vector2(300, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShopRoof" parent="World" unique_id=2087808899 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2850, 400)
+size = Vector2(700, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShopFloor" parent="World" unique_id=656540406 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2850, 800)
+size = Vector2(700, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShopWallW" parent="World" unique_id=1910450803 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2512, 510)
+rotation = 1.5707963
+size = Vector2(220, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShopWallE" parent="World" unique_id=1575670310 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3188, 600)
+rotation = 1.5707963
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShopLedge" parent="World" unique_id=1732943910 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2660, 620)
+size = Vector2(260, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShopBench" parent="World" unique_id=1838828063 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3060, 744)
+size = Vector2(220, 88)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="RimLedge1" parent="World" unique_id=2130739680 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4495, -2400)
+size = Vector2(190, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="RimLedge2" parent="World" unique_id=881377344 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4715, -1900)
+size = Vector2(230, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="WallStep0" parent="World" unique_id=1070439036 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4935, -620)
+size = Vector2(230, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="WallStep0b" parent="World" unique_id=1258473369 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4671.552, 253)
+size = Vector2(531.1035, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="WallStep0b2" parent="World" unique_id=1121950867 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4937.1035, 44.87773)
+rotation = 1.5707964
+size = Vector2(416.24454, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShedRoof" parent="World" unique_id=1481246759 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2045, 1000)
+size = Vector2(590, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShedWallE" parent="World" unique_id=1747363001 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2332, 1129)
+rotation = 1.5707963
+size = Vector2(258, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShedCrate" parent="World" unique_id=150735498 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2100, 1213)
+size = Vector2(160, 88)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="PitFloorE" parent="World" unique_id=1715954149 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4336, 1871)
+size = Vector2(572, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PitDeck" parent="World" unique_id=971793468 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4380, 1560)
+size = Vector2(560, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PitDeck2" parent="World" unique_id=60427882 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3150, 1442)
+size = Vector2(560, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PitHopper" parent="World" unique_id=1263203552 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(4300, 1815)
+size = Vector2(240, 88)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="SumpShelf" parent="World" unique_id=1738448225 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3650, 2100)
+size = Vector2(500, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="SumpFloor" parent="World" unique_id=1230190634 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3780, 2380)
+size = Vector2(600, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="SumpCrate" parent="World" unique_id=2046888094 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3600, 2324)
+size = Vector2(140, 88)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="YardFloor" parent="World" unique_id=1220860647 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-845, -821)
+size = Vector2(2910, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardMast" parent="World" unique_id=1878699173 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-250, -2173.5)
+rotation = -1.5707963
+size = Vector2(767, 40)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardPlat2" parent="World" unique_id=1748024944 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-250, -1200)
+size = Vector2(600, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardPlat1" parent="World" unique_id=535641667 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-250, -1701)
+size = Vector2(600, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="EastFaceA" parent="World" unique_id=495755045 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(805, -1527)
+rotation = 1.5707963
+size = Vector2(366, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="EastFaceB" parent="World" unique_id=7437626 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(805, -1072)
+rotation = 1.5707963
+size = Vector2(256, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="EastFaceC" parent="World" unique_id=1999696224 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(805, -700)
+rotation = 1.5707963
+size = Vector2(256, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="EastBalc1" parent="World" unique_id=133400687 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(773, -1701)
+size = Vector2(264, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="EastBalc2" parent="World" unique_id=1879092324 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(774, -1200)
+size = Vector2(254, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="EastBalc3" parent="World" unique_id=228543632 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(844, -821)
+size = Vector2(268, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="EastDeck1" parent="World" unique_id=355392072 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(1062, -1859)
+size = Vector2(528, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="EastDeck2" parent="World" unique_id=1385433679 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(1259.4064, -1522)
+size = Vector2(676.8125, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="EastDeck3" parent="World" unique_id=227247059 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(892, -1388)
+size = Vector2(182, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="EastDeck4" parent="World" unique_id=1966518474 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(1150, -1017)
+size = Vector2(268, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="EastDeck5" parent="World" unique_id=1618249383 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(1211.5, -659)
+size = Vector2(813, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PanDeck" parent="World" unique_id=1299157972 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-385, -2545)
+size = Vector2(1890, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PanCore" parent="World" unique_id=1828836959 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-609, -2592)
+size = Vector2(300, 88)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="PavLip" parent="World" unique_id=379268256 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(881, -2545)
+size = Vector2(434, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PavPost" parent="World" unique_id=1143333120 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(1003, -2438)
+rotation = 1.5707963
+size = Vector2(228, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PavFloor" parent="World" unique_id=1510807845 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(1520.5, -2334)
+size = Vector2(1059, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PavRoofA" parent="World" unique_id=748170263 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(1275, -2666)
+size = Vector2(450, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PavRoofB" parent="World" unique_id=1391333955 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(1660, -2749)
+size = Vector2(440, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PavRoofC" parent="World" unique_id=805618143 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(1950, -2787)
+size = Vector2(260, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PavPostBack" parent="World" unique_id=964554694 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(2038, -2598.5)
+rotation = 1.5707963
+size = Vector2(231, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="PavBench" parent="World" unique_id=836056661 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(1830, -2390)
+size = Vector2(160, 88)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ShaftW1" parent="World" unique_id=617828384 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-550, -2822)
+rotation = 1.5707963
+size = Vector2(204, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftW2" parent="World" unique_id=457287585 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-550, -2120)
+rotation = 1.5707963
+size = Vector2(560, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftW3" parent="World" unique_id=148842953 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-550, -1490)
+rotation = 1.5707963
+size = Vector2(340, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftW4" parent="World" unique_id=1878413200 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-550, -1050)
+rotation = 1.5707963
+size = Vector2(180, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftW5" parent="World" unique_id=92868250 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-550, -640)
+rotation = 1.5707963
+size = Vector2(120, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftW6" parent="World" unique_id=3736006 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-550, -195)
+rotation = 1.5707963
+size = Vector2(370, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftW7" parent="World" unique_id=1365658058 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-550, 375)
+rotation = 1.5707963
+size = Vector2(370, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftW9" parent="World" unique_id=213406296 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-925, 401)
+size = Vector2(424.3379, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftW8" parent="World" unique_id=779740425 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-550, 945)
+rotation = 1.5707963
+size = Vector2(370, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftE1" parent="World" unique_id=1055776457 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(50, -2822)
+rotation = 1.5707963
+size = Vector2(204, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftE2" parent="World" unique_id=1937242365 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(50, -2120)
+rotation = 1.5707963
+size = Vector2(560, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftE3" parent="World" unique_id=1913685330 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(50, -1490)
+rotation = 1.5707963
+size = Vector2(340, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftE4" parent="World" unique_id=1804797175 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(50, -1050)
+rotation = 1.5707963
+size = Vector2(180, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftE5" parent="World" unique_id=679817402 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(50, -640)
+rotation = 1.5707963
+size = Vector2(120, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftE6" parent="World" unique_id=579531470 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(50, -195)
+rotation = 1.5707963
+size = Vector2(370, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftE7" parent="World" unique_id=512295872 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(50, 375)
+rotation = 1.5707963
+size = Vector2(370, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftE8" parent="World" unique_id=920186418 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(50.000305, 929.458)
+rotation = 1.5707964
+size = Vector2(338.91602, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftCap" parent="World" unique_id=1463664285 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-250, -2924)
+size = Vector2(600, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftHeadW" parent="World" unique_id=1799536049 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-550, -3068)
+rotation = 1.5707963
+size = Vector2(264, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftHeadE" parent="World" unique_id=157361351 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(50, -3068)
+rotation = 1.5707963
+size = Vector2(264, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftHeadCap" parent="World" unique_id=1823993162 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-250, -3200)
+size = Vector2(600, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftWheel" parent="World" unique_id=140997245 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-250, -3256)
+size = Vector2(190, 88)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="ShaftDeck1" parent="World" unique_id=1613096618 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-250, -442)
+size = Vector2(600, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftDeck2" parent="World" unique_id=367987833 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-250, 130)
+size = Vector2(600, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ShaftDeck3" parent="World" unique_id=1997190641 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-250, 700)
+size = Vector2(600, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="LowW1" parent="World" unique_id=14912349 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1188.5, -442)
+size = Vector2(1277, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="LowE1" parent="World" unique_id=1642196683 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(525, -442)
+size = Vector2(950, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="LowW2" parent="World" unique_id=1294287866 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1695.7195, 130)
+size = Vector2(898.854, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="LowW4" parent="World" unique_id=25589166 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-2145, -249.8489)
+rotation = 1.5707964
+size = Vector2(403.5108, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="LowW5" parent="World" unique_id=328426681 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1254, -215.42062)
+rotation = 1.5707964
+size = Vector2(447.83588, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="LowW6" parent="World" unique_id=88488148 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1447, -145)
+size = Vector2(383.3861, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="LowW7" parent="World" unique_id=1017329316 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1447, -145)
+size = Vector2(383.3861, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="LowW8" parent="World" unique_id=537006026 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1957, -269)
+size = Vector2(383.3861, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="LowE2" parent="World" unique_id=480660208 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(652.5, 130)
+size = Vector2(1205, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="LowW3" parent="World" unique_id=25270619 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1325, 700)
+size = Vector2(1550, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="LowE3" parent="World" unique_id=1668583040 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(525, 700)
+size = Vector2(950, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="LowE4" parent="World" unique_id=1815773612 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(1500, 700)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="BenchA" parent="World" unique_id=113619067 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-3530, -300)
+size = Vector2(660, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="BenchB" parent="World" unique_id=199840759 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-3220, 60)
+size = Vector2(540, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="BenchC" parent="World" unique_id=1453575012 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-2765, 420)
+size = Vector2(730, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="BenchD" parent="World" unique_id=1148288174 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-2435, 780)
+size = Vector2(670, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="BenchE" parent="World" unique_id=840783452 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-2131.1067, 1120)
+size = Vector2(662.2134, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="WestConveyor" parent="World" unique_id=1180063752 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-2800, 10)
+rotation = 0.483447
+size = Vector2(903.5486, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="WestHouseRoof" parent="World" unique_id=2093753017 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-2900, 180)
+size = Vector2(400, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="WestHouseWallW" parent="World" unique_id=2036460839 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-3088, 300)
+rotation = 1.5707963
+size = Vector2(240, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="WestHouseWallE" parent="World" unique_id=847216087 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-2712, 240)
+rotation = 1.5707963
+size = Vector2(120, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="BenchCrate1" parent="World" unique_id=973614765 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-3740, -356)
+size = Vector2(160, 88)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="BenchCrate2" parent="World" unique_id=146144794 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-3220, 4)
+size = Vector2(160, 88)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="BenchCrate3" parent="World" unique_id=1907567763 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-2270, 724)
+size = Vector2(160, 88)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="FloorShedRoof" parent="World" unique_id=1332531783 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1500, 1030)
+size = Vector2(500, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="FloorShedWallW" parent="World" unique_id=675252449 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1738, 1143.5)
+rotation = 1.5707963
+size = Vector2(227, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="FloorShedCrate" parent="World" unique_id=805761695 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1520, 1213)
+size = Vector2(160, 88)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="FloorGantry" parent="World" unique_id=914440583 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(550, 950)
+size = Vector2(800, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="FloorBlock1" parent="World" unique_id=1367141932 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-820, 1213)
+size = Vector2(160, 88)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
+[node name="FloorBlock2" parent="World" unique_id=323929535 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(1080, 1213)
+size = Vector2(160, 88)
+color = Color(0.196078, 0.223529, 0.278431, 1)
+
 [node name="Ziplines" type="Node2D" parent="." unique_id=924256746]
-
-[node name="ZipYard15" parent="Ziplines" unique_id=267086155 instance=ExtResource("9_dnabq")]
-position = Vector2(-3680, -178)
-top = Vector2(-105.52612, -156.67407)
-bottom = Vector2(115.41919, 95.3418)
-speed = 800.0
-
-[node name="ZipYard18" parent="Ziplines" unique_id=562228375 instance=ExtResource("9_dnabq")]
-position = Vector2(-4152.0005, -515.00006)
-rotation = -0.011121668
-top = Vector2(-105.52612, -156.67407)
-bottom = Vector2(90.18652, 98.843445)
-speed = 800.0
 
 [node name="ZipYard19" parent="Ziplines" unique_id=302868900 instance=ExtResource("9_dnabq")]
 position = Vector2(-3779, -835)
 top = Vector2(-409.90405, -208.53772)
-bottom = Vector2(282.77637, 266.24072)
+bottom = Vector2(216.76367, 279.79626)
+speed = 800.0
+
+[node name="ZipRamp" parent="Ziplines" unique_id=780584888 instance=ExtResource("9_dnabq")]
+position = Vector2(2350, -3569)
+top = Vector2(-100, -137)
+bottom = Vector2(100, 137)
+speed = 800.0
+
+[node name="ZipPlant1" parent="Ziplines" unique_id=553298357 instance=ExtResource("9_dnabq")]
+position = Vector2(2500, -3282)
+top = Vector2(0, -150)
+bottom = Vector2(0, 150)
+speed = 800.0
+
+[node name="ZipPlant2" parent="Ziplines" unique_id=848776681 instance=ExtResource("9_dnabq")]
+position = Vector2(3750, -2932)
+top = Vector2(214.32605, -153.30551)
+bottom = Vector2(-350, 140)
+speed = 800.0
+
+[node name="ZipPlant3" parent="Ziplines" unique_id=1700711956 instance=ExtResource("9_dnabq")]
+position = Vector2(4025, -2842)
+top = Vector2(75, -246.2337)
+bottom = Vector2(75, 230)
+speed = 800.0
+
+[node name="ZipGantry2" parent="Ziplines" unique_id=1981012507 instance=ExtResource("9_dnabq")]
+position = Vector2(2800, -2682)
+top = Vector2(200, -110)
+bottom = Vector2(-200, 110)
+speed = 800.0
+
+[node name="ZipGantry3" parent="Ziplines" unique_id=1529043547 instance=ExtResource("9_dnabq")]
+position = Vector2(3525, -2502)
+top = Vector2(325, -110)
+bottom = Vector2(-325, 110)
+speed = 800.0
+
+[node name="ZipGantry4" parent="Ziplines" unique_id=1023815691 instance=ExtResource("9_dnabq")]
+position = Vector2(2525, -2422)
+top = Vector2(-75, -150)
+bottom = Vector2(75, 150)
+speed = 800.0
+
+[node name="ZipGantry5" parent="Ziplines" unique_id=727222695 instance=ExtResource("9_dnabq")]
+position = Vector2(3875, -2252)
+top = Vector2(-175, -140)
+bottom = Vector2(175, 140)
+speed = 800.0
+
+[node name="ZipSilo1" parent="Ziplines" unique_id=1224314054 instance=ExtResource("9_dnabq")]
+position = Vector2(2800, -1922)
+top = Vector2(0, -350)
+bottom = Vector2(0, 350)
+speed = 800.0
+
+[node name="ZipSilo2" parent="Ziplines" unique_id=2077340406 instance=ExtResource("9_dnabq")]
+position = Vector2(3150, -1922)
+top = Vector2(0, -290)
+bottom = Vector2(0, 290)
+speed = 800.0
+
+[node name="ZipSilo3" parent="Ziplines" unique_id=1806099407 instance=ExtResource("9_dnabq")]
+position = Vector2(3147.5, -2242)
+top = Vector2(-252.5, -30)
+bottom = Vector2(252.5, 30)
+speed = 800.0
+
+[node name="ZipScreen1" parent="Ziplines" unique_id=1117564992 instance=ExtResource("9_dnabq")]
+position = Vector2(4291, -1930)
+top = Vector2(0, -200)
+bottom = Vector2(0, 200)
+speed = 800.0
+
+[node name="ZipScreen3" parent="Ziplines" unique_id=1206855775 instance=ExtResource("9_dnabq")]
+position = Vector2(3625, -1912)
+top = Vector2(125, -200)
+bottom = Vector2(-137.93738, 723.1865)
+speed = 800.0
+
+[node name="ZipConvA1" parent="Ziplines" unique_id=335380033 instance=ExtResource("9_dnabq")]
+position = Vector2(2557, -1515)
+top = Vector2(0, -408.8714)
+bottom = Vector2(0, 70)
+speed = 800.0
+
+[node name="ZipConv1" parent="Ziplines" unique_id=1365483580 instance=ExtResource("9_dnabq")]
+position = Vector2(2725, -1367)
+top = Vector2(-125, -205)
+bottom = Vector2(125, 205)
+speed = 800.0
+
+[node name="ZipConv2" parent="Ziplines" unique_id=268198335 instance=ExtResource("9_dnabq")]
+position = Vector2(4300, -1272)
+top = Vector2(-100, -180)
+bottom = Vector2(100, 180)
+speed = 800.0
+
+[node name="ZipLong1" parent="Ziplines" unique_id=1035877692 instance=ExtResource("9_dnabq")]
+position = Vector2(2100, -1945.5)
+top = Vector2(300, -626.5)
+bottom = Vector2(-300, 626.5)
+speed = 800.0
+
+[node name="ZipGallery1" parent="Ziplines" unique_id=685161615 instance=ExtResource("9_dnabq")]
+position = Vector2(3925, -1077)
+top = Vector2(-125, -85)
+bottom = Vector2(125, 85)
+speed = 800.0
+
+[node name="ZipPump" parent="Ziplines" unique_id=573245379 instance=ExtResource("9_dnabq")]
+position = Vector2(4000, -897)
+top = Vector2(0, -95)
+bottom = Vector2(0, 95)
+speed = 800.0
+
+[node name="ZipHaul1" parent="Ziplines" unique_id=1374674765 instance=ExtResource("9_dnabq")]
+position = Vector2(3700, -597)
+top = Vector2(200, -205)
+bottom = Vector2(-200, 205)
+speed = 800.0
+
+[node name="ZipHaul2" parent="Ziplines" unique_id=2088976908 instance=ExtResource("9_dnabq")]
+position = Vector2(2530, -887)
+top = Vector2(420.5348, -304.47986)
+bottom = Vector2(-230, 275)
+speed = 800.0
+
+[node name="ZipHaul3" parent="Ziplines" unique_id=191718740 instance=ExtResource("9_dnabq")]
+position = Vector2(2500, -282)
+top = Vector2(100, -330)
+bottom = Vector2(-199.26208, 306.14044)
+speed = 800.0
+
+[node name="ZipHaul8" parent="Ziplines" unique_id=1912337408 instance=ExtResource("9_dnabq")]
+position = Vector2(2500, -282)
+top = Vector2(100, -330)
+bottom = Vector2(-199.26208, 306.14044)
+speed = 800.0
+
+[node name="ZipHaul4" parent="Ziplines" unique_id=1156374850 instance=ExtResource("9_dnabq")]
+position = Vector2(2975, -172)
+top = Vector2(75, -220)
+bottom = Vector2(-75, 220)
+speed = 800.0
+
+[node name="ZipHaul5" parent="Ziplines" unique_id=1404166549 instance=ExtResource("9_dnabq")]
+position = Vector2(4150, 68)
+top = Vector2(-50, -240)
+bottom = Vector2(50, 240)
+speed = 800.0
+
+[node name="ZipHaul7" parent="Ziplines" unique_id=827319678 instance=ExtResource("9_dnabq")]
+position = Vector2(1850, 768)
+top = Vector2(-50, -220)
+bottom = Vector2(50, 220)
+speed = 800.0
+
+[node name="ZipLong2" parent="Ziplines" unique_id=293581703 instance=ExtResource("9_dnabq")]
+position = Vector2(4625, -632)
+top = Vector2(-75, -460)
+bottom = Vector2(75, 460)
+speed = 800.0
+
+[node name="ZipShop" parent="Ziplines" unique_id=1574748156 instance=ExtResource("9_dnabq")]
+position = Vector2(2658, 569)
+top = Vector2(0, -198)
+bottom = Vector2(0, 198)
+speed = 800.0
+
+[node name="ZipCross1" parent="Ziplines" unique_id=2093270721 instance=ExtResource("9_dnabq")]
+position = Vector2(2975, -502)
+top = Vector2(-325, -110)
+bottom = Vector2(325, 110)
+speed = 800.0
+
+[node name="ZipCross3" parent="Ziplines" unique_id=245289039 instance=ExtResource("9_dnabq")]
+position = Vector2(2327, 277)
+top = Vector2(250, -250)
+bottom = Vector2(-250, 250)
+speed = 800.0
+
+[node name="ZipCross4" parent="Ziplines" unique_id=685823991 instance=ExtResource("9_dnabq")]
+position = Vector2(2327, 277)
+top = Vector2(250, -250)
+bottom = Vector2(-250, 250)
+speed = 800.0
+
+[node name="ZipRim1" parent="Ziplines" unique_id=1536805126 instance=ExtResource("9_dnabq")]
+position = Vector2(4400, -2622)
+top = Vector2(-100, -210)
+bottom = Vector2(253.1565, 686.146)
+speed = 800.0
+
+[node name="ZipRim3" parent="Ziplines" unique_id=1715609045 instance=ExtResource("9_dnabq")]
+position = Vector2(4716, -1522)
+top = Vector2(50, -410)
+bottom = Vector2(-50, 410)
+speed = 800.0
+
+[node name="ZipWall1" parent="Ziplines" unique_id=676538018 instance=ExtResource("9_dnabq")]
+position = Vector2(4825, -402)
+top = Vector2(75, -230)
+bottom = Vector2(-9.76001, 602.50903)
+speed = 800.0
+
+[node name="ZipShed" parent="Ziplines" unique_id=1356207670 instance=ExtResource("9_dnabq")]
+position = Vector2(2250, 1122.5)
+top = Vector2(-51.052124, -156.00012)
+bottom = Vector2(664.821, 271.9674)
+speed = 800.0
+
+[node name="ZipPit1" parent="Ziplines" unique_id=1214858248 instance=ExtResource("9_dnabq")]
+position = Vector2(3825, 1208)
+top = Vector2(-457.78052, -357.4502)
+bottom = Vector2(375, 340)
+speed = 800.0
+
+[node name="ZipPit4" parent="Ziplines" unique_id=1737164011 instance=ExtResource("9_dnabq")]
+position = Vector2(3418, 1222)
+top = Vector2(-205.56616, 593.4603)
+bottom = Vector2(46.656555, -99.36328)
+speed = 800.0
+
+[node name="ZipPit5" parent="Ziplines" unique_id=111115228 instance=ExtResource("9_dnabq")]
+position = Vector2(4315, 522)
+top = Vector2(-205.56616, 593.4603)
+bottom = Vector2(599.86255, 79.410706)
+speed = 800.0
+
+[node name="ZipPit7" parent="Ziplines" unique_id=741417183 instance=ExtResource("9_dnabq")]
+position = Vector2(4079, 429)
+top = Vector2(-176.36365, -150.79382)
+bottom = Vector2(188.04651, 176.5907)
+speed = 800.0
+
+[node name="ZipPit2" parent="Ziplines" unique_id=1117664395 instance=ExtResource("9_dnabq")]
+position = Vector2(4200, 1703.5)
+top = Vector2(100, -155.5)
+bottom = Vector2(-100, 155.5)
+speed = 800.0
+
+[node name="ZipPit3" parent="Ziplines" unique_id=1786867959 instance=ExtResource("9_dnabq")]
+position = Vector2(4698, 1361)
+top = Vector2(222.0498, -292.71558)
+bottom = Vector2(-100, 155.5)
+speed = 800.0
+
+[node name="ZipSump" parent="Ziplines" unique_id=1478832369 instance=ExtResource("9_dnabq")]
+position = Vector2(3975, 2079)
+top = Vector2(0, -289)
+bottom = Vector2(0, 289)
+speed = 800.0
+
+[node name="ZipYardE" parent="Ziplines" unique_id=1422295232 instance=ExtResource("9_dnabq")]
+position = Vector2(350, -1231)
+top = Vector2(350, -19)
+bottom = Vector2(-350, 19)
+speed = 800.0
+
+[node name="ZipEastLift" parent="Ziplines" unique_id=225876723 instance=ExtResource("9_dnabq")]
+position = Vector2(871, -1301)
+top = Vector2(0, -604)
+bottom = Vector2(0, 604)
+speed = 800.0
+
+[node name="ZipEastLink" parent="Ziplines" unique_id=131955911 instance=ExtResource("9_dnabq")]
+position = Vector2(1675, -641.5)
+top = Vector2(-125, -29.5)
+bottom = Vector2(125, 29.5)
+speed = 800.0
+
+[node name="ZipEastLink2" parent="Ziplines" unique_id=844133088 instance=ExtResource("9_dnabq")]
+position = Vector2(1525, -1595)
+top = Vector2(-225, -276)
+bottom = Vector2(493.36206, 965.45105)
+speed = 800.0
+
+[node name="ZipPavIn" parent="Ziplines" unique_id=140422839 instance=ExtResource("9_dnabq")]
+position = Vector2(1050, -2466)
+top = Vector2(0, -104)
+bottom = Vector2(0, 104)
+speed = 800.0
+
+[node name="ZipPav" parent="Ziplines" unique_id=1721196397 instance=ExtResource("9_dnabq")]
+position = Vector2(2150, -2459)
+top = Vector2(250, -113)
+bottom = Vector2(-250, 113)
+speed = 800.0
+
+[node name="ZipPanDrop" parent="Ziplines" unique_id=2050898962 instance=ExtResource("9_dnabq")]
+position = Vector2(-195, -2135)
+top = Vector2(0, -446)
+bottom = Vector2(0, 1270.282)
+speed = 800.0
+
+[node name="ZipEastDown" parent="Ziplines" unique_id=1003862570 instance=ExtResource("9_dnabq")]
+position = Vector2(950, -2108.5)
+top = Vector2(50, -237.5)
+bottom = Vector2(-50, 237.5)
+speed = 800.0
+
+[node name="ZipShaftA" parent="Ziplines" unique_id=109678874 instance=ExtResource("9_dnabq")]
+position = Vector2(-395, -643.5)
+top = Vector2(0, -189.5)
+bottom = Vector2(0, 189.5)
+speed = 800.0
+
+[node name="ZipShaftB" parent="Ziplines" unique_id=1858206705 instance=ExtResource("9_dnabq")]
+position = Vector2(-195, -168)
+top = Vector2(0, -286)
+bottom = Vector2(0, 286)
+speed = 800.0
+
+[node name="ZipShaftC" parent="Ziplines" unique_id=2087952752 instance=ExtResource("9_dnabq")]
+position = Vector2(-343, 380)
+top = Vector2(0, -285)
+bottom = Vector2(0, 285)
+speed = 800.0
+
+[node name="ZipShaftD" parent="Ziplines" unique_id=224302878 instance=ExtResource("9_dnabq")]
+position = Vector2(-195, 972.5)
+top = Vector2(0, -284.5)
+bottom = Vector2(0, 284.5)
+speed = 800.0
+
+[node name="ZipEastLow" parent="Ziplines" unique_id=1228018926 instance=ExtResource("9_dnabq")]
+position = Vector2(1050, -562.5)
+top = Vector2(150, -108.5)
+bottom = Vector2(-150, 108.5)
+speed = 800.0
+
+[node name="ZipLowW" parent="Ziplines" unique_id=75345822 instance=ExtResource("9_dnabq")]
+position = Vector2(-1800, -168)
+top = Vector2(100, -286)
+bottom = Vector2(411.5404, 242.92078)
+speed = 800.0
+
+[node name="ZipLowW4" parent="Ziplines" unique_id=274161138 instance=ExtResource("9_dnabq")]
+position = Vector2(-2505, -146)
+top = Vector2(453.7602, -154.6365)
+bottom = Vector2(411.5404, 242.92078)
+speed = 800.0
+
+[node name="ZipLowW2" parent="Ziplines" unique_id=1355614752 instance=ExtResource("9_dnabq")]
+position = Vector2(-1850, 403)
+top = Vector2(-50, -285)
+bottom = Vector2(50, 285)
+speed = 800.0
+
+[node name="ZipLowW3" parent="Ziplines" unique_id=1376183276 instance=ExtResource("9_dnabq")]
+position = Vector2(-1172, 362)
+top = Vector2(688.34595, -276.36328)
+bottom = Vector2(-96.261475, 285.41553)
+speed = 800.0
+
+[node name="ZipLowE1" parent="Ziplines" unique_id=1938939667 instance=ExtResource("9_dnabq")]
+position = Vector2(350, -168)
+top = Vector2(-150, -286)
+bottom = Vector2(420.94543, 252.76245)
+speed = 800.0
+
+[node name="ZipLowE5" parent="Ziplines" unique_id=1748918427 instance=ExtResource("9_dnabq")]
+position = Vector2(350, -168)
+top = Vector2(-150, -286)
+bottom = Vector2(420.94543, 252.76245)
+speed = 800.0
+
+[node name="ZipLowE2" parent="Ziplines" unique_id=1189511585 instance=ExtResource("9_dnabq")]
+position = Vector2(350, 403)
+top = Vector2(150, -285)
+bottom = Vector2(-150, 285)
+speed = 800.0
+
+[node name="ZipLowE3" parent="Ziplines" unique_id=688376670 instance=ExtResource("9_dnabq")]
+position = Vector2(1525, 38)
+top = Vector2(225, -650)
+bottom = Vector2(-175.64868, 612.199)
+speed = 800.0
+
+[node name="ZipLowE4" parent="Ziplines" unique_id=425622561 instance=ExtResource("9_dnabq")]
+position = Vector2(1500, 972.5)
+top = Vector2(0, -284.5)
+bottom = Vector2(0, 284.5)
+speed = 800.0
+
+[node name="ZipBench1" parent="Ziplines" unique_id=406221298 instance=ExtResource("9_dnabq")]
+position = Vector2(-3580, -422)
+top = Vector2(20, -110)
+bottom = Vector2(-20, 110)
+speed = 800.0
+
+[node name="ZipBench2" parent="Ziplines" unique_id=231328997 instance=ExtResource("9_dnabq")]
+position = Vector2(-3350, -132)
+top = Vector2(-50, -180)
+bottom = Vector2(50, 180)
+speed = 800.0
+
+[node name="ZipBench3" parent="Ziplines" unique_id=489302062 instance=ExtResource("9_dnabq")]
+position = Vector2(-3000, 228)
+top = Vector2(0, -180)
+bottom = Vector2(0, 180)
+speed = 800.0
+
+[node name="ZipBench4" parent="Ziplines" unique_id=255090995 instance=ExtResource("9_dnabq")]
+position = Vector2(-2500, 588)
+top = Vector2(0, -485.2124)
+bottom = Vector2(0, 180)
+speed = 800.0
+
+[node name="ZipBench5" parent="Ziplines" unique_id=218774512 instance=ExtResource("9_dnabq")]
+position = Vector2(-2200, 938)
+top = Vector2(0, -170)
+bottom = Vector2(0, 170)
+speed = 800.0
+
+[node name="ZipBench6" parent="Ziplines" unique_id=867141713 instance=ExtResource("9_dnabq")]
+position = Vector2(-1900, 1182.5)
+top = Vector2(0, -74.5)
+bottom = Vector2(0, 74.5)
+speed = 800.0
+
+[node name="ZipWestHouse" parent="Ziplines" unique_id=977006638 instance=ExtResource("9_dnabq")]
+position = Vector2(-2800, 288)
+top = Vector2(0, -120)
+bottom = Vector2(0, 120)
+speed = 800.0
+
+[node name="ZipFloorG" parent="Ziplines" unique_id=2096211584 instance=ExtResource("9_dnabq")]
+position = Vector2(300, 813)
+top = Vector2(0, -125)
+bottom = Vector2(0, 125)
+speed = 800.0
+
+[node name="ZipFloorE" parent="Ziplines" unique_id=1184609168 instance=ExtResource("9_dnabq")]
+position = Vector2(850, 1097.5)
+top = Vector2(-150, -159.5)
+bottom = Vector2(150, 159.5)
 speed = 800.0
 
 [node name="Spawns" type="Node2D" parent="." unique_id=1755117685]
@@ -664,52 +2542,30 @@ speed = 800.0
 position = Vector2(-4064, -3702)
 display_name = "THE YARD"
 
-[node name="SpawnControl" parent="Spawns" unique_id=1298046729 instance=ExtResource("10_v5b0e")]
-position = Vector2(-4107, -3670)
-display_name = "CONTROL"
+[node name="SpawnYard2" parent="Spawns" unique_id=781425275 instance=ExtResource("10_v5b0e")]
+position = Vector2(-4420, -1033)
+display_name = "THE YARD"
 
-[node name="SpawnMast" parent="Spawns" unique_id=752008386 instance=ExtResource("10_v5b0e")]
-position = Vector2(-3921, -3693)
-display_name = "MAST DECK"
+[node name="SpawnYard3" parent="Spawns" unique_id=345055667 instance=ExtResource("10_v5b0e")]
+position = Vector2(-2204, 1223)
+display_name = "THE YARD"
 
-[node name="SpawnMast2" parent="Spawns" unique_id=432687652 instance=ExtResource("10_v5b0e")]
-position = Vector2(-4033, -3662)
-display_name = "MAST DECK"
+[node name="SpawnPlant" parent="Spawns" unique_id=1968877396 instance=ExtResource("10_v5b0e")]
+position = Vector2(3000, -3160)
+display_name = "THE PLANT"
+
+[node name="SpawnGallery" parent="Spawns" unique_id=1894736265 instance=ExtResource("10_v5b0e")]
+position = Vector2(4780, 5)
+display_name = "THE GALLERY"
+
+[node name="SpawnPit" parent="Spawns" unique_id=1480789615 instance=ExtResource("10_v5b0e")]
+position = Vector2(3700, 1830)
+display_name = "THE PIT"
 
 [node name="Enemies" type="Node2D" parent="." unique_id=1002818592]
 
 [node name="GuardYard" parent="Enemies" unique_id=2096302872 instance=ExtResource("11_jahhw")]
 position = Vector2(-1770, 395)
-
-[node name="GuardYard2" parent="Enemies" unique_id=692818654 instance=ExtResource("11_jahhw")]
-position = Vector2(-1765, -87)
-
-[node name="GuardYard3" parent="Enemies" unique_id=18484775 instance=ExtResource("11_jahhw")]
-position = Vector2(-3183, -3630)
-
-[node name="GuardYard11" parent="Enemies" unique_id=1148716876 instance=ExtResource("11_jahhw")]
-position = Vector2(-1661, -1030)
-
-[node name="GuardYard4" parent="Enemies" unique_id=1342476506 instance=ExtResource("11_jahhw")]
-position = Vector2(-935, 10)
-
-[node name="GuardYard5" parent="Enemies" unique_id=1202221868 instance=ExtResource("11_jahhw")]
-position = Vector2(-323, 2)
-
-[node name="GuardYard10" parent="Enemies" unique_id=1665318694 instance=ExtResource("11_jahhw")]
-position = Vector2(-343, 381)
-
-[node name="GuardYard6" parent="Enemies" unique_id=1803167443 instance=ExtResource("11_jahhw")]
-position = Vector2(-206, -615)
-
-[node name="GuardYard7" parent="Enemies" unique_id=722346007 instance=ExtResource("11_jahhw")]
-position = Vector2(-172, -939)
-
-[node name="GuardYard8" parent="Enemies" unique_id=1093148849 instance=ExtResource("11_jahhw")]
-position = Vector2(954, -547)
-
-[node name="GuardYard9" parent="Enemies" unique_id=268734520 instance=ExtResource("11_jahhw")]
-position = Vector2(923, -205)
 
 [node name="Players" type="Node2D" parent="." unique_id=1382237455]
 
@@ -849,14 +2705,14 @@ color = Color(0.196078, 0.223529, 0.278431, 1)
 
 [node name="ZipYard20" parent="." unique_id=889428644 instance=ExtResource("9_dnabq")]
 position = Vector2(-2833, -3185)
-top = Vector2(222.17786, -29.752441)
-bottom = Vector2(-300.9917, -429.2487)
+top = Vector2(-300.9917, -429.2487)
+bottom = Vector2(222.17786, -29.752441)
 speed = 800.0
 
 [node name="ZipYard24" parent="." unique_id=862160146 instance=ExtResource("9_dnabq")]
 position = Vector2(-3223, -3208)
-top = Vector2(317.9215, 63.401306)
-bottom = Vector2(-261.60144, -66.01663)
+top = Vector2(-261.60144, -66.01663)
+bottom = Vector2(317.9215, 63.401306)
 speed = 800.0
 
 [node name="ZipYard25" parent="." unique_id=1669837511 instance=ExtResource("9_dnabq")]
@@ -879,19 +2735,55 @@ speed = 800.0
 
 [node name="ZipYard7" parent="." unique_id=1931122788 instance=ExtResource("9_dnabq")]
 position = Vector2(-2075, -2927)
-top = Vector2(56.66858, 148.84265)
-bottom = Vector2(-170.55182, -200.56244)
+top = Vector2(-170.55182, -200.56244)
+bottom = Vector2(56.66858, 148.84265)
 speed = 800.0
 
 [node name="ZipYard8" parent="." unique_id=1294610632 instance=ExtResource("9_dnabq")]
 position = Vector2(-1680, -2721)
-top = Vector2(56.66858, 148.84265)
-bottom = Vector2(-195.84937, -48.013794)
+top = Vector2(-195.84937, -48.013794)
+bottom = Vector2(56.66858, 148.84265)
 speed = 800.0
 
 [node name="ZipYard9" parent="." unique_id=386362298 instance=ExtResource("9_dnabq")]
 position = Vector2(-1838, -2457)
 top = Vector2(19.121704, -113.02557)
+bottom = Vector2(14.729492, 94.87659)
+speed = 800.0
+
+[node name="ZipYard33" parent="." unique_id=1696676284 instance=ExtResource("9_dnabq")]
+position = Vector2(-1752, -1809)
+top = Vector2(-230.71582, -220.156)
+bottom = Vector2(14.729492, 94.87659)
+speed = 800.0
+
+[node name="ZipYard34" parent="." unique_id=613983642 instance=ExtResource("9_dnabq")]
+position = Vector2(-1752, -1809)
+top = Vector2(-230.71582, -220.156)
+bottom = Vector2(14.729492, 94.87659)
+speed = 800.0
+
+[node name="ZipYard37" parent="." unique_id=125556717 instance=ExtResource("9_dnabq")]
+position = Vector2(-979, -1477)
+top = Vector2(-227.32178, -217.5409)
+bottom = Vector2(620.8323, 238.95801)
+speed = 800.0
+
+[node name="ZipYard38" parent="." unique_id=2041549884 instance=ExtResource("9_dnabq")]
+position = Vector2(-979, -1477)
+top = Vector2(-227.32178, -217.5409)
+bottom = Vector2(620.8323, 238.95801)
+speed = 800.0
+
+[node name="ZipYard35" parent="." unique_id=766917367 instance=ExtResource("9_dnabq")]
+position = Vector2(-1136, -2107)
+top = Vector2(160.92981, -475.66852)
+bottom = Vector2(14.729492, 94.87659)
+speed = 800.0
+
+[node name="ZipYard36" parent="." unique_id=99086934 instance=ExtResource("9_dnabq")]
+position = Vector2(-1136, -2107)
+top = Vector2(160.92981, -475.66852)
 bottom = Vector2(14.729492, 94.87659)
 speed = 800.0
 
@@ -903,20 +2795,20 @@ speed = 800.0
 
 [node name="ZipYard28" parent="." unique_id=2022512792 instance=ExtResource("9_dnabq")]
 position = Vector2(-3122, -1987)
-top = Vector2(201.30481, 420.35175)
-bottom = Vector2(-210.69531, -100.17618)
+top = Vector2(-210.69531, -100.17618)
+bottom = Vector2(201.30481, 420.35175)
 speed = 800.0
 
 [node name="ZipYard31" parent="." unique_id=853518840 instance=ExtResource("9_dnabq")]
 position = Vector2(-3054, -1062)
-top = Vector2(-93.50275, 375)
-bottom = Vector2(-93.50275, -280.97897)
+top = Vector2(-93.50275, -280.97897)
+bottom = Vector2(-93.50275, 375)
 speed = 800.0
 
 [node name="ZipYard32" parent="." unique_id=1230730931 instance=ExtResource("9_dnabq")]
 position = Vector2(-2678, -1206)
-top = Vector2(-87.76953, 152.85602)
-bottom = Vector2(35.214844, -214.63312)
+top = Vector2(35.214844, -214.63312)
+bottom = Vector2(-87.76953, 152.85602)
 speed = 800.0
 
 [node name="ZipYard29" parent="." unique_id=1840133158 instance=ExtResource("9_dnabq")]
@@ -945,14 +2837,20 @@ speed = 800.0
 
 [node name="ZipYard19" parent="." unique_id=777675372 instance=ExtResource("9_dnabq")]
 position = Vector2(-4200, -1369)
-top = Vector2(464.23242, 101.921875)
-bottom = Vector2(178.22095, -124.73389)
+top = Vector2(178.22095, -124.73389)
+bottom = Vector2(464.23242, 101.921875)
 speed = 800.0
 
 [node name="ZipYard21" parent="." unique_id=1770654856 instance=ExtResource("9_dnabq")]
 position = Vector2(-4107, -1182)
 top = Vector2(201.69409, -87.026794)
 bottom = Vector2(-227.02374, 150.71674)
+speed = 800.0
+
+[node name="ZipYard22" parent="." unique_id=65615570 instance=ExtResource("9_dnabq")]
+position = Vector2(-4274, -1182)
+top = Vector2(-227.02374, 150.71674)
+bottom = Vector2(100.50244, 498.1178)
 speed = 800.0
 
 [node name="ZipYard11" parent="." unique_id=400247668 instance=ExtResource("9_dnabq")]
@@ -997,8 +2895,75 @@ top = Vector2(-103.51047, -151.18433)
 bottom = Vector2(125.020935, 197.8133)
 speed = 800.0
 
-[node name="GuardYard6" parent="." unique_id=2121305223 instance=ExtResource("11_jahhw")]
-position = Vector2(-2364, -2825)
+[node name="BackPanelYard" parent="." unique_id=1559643489 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1862, -935)
+texture = ExtResource("5_63r5p")
+size = Vector2(220, 220)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
 
-[node name="GuardYard7" parent="." unique_id=1997733222 instance=ExtResource("11_jahhw")]
-position = Vector2(-2330, -3149)
+[node name="BackPanelYard2" parent="." unique_id=2133320669 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1087, -939)
+texture = ExtResource("5_63r5p")
+size = Vector2(220, 220)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="YardCeiling7" parent="." unique_id=90845695 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1862, -1056)
+scale = Vector2(1.1200024, 1)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling15" parent="." unique_id=1416519230 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-1085, -1054)
+scale = Vector2(1.1200024, 1)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ZipYard39" parent="." unique_id=83014599 instance=ExtResource("9_dnabq")]
+position = Vector2(-1880, -1012)
+top = Vector2(15.425262, -69.96515)
+bottom = Vector2(17.118683, 163.16257)
+speed = 800.0
+
+[node name="ZipYard40" parent="." unique_id=568543800 instance=ExtResource("9_dnabq")]
+position = Vector2(-1103, -1010)
+top = Vector2(15.425262, -69.96515)
+bottom = Vector2(17.118683, 163.16257)
+speed = 800.0
+
+[node name="BackPanelYard3" parent="." unique_id=2090225118 instance=ExtResource("3_hdcd5")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3679, 196)
+texture = ExtResource("5_63r5p")
+size = Vector2(220, 220)
+tint = Color(0.427451, 0.470588, 0.545098, 1)
+
+[node name="YardCeiling16" parent="." unique_id=166398311 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3681, 81)
+scale = Vector2(1.1200024, 1)
+size = Vector2(200, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="YardCeiling17" parent="." unique_id=506935386 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(3071.8005, -155)
+size = Vector2(397.60107, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
+[node name="ZipYard41" parent="." unique_id=1926281073 instance=ExtResource("9_dnabq")]
+position = Vector2(3663, 125)
+top = Vector2(15.425262, -69.96515)
+bottom = Vector2(17.118683, 163.16257)
+speed = 800.0

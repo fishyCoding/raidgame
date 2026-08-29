@@ -6,6 +6,11 @@
 # The second client is started ten seconds late on purpose. The first one has to
 # sit there waiting, and that wait is half of what is being tested.
 
+param(
+	# Which map the server holds open. Empty means the world, as before.
+	[string]$Level = ''
+)
+
 $ErrorActionPreference = 'Stop'
 
 $godot = 'C:\Users\Computer\Downloads\Godot_v4.7.1-stable_win64.exe\Godot_v4.7.1-stable_win64_console.exe'
@@ -13,9 +18,9 @@ $project = Split-Path -Parent $PSScriptRoot
 $out = Join-Path $env:TEMP 'raid-match-test'
 New-Item -ItemType Directory -Force -Path $out | Out-Null
 
-Write-Host '== starting server on 27780'
+Write-Host "== starting server on 27780$(if ($Level) { " (map: $Level)" })"
 $server = Start-Process -FilePath $godot -PassThru -NoNewWindow `
-	-ArgumentList '--headless', '--path', $project, '--', '--server=27780' `
+	-ArgumentList (@('--headless', '--path', $project, '--', '--server=27780') + $(if ($Level) { "--level=$Level" } else { @() })) `
 	-RedirectStandardOutput "$out\server.log" -RedirectStandardError "$out\server.err"
 $null = $server.Handle
 

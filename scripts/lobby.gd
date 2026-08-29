@@ -60,10 +60,23 @@ func _ready() -> void:
 ##
 ##   godot --headless --path . -- --server
 ##   godot --headless --path . -- --server=27015
+##   godot --headless --path . -- --server --level=quarry
 ##
 ## --server is the only one of these that is not a convenience. A dedicated
 ## server has no menu to click, so the command line is its entire interface.
+##
+## --level is how a match is played on something other than the world. It is a
+## server-side flag and deliberately has no client half: the server announces
+## what it is holding open and clients follow, because two machines choosing a
+## map independently is two machines in different buildings.
 func _take_orders_from_the_command_line() -> void:
+	# Read before --server acts on it, whatever order they were typed in: the
+	# map has to be chosen before the socket opens, because the first thing the
+	# server says to a peer is which one it is holding open.
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--level="):
+			_choose_map(arg.get_slice("=", 1))
+			Net.match_level = Net.solo_scene()
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--server" or arg.begins_with("--server="):
 			_on_serve(int(arg.get_slice("=", 1)) if arg.contains("=") else Net.DEFAULT_PORT)
@@ -293,15 +306,22 @@ func _on_serve(port: int) -> void:
 		push_error("could not open port %d - is something already on it?" % port)
 		get_tree().quit(1)
 		return
-	# The world, whatever the menu was left on. A server holds open the map its
-	# clients are going to load, and that is only ever this one.
-	_enter_level(Net.WORLD)
+	# Whichever map --level named, defaulting to the world. A server holds open
+	# the map its clients are going to load, and now it says which one that is
+	# instead of everybody assuming.
+	print("[server] holding open %s" % Net.match_level)
+	_enter_level(Net.match_level)
 
 
+## A client waits to be told which map before it opens one. Connecting and
+## knowing where you are going are different moments - Net sends the map to a
+## peer the instant it connects, but that is a round trip, and loading the wrong
+## level in the gap puts the two machines in different buildings with every
+## synchroniser pointing at a node path the other end does not have.
 func _process(_delta: float) -> void:
-	if Net.in_session:
+	if Net.in_session and Net.level_settled():
 		set_process(false)
-		_enter_level(Net.WORLD)
+		_enter_level(Net.match_level)
 
 
 func _on_session_started(_as_host: bool) -> void:

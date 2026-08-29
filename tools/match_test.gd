@@ -91,7 +91,19 @@ func _run() -> void:
 		quit(1)
 		return
 
-	_main = (load("res://scenes/main.tscn") as PackedScene).instantiate()
+	# Whichever map the server says it is holding open, the way the menu does it.
+	# Loading main.tscn regardless is what this used to do, and it only worked
+	# because there was only ever one map - on any other the two machines would
+	# have been in different buildings with every synchroniser pointing at a node
+	# path the other end does not have.
+	var told := 0
+	while not _net.level_settled() and told < 600:
+		await physics_frame
+		told += 1
+	_check("server said which map", _net.level_settled())
+	_say("map %s" % _net.match_level)
+
+	_main = (load(_net.match_level) as PackedScene).instantiate()
 	root.add_child(_main)
 	current_scene = _main
 	await physics_frame

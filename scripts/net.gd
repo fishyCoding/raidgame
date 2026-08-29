@@ -58,9 +58,20 @@ const WORLD := "res://scenes/main.tscn"
 ## Everything after it is solo only - a map that no server is holding open is
 ## not somewhere two people can be matched into, and saying so in the menu is
 ## better than a button that finds nobody forever.
+## Each one carries the line the briefing map puts under its name, because that
+## screen is drawn from the level's own geometry and has nothing else to read a
+## description off.
 const LEVELS := [
-	{"name": "the yard", "scene": WORLD},
-	{"name": "the quarry", "scene": "res://scenes/quarry.tscn"},
+	{
+		"name": "the yard",
+		"scene": WORLD,
+		"blurb": "four rooms, four hallways, and a vault in the middle - your way out is across it",
+	},
+	{
+		"name": "the quarry",
+		"scene": "res://scenes/quarry.tscn",
+		"blurb": "a yard cut into one wall and a plant into the other - the middle is still open ground",
+	},
 ]
 
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
@@ -94,6 +105,25 @@ var test_drive := false
 ## dying builds a fresh one, and a map you picked should outlive the run you
 ## picked it for. The same reason staged_kit is here.
 var solo_level := 0
+
+## The map this session is being played on, as a scene path.
+##
+## The server owns this. It is set from `--level=` before the socket opens and
+## then told to every machine, because the one thing a client cannot do is guess
+## which map to load - open the wrong one and every synchroniser addresses a node
+## path that does not exist on the other end, which reads as "replication is
+## broken" rather than "we are in different buildings".
+##
+## It travels on _set_match rather than a message of its own. Godot checksums an
+## RPC by the *set of method names* on the node, so adding a thirty-first would
+## have invalidated every id and locked out every client that had not updated -
+## see the note on _set_match. A new argument on a call that already exists costs
+## nothing, and the pair still has to ship together either way.
+var match_level := WORLD
+
+## False on a client between connecting and being told which map is up. Nobody
+## should open a level in that gap; see lobby.gd's _process.
+var _level_told := false
 
 ## True once host() or join() has succeeded. Single player counts: it is a
 ## session of one.
@@ -246,6 +276,9 @@ func play_solo() -> void:
 		return
 	in_session = true
 	is_host = true
+	# Alone, the map you picked is the map the session is on. Keeps match_level
+	# honest for anything that reads it rather than leaving it on the default.
+	match_level = solo_scene()
 	session_started.emit(true)
 
 
@@ -261,6 +294,19 @@ func solo_name() -> String:
 ## The next map along, wrapping. The menu's map button and nothing else.
 func cycle_solo_level() -> void:
 	solo_level = (solo_level + 1) % LEVELS.size()
+
+
+## The map currently loaded, as its entry in LEVELS - or an empty one if the
+## level being played is not on the list, which is every test harness that opens
+## a scene directly.
+func level_here() -> Dictionary:
+	var scene := get_tree().current_scene
+	if scene == null:
+		return {}
+	for level in LEVELS:
+		if level["scene"] == scene.scene_file_path:
+			return level
+	return {}
 
 
 ## The map whose name contains this text, or -1 for no such map. Loose on
@@ -450,17 +496,31 @@ func _begin_match() -> void:
 ## know.
 func _announce(state: Match, left: float) -> void:
 	if is_networked():
-		_set_match.rpc(int(state), left, _waiting.size())
+		_set_match.rpc(int(state), left, _waiting.size(), match_level)
 	else:
-		_set_match(int(state), left, _waiting.size())
+		_set_match(int(state), left, _waiting.size(), match_level)
 
 
+## Carries the map as well as the clock. The argument was added rather than a
+## thirty-first rpc on purpose: the checksum Godot guards these with is over the
+## set of method *names*, so the count has to stay at thirty or every id shifts
+## and no client that has not updated can talk to the server at all.
 @rpc("authority", "call_local", "reliable")
-func _set_match(state: int, left: float, players: int) -> void:
+func _set_match(state: int, left: float, players: int, level: String) -> void:
 	match_state = state as Match
 	seconds_left = left
 	players_here = players
+	if not level.is_empty():
+		match_level = level
+		_level_told = true
 	match_changed.emit(match_state, seconds_left)
+
+
+## Whether this machine knows which map to open. Always true for whoever chose
+## it - a host, a dedicated server, or somebody playing alone. A client has to
+## be told, and until it has been there is nothing safe to load.
+func level_settled() -> bool:
+	return _level_told or is_host or not is_networked()
 
 
 ## How many players are in this match, waiting or deployed. Known everywhere.
@@ -1630,6 +1690,11 @@ func _on_peer_connected(id: int) -> void:
 		print("[server] peer %d connected (%d/%d)"
 			% [id, multiplayer.get_peers().size(), MAX_PLAYERS])
 	peer_joined.emit(id)
+	# Which map is up, straight away and to this peer alone. It is the one thing
+	# they need *before* loading anything, and the periodic announcement is no
+	# use here - a WAITING server sends none, so a newcomer would sit on the menu
+	# until a second player arrived to start the countdown.
+	_set_match.rpc_id(id, int(match_state), seconds_left, _waiting.size(), match_level)
 	# Nothing is spawned here on purpose. A peer that has connected has not
 	# necessarily loaded the level - it asks for a character itself, once it has
 	# somewhere to put one. See request_character.
