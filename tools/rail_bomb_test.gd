@@ -412,6 +412,29 @@ func _bomb_half() -> void:
 	_check("it shoots somebody standing under it", seen.taken > 0.0)
 	_check("rider or not", not bool(seen.get(&"riding")))
 
+	# --- and a screen is a wall to it ----------------------------------------
+	#
+	# The whole value of a screen is that somebody spent an ultimate so as not to
+	# be looked at through it. A drone that shot through one would make the
+	# answer to a drone "there is no answer".
+	var sheet_at: Vector2 = seen.global_position.lerp(bomb.global_position, 0.5)
+	var across := (seen.global_position - bomb.global_position).orthogonal().normalized()
+	var sheet: Node = net.raise_screen(sheet_at + across * 90.0, sheet_at - across * 90.0,
+		net.peer_id())
+	await _wait(3)
+	_check("there is a screen between them", sheet != null)
+	_check("and it reads as blocking the line", not bomb._can_see(seen.global_position))
+	seen.taken = 0.0
+	await _wait(40)
+	_check("it cannot shoot through a screen", seen.taken == 0.0)
+	if sheet != null:
+		net.break_screen(int(sheet.get(&"id")))
+	await _wait(6)
+	_check("and can again once the screen is down", bomb._can_see(seen.global_position))
+	seen.taken = 0.0
+	await _wait(30)
+	_check("shooting him again with it gone", seen.taken > 0.0)
+
 	# Out of range is out of it.
 	seen.taken = 0.0
 	seen.global_position = bomb.global_position + Vector2(gadget.sight_range + 400.0, 0.0)

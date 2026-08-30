@@ -89,9 +89,10 @@ const HOVER_RISE := 46.0
 const HOVER_BOB := 7.0
 const HOVER_HZ := 1.6
 
-## What it is cast against, both for the shot and for deciding it can see you.
-## Solid geometry only, the same mask vision_system uses: a one-way catwalk and
-## another player are both see-through to this.
+## What the ray is cast against. Solid geometry only, the same mask
+## vision_system uses: a one-way catwalk and another player are both see-through
+## to this. What stops light but is not geometry - smoke, screens - is asked
+## about separately, because neither of them is a physics body at all.
 const SIGHT_MASK := Layers.WORLD
 
 ## The body, in the local frame. Small and hard - it is a device, not a grenade.
@@ -303,14 +304,36 @@ func _is_a_target(body: Node2D) -> bool:
 	return typeof(alive) != TYPE_BOOL or bool(alive)
 
 
-## Whether there is anything solid between the bomb and a point.
+## Whether the bomb can actually see a point: geometry, smoke and screens.
+##
+## All three, because all three are things the rest of the game already agrees
+## stop light, and a machine that can see through one of them is a machine that
+## cannot be hidden from by the one thing built for hiding from it. A screen is
+## a sheet somebody spent an ultimate raising precisely so they could not be
+## looked at through it; a drone that shot straight through it would make the
+## answer to a drone "there is no answer".
+##
+## Deliberately not VisionSystem.line_is_clear, which asks the same question and
+## is the reason Smoke and Screen expose these at all. That one resolves the
+## local player's eye first and answers `true` when there is not one - the right
+## way to be wrong for a thing that decides what to *draw*, and exactly the wrong
+## way for a thing that decides what to *shoot*, because the machine with no eye
+## is the dedicated server, which is the machine that resolves every hit in the
+## game. Borrowed logic, not borrowed answer.
 func _can_see(at: Vector2) -> bool:
 	var world := get_world_2d()
 	if world == null:
 		return true
 	var query := PhysicsRayQueryParameters2D.create(global_position, at, SIGHT_MASK)
 	query.hit_from_inside = false
-	return world.direct_space_state.intersect_ray(query).is_empty()
+	if not world.direct_space_state.intersect_ray(query).is_empty():
+		return false
+	var tree := get_tree()
+	if tree == null:
+		return true
+	if Smoke.blocks_sight(tree, global_position, at):
+		return false
+	return not Screen.blocks_sight(tree, global_position, at)
 
 
 ## One body's turn on the clock, and the hit if it is due.
