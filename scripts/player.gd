@@ -587,6 +587,23 @@ var _extract_held := 0.0
 ## crossing ground you could not otherwise cross, or leaving somewhere fast.
 var overload_left := 0.0
 
+## Seconds of current left in a cable, and a point on the cable carrying it.
+##
+## Both replicated, and the pair is the whole message. There is no rpc for this
+## and no node for the effect: the cable a rider is on is not replicated either
+## (see Zipline._someone_is_riding), and this works the same way - every machine
+## has every player's arc_at and arc_left, so every machine can ask a cable "is
+## one of those points on you" and get the same answer without a word being
+## sent about it.
+##
+## arc_at is a point rather than a node path for the same reason a rider is
+## matched by position: a NodePath to a level node is a thing the two machines
+## would have to agree a shorthand for, and the point is already unambiguous -
+## two cables would have to overlap for it to pick the wrong one, and then
+## electrifying both is the right answer anyway.
+var arc_at := Vector2.ZERO
+var arc_left := 0.0
+
 ## How white the screen is, 0 to 1, and how long it has left. Set by a flash
 ## grenade going off somewhere this body could see it - see Grenade._blind, which
 ## works it out on this machine and calls flashed() directly, because a screen is
@@ -2033,6 +2050,7 @@ func _update_weapon() -> void:
 ## plus trouble: standing around fills it slowly, a fight fills it faster.
 func _charge_ultimate(delta: float) -> void:
 	overload_left = maxf(overload_left - delta, 0.0)
+	arc_left = maxf(arc_left - delta, 0.0)
 	projection_left = maxf(projection_left - delta, 0.0)
 	if projection_left > 0.0 and not _projection_standing():
 		# Shot out early. The clock was only ever a guess at how long the ghost
@@ -2118,6 +2136,30 @@ func _use_ultimate(slot := 0) -> void:
 			if dash_ready else "dash put away, %d left" % dashes_left)
 		return
 
+	# A live rail needs a cable, and whether there is one is not something the
+	# meter knows. Checked before the charge is touched so pressing Q nowhere
+	# near a zipline costs nothing - the same rule the screen and the projection
+	# already follow, and the only one that keeps a positional ultimate from
+	# being a thing you can waste by standing in the wrong place.
+	if ult.gadget.kind == GadgetData.Kind.LIVE_RAIL:
+		if ult.charge < 1.0:
+			_say_loot("ultimate at %d%%" % roundi(ult.charge * 100.0))
+			return
+		var cable := _cable_within(ult.gadget.radius)
+		if cable == null:
+			_say_loot("no cable in reach")
+			return
+		ult.charge = 0.0
+		# The midpoint, not the end you are standing at. Either end is a place a
+		# second cable can also end - they are strung end to end all over this
+		# map - and the middle of a rope belongs to one rope only.
+		arc_at = (cable.world_top() + cable.world_bottom()) * 0.5
+		arc_left = ult.gadget.active_time
+		_say_loot("LIVE RAIL - that cable is hot for %ds" % roundi(arc_left))
+		if _audio:
+			_audio.reload_finished(global_position)
+		return
+
 	if ult.charge < 1.0:
 		_say_loot("ultimate at %d%%" % roundi(ult.charge * 100.0))
 		return
@@ -2148,6 +2190,26 @@ func _use_ultimate(slot := 0) -> void:
 			_say_loot("bow out - hold fire to draw, release to loose")
 	if _audio:
 		_audio.reload_finished(global_position)
+
+
+## The nearest cable with any part of it within `reach` of this body.
+##
+## Measured to the closest point on the rope rather than to its ends, so
+## standing under the middle of a long haul counts. Zipline.nearest() is not the
+## call here: that one is the grab check and uses each cable's own grab_range,
+## which is about 46px - a reach this gadget is supposed to beat.
+func _cable_within(reach: float) -> Zipline:
+	var best: Zipline = null
+	var best_distance := reach
+	for node in get_tree().get_nodes_in_group(&"zipline"):
+		var line := node as Zipline
+		if line == null:
+			continue
+		var distance := line.closest_point(global_position).distance_to(global_position)
+		if distance <= best_distance:
+			best_distance = distance
+			best = line
+	return best
 
 
 ## How far apart the two ends may be, in player heights. The leash on a screen:

@@ -36,6 +36,30 @@ const OCCUPIED_WIDTH := 3.5
 ## either end sees it, which is exactly who is at risk on a rope that short.
 const WARN_RANGE := 680.0
 
+## What the sight check for the warning is cast against, and how far short of
+## the cable it stops. Same mask as vision_system: solid geometry only, so a
+## one-way catwalk and another player are both see-through for this.
+const SIGHT_MASK := Layers.WORLD
+const SIGHT_INSET := 8.0
+
+## The Live Rail ultimate, read for its damage so the number lives in the
+## resource with the rest of the gadget's numbers rather than being typed twice.
+const RAIL: GadgetData = preload("res://resources/gadgets/live_rail.tres")
+
+## How near a cable Player.arc_at has to fall for the current to be this cable's.
+## Generous on purpose: arc_at is the midpoint of whatever cable was in reach
+## when it was cast, so an exact match is the normal case and this only has to
+## survive the two ends being dragged since.
+const ARC_MATCH := 24.0
+
+## What a hot cable looks like, and how fast it crawls.
+const LIVE_COLOUR := Color(0.62, 0.92, 1.0, 1.0)
+const LIVE_CORE := Color(1.0, 1.0, 1.0, 0.9)
+const LIVE_WIDTH := 4.0
+const ARC_SEGMENTS := 14
+const ARC_SPREAD := 5.0
+const ARC_HZ := 18.0
+
 ## How often the cable checks whether anyone is on it. Cheap either way - a
 ## handful of players against one segment - but this runs on every cable in the
 ## level and there is nothing to be gained from doing it at the frame rate.
@@ -83,6 +107,13 @@ const WATCH_INTERVAL := 0.1
 ## one end of it. Drives the colour and nothing else.
 var _warning_lit := false
 var _watch_timer := 0.0
+
+## True while somebody's Live Rail is running through this cable. Worked out on
+## every machine rather than sent - see _current_through_me.
+var _live := false
+var _was_live := false
+var _powered_by := 0
+var _arc_phase := 0.0
 
 
 func _ready() -> void:
@@ -133,14 +164,88 @@ func _lift_above_the_dark() -> void:
 ## on this particular cable - which is the whole trick, because the cable they
 ## are on is not replicated and does not need to be.
 func _process(delta: float) -> void:
+	# Damage every frame, but only once we already know the cable is hot. Who is
+	# powering it is re-asked on the watch interval below with everything else -
+	# scanning every player from every cable in the level sixty times a second
+	# is a lot of work to keep answering "nobody", and there are a hundred
+	# cables on the quarry. The cost of asking at 10Hz is up to a tenth of a
+	# second of grace at either end of the effect, which is the same tolerance
+	# the warning colour has always had.
+	if _live:
+		_arc_phase += delta
+		_electrocute(delta, _powered_by)
+		queue_redraw()
+
 	_watch_timer -= delta
 	if _watch_timer > 0.0:
 		return
 	_watch_timer = WATCH_INTERVAL
+
+	_powered_by = _current_through_me()
+	_live = _powered_by != 0
+	if _live != _was_live:
+		queue_redraw()
+	_was_live = _live
 	var lit := _someone_is_riding() and _at_an_end(Net.local_player)
 	if lit != _warning_lit:
 		_warning_lit = lit
 		queue_redraw()
+
+
+## Whether somebody has put current through this particular cable.
+##
+## Read off the players rather than told to us, the same way riders are. Every
+## machine has every player's arc_at and arc_left, so every machine reaches this
+## answer on its own and the effect needs no message of its own - see
+## Player.arc_at.
+## Returns the peer id of whoever is powering it, or 0 for a dead cable - so the
+## kill goes to the person who threw the switch rather than to nobody.
+func _current_through_me() -> int:
+	for body in Net.players():
+		if body == null or not is_instance_valid(body):
+			continue
+		var left: Variant = body.get(&"arc_left")
+		if typeof(left) != TYPE_FLOAT or left <= 0.0:
+			continue
+		var at: Variant = body.get(&"arc_at")
+		if typeof(at) != TYPE_VECTOR2:
+			continue
+		if closest_point(at).distance_to(at) <= ARC_MATCH:
+			return (body as Node).get_multiplayer_authority()
+	return 0
+
+
+## Hurts whoever is hanging off a live cable.
+##
+## Host only, like every other source of damage in the game - see
+## Net.deals_damage. Every machine draws the sparks; one of them decides what
+## they cost.
+##
+## Riders only. Standing at either end of a hot cable is safe, and that is the
+## point of it: the gadget does not deny the ledge, it denies the rope. A ride
+## is already a commitment you cannot break off halfway, so what this really
+## does is turn one that is already underway into a mistake.
+func _electrocute(delta: float, powered_by: int) -> void:
+	if not Net.deals_damage():
+		return
+	for body in Net.players():
+		if body == null or not is_instance_valid(body):
+			continue
+		if (body as Node).get_multiplayer_authority() == powered_by:
+			continue   # your own rail does not bite you
+		var rides: Variant = body.get(&"riding")
+		if typeof(rides) != TYPE_BOOL or not rides:
+			continue
+		if not in_reach(body.global_position):
+			continue
+		if not body.has_method(&"take_damage"):
+			continue
+		# Aimed at the body's own centre, which Damage.resolve reads as a body
+		# shot: current is not a projectile and should not be rolling headshots.
+		# Along the rope for a direction, because that is the way it is running.
+		Net.attributing_to = powered_by
+		body.take_damage(RAIL.damage * delta, body.global_position, direction())
+		Net.attributing_to = 0
 
 
 ## Whether somebody *other than you* is hanging off this cable.
@@ -183,13 +288,48 @@ func _at_an_end(body: Node2D) -> bool:
 	var at := body.global_position
 	var to_top := at.distance_to(world_top())
 	var to_bottom := at.distance_to(world_bottom())
-	return minf(to_top, to_bottom) <= WARN_RANGE
+	if minf(to_top, to_bottom) > WARN_RANGE:
+		return false
+	return _in_sight_of(at)
+
+
+## Whether the cable can actually be seen from a point.
+##
+## The warning is a thing you notice, and you cannot notice a rope through a
+## wall. Standing at the top of a shaft with a floor between you and the cable
+## used to light it amber anyway - which told you somebody was coming, from a
+## direction you had no way of watching, through geometry that was the whole
+## reason you felt safe standing there.
+##
+## Aimed at the nearest point of the cable rather than at either end, because
+## the end you are near is the end you might be standing on the far side of, and
+## what matters is whether any of the rope is visible from here.
+##
+## WORLD only, the same mask vision_system uses. A one-way catwalk you can see
+## through does not hide the cable, and neither does another player.
+func _in_sight_of(from: Vector2) -> bool:
+	var world := get_world_2d()
+	if world == null:
+		return true
+	var to := closest_point(from)
+	# Pulled back off the cable so the ray does not start inside whatever the
+	# cable is bolted to and report the anchor as the thing in the way.
+	var span := to - from
+	if span.length() <= SIGHT_INSET:
+		return true
+	to -= span.normalized() * SIGHT_INSET
+	var query := PhysicsRayQueryParameters2D.create(from, to, SIGHT_MASK)
+	query.hit_from_inside = false
+	return world.direct_space_state.intersect_ray(query).is_empty()
 
 
 func _draw() -> void:
 	# A rope with somebody on it, seen from the end they are heading for. The
 	# cable is scenery for the whole raid until this moment, which is exactly why
 	# a colour is enough - nothing else about it ever changes.
+	if _live:
+		_draw_live()
+		return
 	var line := OCCUPIED_COLOUR if _warning_lit else colour
 	var width := OCCUPIED_WIDTH if _warning_lit else 2.0
 	draw_line(bottom, top, line, width, true)
@@ -199,6 +339,37 @@ func _draw() -> void:
 			Color(line.r, line.g, line.b, 0.9))
 	if Engine.is_editor_hint() and show_guides:
 		_draw_guides()
+
+
+## A hot cable, drawn as a rope with something wrong with it.
+##
+## Deliberately unmissable and deliberately not the amber warning. Amber means
+## somebody is on this rope; this means the rope will kill you, and reading one
+## as the other in the second you have to decide is the whole cost of the
+## gadget being subtle. The zigzag is seeded off a clock so it crawls, because a
+## static lightning bolt reads as a decal rather than as current.
+func _draw_live() -> void:
+	var span := top - bottom
+	var length := span.length()
+	if length < 1.0:
+		return
+	var along := span / length
+	var side := along.orthogonal()
+	var points := PackedVector2Array()
+	for i in ARC_SEGMENTS + 1:
+		var t := float(i) / float(ARC_SEGMENTS)
+		var wobble := 0.0
+		if i > 0 and i < ARC_SEGMENTS:
+			# Two waves at odds with each other, so it never looks like a sine.
+			wobble = (sin(t * 22.0 + _arc_phase * ARC_HZ)
+				+ sin(t * 9.0 - _arc_phase * ARC_HZ * 0.6)) * 0.5 * ARC_SPREAD
+		points.append(bottom + along * (length * t) + side * wobble)
+	draw_polyline(points, LIVE_COLOUR, LIVE_WIDTH, true)
+	# A straight white core under the crackle: the rope is still there, and
+	# where it runs is still the thing you are judging.
+	draw_line(bottom, top, LIVE_CORE, 1.5, true)
+	for point in [top, bottom]:
+		draw_circle(point, 7.0, LIVE_COLOUR)
 
 
 func world_top() -> Vector2:

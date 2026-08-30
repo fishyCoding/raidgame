@@ -8,7 +8,7 @@ extends Resource
 ## that recharge over the course of a raid. Both are bought before you go in,
 ## which is what makes the shop a decision rather than a shopping list.
 
-enum Kind { FRAG, SMOKE, OVERLOAD, RECON_BOW, PROJECTION, FLASH, DASH, SCREEN }
+enum Kind { FRAG, SMOKE, OVERLOAD, RECON_BOW, PROJECTION, FLASH, DASH, SCREEN, LIVE_RAIL }
 enum Class { THROWABLE, ULTIMATE }
 
 @export var display_name := "Gadget"
@@ -20,9 +20,12 @@ enum Class { THROWABLE, ULTIMATE }
 @export_group("Throwable")
 ## Seconds from leaving your hand to going off.
 @export var fuse := 1.6
-## How far the effect reaches, in pixels.
+## How far the effect reaches, in pixels. For LIVE_RAIL it is how close to a
+## cable you have to be standing to put current through it.
 @export var radius := 160.0
-## Peak damage at the centre, falling off to nothing at the edge (FRAG).
+## Peak damage at the centre, falling off to nothing at the edge (FRAG). For
+## LIVE_RAIL it is damage per second to anyone on the cable, so the cost of
+## being caught on one is set by how far along it you were.
 @export var damage := 120.0
 ## How long the effect lingers (SMOKE), and how long the screen stays white
 ## after a FLASH goes off in your face.

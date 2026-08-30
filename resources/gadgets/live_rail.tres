@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="GadgetData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/gadget_data.gd" id="1_gadget"]
+
+[resource]
+script = ExtResource("1_gadget")
+display_name = "Live Rail"
+short_name = "LIVE"
+kind = 8
+gadget_class = 1
+price = 1200
+radius = 220.0
+damage = 55.0
+charge_time = 45.0
+active_time = 9.0
+tint = Color(0.55, 0.85, 1.0, 1)
+grid_size = Vector2i(2, 1)

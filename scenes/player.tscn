@@ -67,6 +67,12 @@ properties/13/replication_mode = 1
 properties/14/path = NodePath(".:scoped")
 properties/14/spawn = true
 properties/14/replication_mode = 2
+properties/15/path = NodePath(".:arc_at")
+properties/15/spawn = true
+properties/15/replication_mode = 1
+properties/16/path = NodePath(".:arc_left")
+properties/16/spawn = true
+properties/16/replication_mode = 1
 
 [node name="Player" type="CharacterBody2D" groups=["player"]]
 collision_layer = 4
