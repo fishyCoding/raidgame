@@ -280,21 +280,72 @@ func _bomb_half() -> void:
 	net._players.erase(4245)
 	clung.queue_free()
 
-	# --- it gets off early if it sees somebody -------------------------------
+	# --- in reach but out of sight is not a reason to stop -------------------
 	#
-	# A man standing off the rope, in the open, well inside its reach. The bomb
-	# is still climbing and has no business with him - until it looks up.
+	# Sight, not proximity. The break-off is the one part of this gadget that
+	# decides something for itself, and a version of it that stopped for a man it
+	# could not see would be a bomb that never left the bottom of the rope on a
+	# map made of walls - and would then be holding station over something it
+	# cannot shoot, which is worse.
+	#
+	# Walled in on all four sides rather than hidden behind one slab, and that is
+	# not belt and braces: the ropes in this level run diagonally, so a bomb
+	# climbing one travels sideways as well as up and simply goes around a single
+	# wall. The first version of this check did exactly that and read as a bug in
+	# the gadget.
+	#
+	# Put beside the middle of the cable, square off the rope, so he stays well
+	# inside sight_range for the whole climb - out of range would pass this test
+	# for the wrong reason.
 	ult.charge = 1.0
 	player.arc_stop = 0.0
+	player.global_position = cable.world_bottom() + Vector2(0.0, -20.0)
+	var midpoint: Vector2 = (cable.world_bottom() + cable.world_top()) * 0.5
+	var blind_spot: Vector2 = midpoint + cable.direction().orthogonal() * 200.0
+	var box := _box_in(level, blind_spot)
+	await _wait(3)
+	var hidden := _stub_rider(level, blind_spot)
+	hidden.set(&"riding", false)
+	net._players[4244] = hidden
+	await physics_frame
+	player._use_ultimate(0)
+	await _wait(3)
+	bomb = get_first_node_in_group(&"rail_bomb")
+	_check("he is well inside its reach",
+		bomb.global_position.distance_to(blind_spot) < gadget.sight_range)
+	_check("but it cannot see him", not bomb._can_see(blind_spot))
+	Input.action_press(&"jump")
+	await physics_frame
+	Input.action_release(&"jump")
+	await _wait(45)
+	_say("with him walled in it got to %.2f of the way up, %.0f px from him"
+		% [bomb.along, bomb.global_position.distance_to(blind_spot)])
+	_check("it does not stop for a man it cannot see", is_zero_approx(player.arc_stop))
+	_check("it carries on up the rope", bomb.along > 0.5)
+	_check("and he was in range the whole way, not merely far off",
+		bomb.global_position.distance_to(blind_spot) < gadget.sight_range)
+	net._players.erase(4244)
+	hidden.queue_free()
+	for slab in box:
+		slab.queue_free()
+	await _wait(3)
+
+	# --- but it does get off early for one it can see ------------------------
+	#
+	# The same man, the same range, the wall gone.
+	ult.charge = 1.0
+	player.arc_stop = 0.0
+	player.arc_left = 0.0
+	await _wait(3)
 	player.global_position = cable.world_bottom() + Vector2(0.0, -20.0)
 	await physics_frame
 	player._use_ultimate(0)
 	await _wait(3)
 	bomb = get_first_node_in_group(&"rail_bomb")
-	var seen_early := _stub_rider(level,
-		cable.world_bottom() + Vector2(120.0, -260.0))
+	var seen_early := _stub_rider(level, blind_spot)
 	seen_early.set(&"riding", false)
 	net._players[4244] = seen_early
+	_check("now that the walls are gone it can see him", bomb._can_see(blind_spot))
 	Input.action_press(&"jump")
 	await physics_frame
 	Input.action_release(&"jump")
@@ -423,6 +474,23 @@ func _wait(frames: int) -> void:
 func _player_iframes(body: Node2D) -> float:
 	var window: float = body.get(&"invulnerable_time")
 	return maxf(window, 0.001)
+
+
+## Four slabs in a square around a point, so nothing outside can see it whatever
+## angle it looks from. Returns them for the caller to take down again.
+func _box_in(parent: Node, at: Vector2) -> Array[Node2D]:
+	var slabs: Array[Node2D] = []
+	var scene := load("res://scenes/platform.tscn") as PackedScene
+	for side in 4:
+		var slab: Node2D = scene.instantiate()
+		parent.add_child(slab)
+		var offset := Vector2.RIGHT.rotated(PI * 0.5 * float(side)) * 70.0
+		slab.global_position = at + offset
+		slab.set(&"size", Vector2(170.0, 20.0))
+		# The two upright sides turned a quarter turn; the flat ones left alone.
+		slab.rotation = PI * 0.5 if side % 2 == 0 else 0.0
+		slabs.append(slab)
+	return slabs
 
 
 ## A body that can be on a rope and remembers being hurt, and nothing else.
