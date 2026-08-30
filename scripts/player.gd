@@ -194,12 +194,14 @@ extends CharacterBody2D
 ## predictably, and someone gets to shoot you for it. Strung end to end the way
 ## they are on the quarry, that commitment was refundable: ride, step off, grab
 ## the next one, and you crossed the map without ever being somewhere a person
-## could get to you. Ten seconds is long enough that the second rope is a
-## decision you make on the ground.
+## could get to you. Five seconds is long enough that the second rope is a
+## decision you make on the ground, and short enough that it is not a punishment
+## for having used the level as it is built - ten put you at the foot of a cable
+## watching a number, which is the wrong thing to be doing in a raid.
 ##
 ## Timed from stepping off rather than from grabbing, so a long haul does not
 ## come with its own cooldown already half spent.
-@export_range(0.0, 60.0, 0.5, "or_greater") var zipline_cooldown := 10.0
+@export_range(0.0, 60.0, 0.5, "or_greater") var zipline_cooldown := 5.0
 
 @export_group("Slinging the gun")
 ## Seconds to get the gun out of the way when both hands are wanted for a rope.
