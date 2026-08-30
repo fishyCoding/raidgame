@@ -308,6 +308,43 @@ static func _concat(a: AudioStreamWAV, b: AudioStreamWAV, gap: float) -> AudioSt
 	return _to_stream(samples)
 
 
+## A small machine holding itself in the air: a motor tone, a second unit very
+## slightly off it so the two beat against each other, a thin electrical whine
+## on top, and a rotor chop across the whole thing.
+##
+## Built to loop seamlessly, which is the only real constraint here. Every
+## frequency in it is an exact multiple of 1/length, so the last sample runs
+## into the first with no step - get that wrong and the loop ticks once a cycle,
+## which on a sound that plays for ten unbroken seconds is the only thing anyone
+## will hear. At the default half-second that means everything has to be a
+## multiple of 2 Hz, and every number below is.
+##
+## Detuned rather than clean on purpose. A single tone reads as a held note, and
+## a held note reads as music; two units a few hertz apart beat slowly against
+## each other and read as machinery that nobody tuned.
+static func drone_hum(base_hz := 70.0, length := 0.5) -> AudioStreamWAV:
+	var count := int(RATE * length)
+	var samples := PackedFloat32Array()
+	samples.resize(count)
+	for i in count:
+		var t := float(i) / float(RATE)
+		var motor := sin(TAU * base_hz * t) * 0.55
+		motor += sin(TAU * base_hz * 2.0 * t) * 0.2
+		# The second unit, four hertz up. Slow beating, not a chord.
+		motor += sin(TAU * (base_hz + 4.0) * t) * 0.3
+		# The electrics, well above the motor and well under it in level.
+		var whine := sin(TAU * base_hz * 6.0 * t) * 0.07
+		# Rotor chop. Deep enough to hear as blades rather than as tremolo.
+		var chop := 0.76 + 0.24 * sin(TAU * 12.0 * t)
+		samples[i] = clampf((motor + whine) * chop * 0.5, -1.0, 1.0)
+
+	var stream := _to_stream(samples)
+	stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	stream.loop_begin = 0
+	stream.loop_end = count
+	return stream
+
+
 static func _to_stream(samples: PackedFloat32Array) -> AudioStreamWAV:
 	var data := PackedByteArray()
 	data.resize(samples.size() * 2)

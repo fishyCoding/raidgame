@@ -198,6 +198,26 @@ func _bomb_half() -> void:
 	_check("and it did not also jump me into the air",
 		absf(player.global_position.y - was_y) < 24.0)
 
+	# --- and it makes a noise doing it ---------------------------------------
+	#
+	# Read off the Audio autoload's own players rather than from the call, so
+	# what is checked is what reaches the mixer. Headless runs a dummy driver,
+	# which does not matter: every property here is set before play().
+	var audio: Node = root.get_node("Audio")
+	var bomb_id := bomb.get_instance_id()
+	await physics_frame
+	_check("the motor is running", audio._hum != null and audio._hum.playing)
+	_check("and it is this bomb's motor", audio._hum_owner == bomb_id)
+	_check("placed where the bomb is",
+		audio._hum.global_position.distance_to(bomb.global_position) < 1.0)
+	_check("it is a positional sound with a range",
+		audio._hum is AudioStreamPlayer2D and audio._hum.max_distance > 0.0)
+	_check("and quieter than a gunshot", audio.DRONE_TRIM < 0.0)
+	# The rope, while it is on the rope. Same sound a man riding makes, because
+	# what the noise says is "something is on that cable and it is coming".
+	_check("and it is working the rope too",
+		audio._zip != null and audio._zip.playing and audio._zip_owner == bomb_id)
+
 	# --- it climbs -----------------------------------------------------------
 	#
 	# A third of a second, not three quarters. At 600 px/s a longer window puts
@@ -398,6 +418,13 @@ func _bomb_half() -> void:
 	var above: float = cable.world_top().y - bomb.global_position.y
 	_say("holding station %.0f px above the top of the cable" % above)
 	_check("hovering above the end of it", above > 20.0)
+	# The motor carries on; the rope noise does not, because at that moment the
+	# rope really is empty.
+	await physics_frame
+	var flying_id := bomb.get_instance_id()
+	_check("the motor keeps running in the air",
+		audio._hum.playing and audio._hum_owner == flying_id)
+	_check("but it has let the rope noise go", audio._zip_owner != flying_id)
 	# And the rope is a rope again. The danger has left it and is now a thing in
 	# the air saying so on its own account; a cable still flying a hazard colour
 	# under it would be warning about something that is no longer there.
@@ -422,6 +449,7 @@ func _bomb_half() -> void:
 	var sheet: Node = net.raise_screen(sheet_at + across * 90.0, sheet_at - across * 90.0,
 		net.peer_id())
 	await _wait(3)
+	_check("it is holding station for this", bool(bomb.hovering))
 	_check("there is a screen between them", sheet != null)
 	_check("and it reads as blocking the line", not bomb._can_see(seen.global_position))
 	seen.taken = 0.0
@@ -478,6 +506,24 @@ func _bomb_half() -> void:
 	# resolved the round.
 	_check("by way of the cell, so it dies everywhere", is_zero_approx(player.arc_left))
 	_check("and the rope is clean", not bool(cable._bombed))
+
+	# --- the motor is a clean loop -------------------------------------------
+	#
+	# It plays unbroken for ten seconds, so a seam at the loop point is not a
+	# blemish, it is a click twice a second and the only thing anybody would
+	# hear. Every frequency in it is an exact multiple of 1/length for exactly
+	# that reason - this is the check that says so, by reading the ends.
+	var hum := SoundBank.drone_hum()
+	_check("the hum loops", hum.loop_mode == AudioStreamWAV.LOOP_FORWARD)
+	_check("over the whole of itself", hum.loop_begin == 0 and hum.loop_end > 0)
+	var count := hum.data.size() / 2
+	var first := hum.data.decode_s16(0) / 32767.0
+	var last := hum.data.decode_s16((count - 1) * 2) / 32767.0
+	# The step across the loop point, against the biggest step inside the wave -
+	# a seam only matters relative to how fast the waveform moves anyway.
+	var inner := absf(hum.data.decode_s16(2) / 32767.0 - first)
+	_say("loop seam %.4f against a %.4f step inside the wave" % [absf(last - first), inner])
+	_check("without a step at the seam", absf(last - first) <= maxf(inner * 3.0, 0.02))
 
 	# --- the cell runs flat --------------------------------------------------
 	player.arc_left = 0.0

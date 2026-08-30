@@ -146,6 +146,10 @@ var _phase := 0.0
 var _damage := 0.0
 var _reach := 0.0
 
+## The sound of it. Held rather than fetched each frame, and null in a headless
+## run, which is why every use of it is guarded.
+@onready var _audio: Node = get_node_or_null(^"/root/Audio")
+
 ## Rounds it can still absorb. Counted on the host alone, because the host is
 ## the only machine that resolves a round - every other copy learns it is dead
 ## when the thrower's cell reads zero, which is the same way it learns anything.
@@ -242,7 +246,42 @@ func _process(delta: float) -> void:
 		_work_the_air(delta)
 	else:
 		_work_the_rope(delta)
+	_make_noise()
 	queue_redraw()
+
+
+## What it sounds like: a motor the whole time, and the rope while it is on one.
+##
+## Both sounds are positional and both are claimed by whoever is nearest - see
+## Audio.drone and Audio.zipline - so this is safe to shout every frame. Keyed on
+## the instance id, which is this machine's own handle for this bomb and is
+## exactly what the claim wants: it never has to match anybody else's, because
+## every machine is mixing for the person sitting in front of it.
+##
+## The rope noise is the same one a man makes riding, deliberately. Something is
+## on that cable and it is coming - which of the two it is is a thing you work
+## out by looking, and having to look is the point. Cut the moment it lets go,
+## because at that instant the rope really is empty.
+func _make_noise() -> void:
+	if _audio == null:
+		return
+	var id := get_instance_id()
+	_audio.drone(global_position, id)
+	if way != 0 and not hovering:
+		_audio.zipline(global_position, true, id)
+	else:
+		_audio.zipline_stopped(id)
+
+
+## Shot down, run flat, or the level going away underneath it. However it ends,
+## it has to stop making noise - a motor still humming over an empty yard is a
+## thing players would walk into a room to find.
+func _exit_tree() -> void:
+	if _audio == null:
+		return
+	var id := get_instance_id()
+	_audio.drone_stopped(id)
+	_audio.zipline_stopped(id)
 
 
 ## On the way up or down: it only wants people who are on the rope with it.

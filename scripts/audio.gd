@@ -82,6 +82,11 @@ const HEARING := {
 	## Explosions carry: a frag going off is the loudest thing in the game and
 	## should pull attention from anywhere on the map.
 	"explosion": 3000.0,
+	## A drone holding station is a thing you are meant to locate by ear before
+	## you find it by eye - it is small, it is up in the air, and it is lit only
+	## when you can already see it. Carries further than a footstep and less far
+	## than a shot.
+	"drone": 1100.0,
 }
 
 ## Fallback for anything that does not name a range.
@@ -124,6 +129,11 @@ const PLAYER_TRIM := 2.0
 ## quietened the entire game by that much as a side effect. This restores it, so
 ## dropping occlusion changed what you hear about *walls* and nothing else.
 const CLEAR_LINE_TRIM := 4.0
+
+## How loud the drone's motor sits. Under everything that matters in a fight -
+## it is a thing you notice in the gaps, and a machine you can hear over gunfire
+## would be a machine that hides gunfire.
+const DRONE_TRIM := -9.0
 
 ## How sharply sound drops with distance. Above 1 means a fast initial falloff.
 ##
@@ -247,6 +257,13 @@ var _clips := {}
 ## The zipline is the one sound that is a state rather than an event, so it gets
 ## a player of its own that is started and stopped instead of fired.
 var _zip: AudioStreamPlayer2D
+## The rail bomb's motor, on the same one-player-claimed-by-nearest scheme the
+## zip uses - see _claim_zip, which this mirrors. Two drones in the air at once
+## is possible and rare; the near one wins and the far one is a sound you would
+## struggle to place anyway.
+var _hum: AudioStreamPlayer2D
+var _hum_owner := 0
+var _hum_frame := -1000
 ## Who the single rope sound currently belongs to, and when they last asked for
 ## it. See _claim_zip.
 var _zip_owner := 0
@@ -304,6 +321,17 @@ func _ready() -> void:
 			looped.loop = true
 		_zip.stream = looped
 		add_child(_zip)
+
+	# The drone's motor. Synthesised rather than loaded, like the guns - see
+	# SoundBank.drone_hum - and looping for the same reason the zip does: it runs
+	# for as long as the thing is in the air.
+	_hum = AudioStreamPlayer2D.new()
+	_hum.max_distance = HEARING.drone
+	_hum.attenuation = ATTENUATION
+	_hum.panning_strength = PANNING
+	_hum.bus = &"Master"
+	_hum.stream = SoundBank.drone_hum()
+	add_child(_hum)
 	# Reloads are metal on metal: a ringing clack, nothing like the noise burst
 	# of a shot or the dull thud of a boot.
 	_reload_start = SoundBank.clack(1.15, 0.10)
@@ -572,6 +600,52 @@ func zipline(at: Vector2, moving: bool, source := 0) -> void:
 			_zip.play()
 	elif _zip.playing:
 		_zip.stop()
+
+
+## The rail bomb's motor, held for as long as it is asked for each frame.
+##
+## Unlike the zip there is no "moving" half to this: a drone that has stopped
+## moving has not stopped running, and the whole point of the sound is that it
+## keeps telling you where the thing is while it sits there shooting at you.
+func drone(at: Vector2, source := 0) -> void:
+	if _hum == null or not _claim_hum(source, at):
+		return
+	_hum.global_position = at
+	# Re-asked every frame, like the zip and for the same reason: this one climbs
+	# a rope past you and then holds itself above your head, and hearing it
+	# change floors is most of what the cue is worth.
+	var bus := elevation_bus(at)
+	_hum.bus = bus
+	_hum.volume_db = DRONE_TRIM + master_db + CLEAR_LINE_TRIM + elevation_trim(bus)
+	if not _hum.playing:
+		_hum.play()
+
+
+func drone_stopped(source := 0) -> void:
+	if _hum == null:
+		return
+	# Somebody else's drone keeps running when yours is shot down.
+	if source != 0 and _hum_owner != source:
+		return
+	_hum.stop()
+	_hum_owner = 0
+
+
+func _claim_hum(source: int, at: Vector2) -> bool:
+	var frame := Engine.get_physics_frames()
+	if _hum_owner == source or frame - _hum_frame > 2:
+		_hum_owner = source
+		_hum_frame = frame
+		return true
+	var listener := Net.local_player
+	if listener == null:
+		return false
+	if (listener.global_position.distance_to(at)
+			>= listener.global_position.distance_to(_hum.global_position)):
+		return false
+	_hum_owner = source
+	_hum_frame = frame
+	return true
 
 
 func _claim_zip(source: int, at: Vector2) -> bool:
