@@ -434,6 +434,26 @@ func _bomb_half() -> void:
 	var seen := _stub_rider(level, bomb.global_position + Vector2(80.0, 40.0))
 	seen.set(&"riding", false)
 	net._players[4243] = seen
+
+	# --- but not on the frame it sees him ------------------------------------
+	#
+	# Counted in frames rather than seconds: the reaction is a fifth of a second,
+	# which is twelve of them, and eight leaves room for the frame or two the
+	# stub takes to be noticed at all. This check is made before the one below
+	# and not instead of it - on its own a bomb that never fired at anything
+	# would pass it.
+	#
+	# The number is read off the bomb's own script rather than written as
+	# `RailBomb.REACTION`, which would look better and does not work: naming the
+	# class here makes this test script depend on rail_bomb.gd at compile time,
+	# and a `--script` run compiles it before the autoloads exist, so the whole
+	# file fails on the first `Net.` in it. Runtime lookup, no dependency.
+	var reaction: float = float(bomb.get_script().get_script_constant_map()
+		.get("REACTION", 0.2))
+	await _wait(8)
+	_say("took %.0f in the first %.2fs of being looked at (reaction is %.2fs)"
+		% [seen.taken, 8.0 / 60.0, reaction])
+	_check("it does not fire the instant it sees you", seen.taken == 0.0)
 	await _wait(30)
 	_say("the man underneath it took %.0f" % seen.taken)
 	_check("it shoots somebody standing under it", seen.taken > 0.0)

@@ -70,6 +70,27 @@ const JOLT_INTERVAL := 0.4
 ## "should I stay on this cable", and it is meant to be an easy question.
 const ROPE_JOLT_INTERVAL := 0.11
 
+## How long it looks at somebody before it opens up on them, in seconds.
+##
+## It is a machine, and a machine that fired on the same frame its sights
+## crossed you was a machine you could not step out from behind cover at all -
+## the round was already coming before the decision to lean out could be taken
+## back. A fifth of a second is not a chance to dodge; it is the width of the
+## gap between "it has seen me" and "it is shooting me", and that gap is what
+## makes peeking a thing you can do rather than a thing that happens to you.
+##
+## Per target, and it goes back to zero the moment the line breaks - so a man
+## who ducks behind a wall and out again buys the whole delay a second time,
+## which is the entire trade being offered. Timed on every machine rather than
+## replicated, the same as the arcs it gates: everyone runs the same clock off
+## the same replicated positions and arrives at the same picture.
+##
+## Only the shooting waits. Riding the rope with it does not - see
+## ROPE_JOLT_INTERVAL, which is a contact and not a sighting, and where a pass
+## lasting under two tenths of a second would be nullified outright by making
+## it wait two tenths of a second.
+const REACTION := 0.2
+
 ## How close the bomb has to pass a rider to take a bite out of them.
 ##
 ## Generous next to the cable's own grab range, because a man on a rope and a
@@ -141,6 +162,11 @@ var _arcs: Array[Vector2] = []
 
 ## When each victim is next due, by instance id.
 var _next_jolt := {}
+
+## How long it has had eyes on each victim, by instance id. An entry appears the
+## frame the line comes clear and is dropped the frame it breaks; while it reads
+## under REACTION the bomb is looking, not shooting.
+var _seen_for := {}
 
 var _phase := 0.0
 var _damage := 0.0
@@ -311,17 +337,26 @@ func _work_the_rope(delta: float) -> void:
 			wants_off = true
 
 
-## Holding station: anybody it can see, rider or not.
+## Holding station: anybody it can see, rider or not, once it has looked at them
+## for REACTION seconds.
 func _work_the_air(delta: float) -> void:
 	for body in Net.players():
 		if not _is_a_target(body):
 			continue
 		var at: Vector2 = body.global_position
-		if at.distance_to(global_position) > _reach:
-			_next_jolt.erase(body.get_instance_id())
+		var key := body.get_instance_id()
+		if at.distance_to(global_position) > _reach or not _can_see(at):
+			# Lost him. Both clocks go, not just the jolt one: the next time it
+			# finds him it starts from having just found him.
+			_next_jolt.erase(key)
+			_seen_for.erase(key)
 			continue
-		if not _can_see(at):
-			_next_jolt.erase(body.get_instance_id())
+		var looked: float = float(_seen_for.get(key, 0.0)) + delta
+		_seen_for[key] = looked
+		if looked < REACTION:
+			# Seen but not yet shot at, and drawn as such - no arc, because the
+			# arc is the shot and a bolt on the frame it spots you is the thing
+			# this delay exists to remove.
 			continue
 		_arcs.append(at)
 		_jolt(body, delta, JOLT_INTERVAL, false)
