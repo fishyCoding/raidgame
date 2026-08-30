@@ -1,5 +1,5 @@
 class_name RailBomb
-extends Node2D
+extends StaticBody2D
 
 ## A charge you clamp to a zipline, point up or down, and let climb.
 ##
@@ -98,6 +98,12 @@ const SIGHT_MASK := Layers.WORLD
 const BODY := 9.0
 const LAMP := 3.5
 
+## What you have to hit to shoot it down, which is a little more generous than
+## what you can see. A drone is a small fast thing crossing a yard and the
+## difficulty is meant to be tracking it, not sub-pixel aim - and it is the same
+## bargain a body gets, whose hitbox is also kinder than its outline.
+const HITBOX := 13.0
+
 const HULL := Color(0.20, 0.24, 0.30, 1.0)
 const RIM := Color(0.62, 0.92, 1.0, 1.0)
 const SPARK := Color(0.75, 0.95, 1.0, 1.0)
@@ -139,9 +145,28 @@ var _phase := 0.0
 var _damage := 0.0
 var _reach := 0.0
 
+## Rounds it can still absorb. Counted on the host alone, because the host is
+## the only machine that resolves a round - every other copy learns it is dead
+## when the thrower's cell reads zero, which is the same way it learns anything.
+var _hits_left := 0
+
+## How hard it is flinching, 0 to 1. Local, cosmetic, and set on whichever
+## machine saw the round land - a hit that only the host draws is still better
+## than a hit nobody draws, and this is not worth a message.
+var _struck := 0.0
+
 
 func _ready() -> void:
 	add_to_group(&"rail_bomb")
+	# Solid enough to shoot at. Its own layer, and no mask at all: it is a thing
+	# rounds can find, not a thing that goes looking for anything.
+	collision_layer = Layers.GADGET
+	collision_mask = 0
+	var shape := CollisionShape2D.new()
+	var circle := CircleShape2D.new()
+	circle.radius = HITBOX
+	shape.shape = circle
+	add_child(shape)
 	# Taken by the dark, like a grapple line and a dash trail and for the same
 	# reason: a thing that tells you where somebody's attention is should have to
 	# be looked at to be learned. VisionSystem walks this group and turns each
@@ -159,11 +184,30 @@ func _ready() -> void:
 ## Told what it is and what it costs. The Zipline that owns it does this on the
 ## frame it builds it, from the gadget resource, so the numbers live in the
 ## .tres with the rest of the gadget's numbers rather than being typed here.
-func arm(on: Zipline, by: int, damage: float, reach: float) -> void:
+func arm(on: Zipline, by: int, damage: float, reach: float, toughness: int) -> void:
 	cable = on
 	owner_peer = by
 	_damage = damage
 	_reach = reach
+	_hits_left = maxi(toughness, 1)
+
+
+## Somebody shot it.
+##
+## Only ever called where the round was resolved, which is the host - see
+## Bullet, which checks that before it goes looking for this method. So the
+## count is kept in one place by construction rather than by being guarded.
+##
+## Nothing is freed here. The bomb exists because the thrower's cell reads above
+## zero, so the way to end one is to make that read zero and let every machine
+## reach the same conclusion it reaches for a bomb that simply ran flat. See
+## Net.bring_down_rail_bomb.
+func take_damage(_amount: float, _at: Vector2, _from: Vector2) -> void:
+	_struck = 1.0
+	_hits_left -= 1
+	if _hits_left > 0:
+		return
+	Net.bring_down_rail_bomb(owner_peer)
 
 
 ## Where it should be, given the state it was handed this frame.
@@ -191,6 +235,7 @@ func place(at_along: float, which_way: int, is_hovering: bool) -> void:
 
 func _process(delta: float) -> void:
 	_phase += delta
+	_struck = maxf(_struck - delta * 4.0, 0.0)
 	_arcs.clear()
 	if hovering:
 		_work_the_air(delta)
@@ -298,7 +343,12 @@ func _draw() -> void:
 	for at in _arcs:
 		_draw_bolt(to_local(at))
 	var rim := IDLE_RIM if way == 0 else RIM
-	draw_circle(Vector2.ZERO, BODY, HULL)
+	# White for an instant where a round went in, so shooting at one tells you
+	# whether you are hitting it. The count itself is the host's and is not
+	# drawn - a health bar on a gadget would be reading somebody else's mail.
+	if _struck > 0.0:
+		rim = rim.lerp(Color.WHITE, _struck)
+	draw_circle(Vector2.ZERO, BODY, HULL.lerp(Color.WHITE, _struck * 0.7))
 	draw_arc(Vector2.ZERO, BODY, 0.0, TAU, 20, rim, 2.0, true)
 	# A lamp that pulses, so a bomb waiting for orders is visibly waiting rather
 	# than visibly stuck.

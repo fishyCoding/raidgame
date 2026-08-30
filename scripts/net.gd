@@ -1695,6 +1695,36 @@ func _hit_body(owner_id: int, amount: float, at: Vector2, direction: Vector2,
 	attributing_to = 0
 
 
+## Shoots a rail bomb out of the air, everywhere at once.
+##
+## The bomb is derived rather than spawned - every machine builds its own copy
+## off the thrower's replicated numbers and frees it when the cell reads zero -
+## so bringing one down is a matter of making that number zero rather than of
+## despawning anything. See RailBomb.
+##
+## Which is the whole reason this exists as a message at all. The host is the
+## only machine that resolves a round, and the number lives on the thrower's
+## machine, and neither of those can write the other's state: the host cannot
+## touch a client's replicated property, and a client cannot be trusted to
+## notice it has been shot. So the host says so and the owner does it, which is
+## the same shape tell_owner_hit already uses for the same reason.
+func bring_down_rail_bomb(owner_id: int) -> void:
+	var body := player_for(owner_id)
+	# Ours to zero: playing alone, or the host's own bomb on the host.
+	if body != null and (not is_networked() or owner_id == peer_id()):
+		body.set(&"arc_left", 0.0)
+		return
+	if is_networked() and is_host:
+		_rail_bomb_down.rpc_id(owner_id)
+
+
+@rpc("authority", "reliable")
+func _rail_bomb_down() -> void:
+	if local_player == null:
+		return
+	local_player.set(&"arc_left", 0.0)
+
+
 ## Hands a hitmarker to whoever actually fired, which is no longer necessarily
 ## the machine that worked out the hit.
 func credit_hit(headshot: bool, killed: bool) -> void:

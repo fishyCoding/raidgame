@@ -12,6 +12,11 @@ const ENEMY := 1 << 4
 ## stopping anything else - most importantly not sound, which does no raycasting
 ## at all and is therefore left alone for free.
 const SCREEN := 1 << 5
+## A deployed gadget solid enough to shoot at - a rail bomb, so far. Its own
+## layer rather than SCREEN's, because a screen stops light and this must not:
+## a drone that cast a shadow would blind the yard it is hovering over, and the
+## sight checks that read SCREEN are all asking about a wall of picture.
+const GADGET := 1 << 6
 
 ## Bit indices, for set_collision_mask_value() / set_collision_layer_value().
 const WORLD_BIT := 1
@@ -20,6 +25,7 @@ const PLAYER_BIT := 3
 const TARGET_BIT := 4
 const ENEMY_BIT := 5
 const SCREEN_BIT := 6
+const GADGET_BIT := 7
 
 ## What a round fired by the player is allowed to hit.
 ##
@@ -29,8 +35,8 @@ const SCREEN_BIT := 6
 ## that does not work. The shooter's own body is excluded per round rather than
 ## by layer - see Bullet - because the muzzle sits inside your own hitbox at
 ## some angles and a mask cannot tell "me" from "him".
-const PLAYER_SHOT := WORLD | ONE_WAY | TARGET | ENEMY | PLAYER | SCREEN
+const PLAYER_SHOT := WORLD | ONE_WAY | TARGET | ENEMY | PLAYER | SCREEN | GADGET
 
 ## What a round fired by an enemy is allowed to hit. Enemies do not shoot each
 ## other, so friendly fire never becomes the player's problem-solver.
-const ENEMY_SHOT := WORLD | ONE_WAY | PLAYER | SCREEN
+const ENEMY_SHOT := WORLD | ONE_WAY | PLAYER | SCREEN | GADGET

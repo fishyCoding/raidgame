@@ -304,6 +304,12 @@ func _bomb_half() -> void:
 	_check("it broke off before the top", bomb.along < 0.9)
 	_check("and let go of the rope", bool(bomb.hovering))
 	_check("the stop was written down", player.arc_stop > 0.0)
+	# And the cell is re-cut to the hover the moment it stops, however much of
+	# the climb budget was left. Half a second has passed since, hence the slack.
+	_say("cell re-cut to %.2fs (hover_time is %.0f)" % [player.arc_left, gadget.hover_time])
+	_check("ten seconds from the moment it stopped",
+		player.arc_left <= gadget.hover_time
+		and player.arc_left > gadget.hover_time - 1.0)
 	_check("and the rope is not yellow any more", not bool(cable._bombed))
 	# Frozen there. Every other machine reads that number rather than deciding
 	# for itself, and the number has to stop moving for that to be worth
@@ -362,6 +368,42 @@ func _bomb_half() -> void:
 	_check("and not somebody out of its reach", seen.taken == 0.0)
 	net._players.erase(4243)
 	seen.queue_free()
+
+	# --- and you can shoot it out of the air ---------------------------------
+	#
+	# Through take_damage, which is the door a round comes in by - Bullet looks
+	# for exactly this method on whatever its ray hit, and only calls it on the
+	# machine that resolved the round.
+	_check("it is solid enough to shoot at", bomb.collision_layer == Layers.GADGET)
+	_check("and does not go looking for anything itself", bomb.collision_mask == 0)
+	# The layer bit is only half the claim. A round finds what it hits by casting
+	# a ray against Layers.PLAYER_SHOT and then looking for take_damage on
+	# whatever came back (see Bullet), so the check that matters is whether that
+	# same cast comes back holding this - a body on a layer no round is masked
+	# for is a body nobody can shoot.
+	var shot := PhysicsRayQueryParameters2D.create(
+		bomb.global_position + Vector2(-200.0, 0.0),
+		bomb.global_position + Vector2(200.0, 0.0), Layers.PLAYER_SHOT)
+	var found: Dictionary = bomb.get_world_2d().direct_space_state.intersect_ray(shot)
+	_check("a round's own cast finds it", found.get("collider") == bomb)
+	_check("and finds the method it needs on it",
+		found.get("collider") != null and (found["collider"] as Object).has_method(&"take_damage"))
+	var toughness: int = gadget.hit_points
+	for i in toughness - 1:
+		bomb.take_damage(10.0, bomb.global_position, Vector2.RIGHT)
+	await _wait(2)
+	_check("it takes more than one round",
+		not get_nodes_in_group(&"rail_bomb").is_empty())
+	_check("and the cell is still live", player.arc_left > 0.0)
+	bomb.take_damage(10.0, bomb.global_position, Vector2.RIGHT)
+	await _wait(4)
+	_say("shot down after %d rounds" % toughness)
+	_check("the last one downs it", get_nodes_in_group(&"rail_bomb").is_empty())
+	# Downed by zeroing the thrower's cell, not by freeing a node - which is what
+	# makes it come down on every machine rather than only on the one that
+	# resolved the round.
+	_check("by way of the cell, so it dies everywhere", is_zero_approx(player.arc_left))
+	_check("and the rope is clean", not bool(cable._bombed))
 
 	# --- the cell runs flat --------------------------------------------------
 	player.arc_left = 0.0

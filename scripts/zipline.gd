@@ -231,7 +231,7 @@ func _carry_the_bomb() -> void:
 			_bomb = null
 			return
 		into.add_child(_bomb)
-		_bomb.arm(self, int(mine["by"]), BOMB.damage, BOMB.sight_range)
+		_bomb.arm(self, int(mine["by"]), BOMB.damage, BOMB.sight_range, BOMB.hit_points)
 
 	var length := cable_length()
 	var way := int(mine["way"])
@@ -243,25 +243,39 @@ func _carry_the_bomb() -> void:
 		# drifts apart between machines, and one that is a function of a
 		# replicated number cannot.
 		#
-		# The clock stops where it got off. Once arc_stop is set the whole
-		# expression is frozen, which is how a bomb that broke off early sits in
-		# the same spot on every screen.
-		var clock: float = maxf(float(mine["left"]), stopped)
+		# The clock stops where it got off. Once arc_stop is set the position
+		# stops being a function of the running clock and becomes a function of
+		# that one frozen reading, which is how a bomb that broke off early sits
+		# in the same spot on every screen - and, just as importantly, why the
+		# cell can be reset underneath it without the thing sliding.
+		var clock: float = stopped if stopped > 0.0 else float(mine["left"])
 		var travelled: float = (float(mine["launch"]) - clock) * BOMB.travel_speed
 		at = clampf(at + float(way) * travelled / length, 0.0, 1.0)
-	var off_the_rope := way != 0 and (stopped > 0.0 or at <= 0.0 or at >= 1.0)
+	var end_of_rope := way != 0 and (at <= 0.0 or at >= 1.0)
+	var off_the_rope := way != 0 and (stopped > 0.0 or end_of_rope)
 	_bomb.place(at, way, off_the_rope)
 	_set_bombed(not off_the_rope)
 
-	# Whether to break off, decided once and on one machine. This is the owner's
-	# copy of the bomb, so this is the machine whose sight lines count; every
-	# other one reads the answer off arc_stop as a number - see RailBomb.
-	if off_the_rope or way == 0 or not _bomb.wants_off:
+	# Getting off, decided once and on one machine.
+	#
+	# This is the owner's copy of the bomb, so this is the machine whose sight
+	# lines count and whose numbers these are; every other machine reads the
+	# answer off arc_stop rather than reaching it - see RailBomb, which explains
+	# why a decision about what can be seen must not be made twice.
+	if way == 0 or stopped > 0.0:
 		return
-	var mine_to_stop := Net.local_player
-	if mine_to_stop == null or mine_to_stop.get_multiplayer_authority() != int(mine["by"]):
+	if not (end_of_rope or _bomb.wants_off):
 		return
-	mine_to_stop.arc_stop = float(mine["left"])
+	var owner := Net.local_player
+	if owner == null or owner.get_multiplayer_authority() != int(mine["by"]):
+		return
+	owner.arc_stop = float(mine["left"])
+	# And the cell is re-cut to the hover: ten seconds of holding station,
+	# however long the climb took to get here. Set rather than subtracted - a
+	# bomb that spent most of its charge getting up a long rope would otherwise
+	# arrive with nothing left to do at the top, which is the half of the gadget
+	# that matters.
+	owner.arc_left = BOMB.hover_time
 
 
 ## Only redraws on the edge. The cable is static scenery for the whole raid and

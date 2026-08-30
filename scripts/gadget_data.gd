@@ -38,7 +38,13 @@ enum Class { THROWABLE, ULTIMATE }
 @export var charge_time := 45.0
 ## How long the effect lasts once spent.
 @export var active_time := 8.0
-## How many rounds the effect can absorb before it comes apart (PROJECTION).
+## How many rounds the effect can absorb before it comes apart (PROJECTION), and
+## how many a RAIL_BOMB takes before it is shot out of the air.
+##
+## Counted on the host only, like every other kind of damage, and the bomb comes
+## down everywhere when the count runs out - see Net.bring_down_rail_bomb. It is
+## a small hard thing that moves, so the difficulty is meant to be hitting it
+## rather than hurting it.
 @export var hit_points := 3
 ## How many dashes casting it gives you. Spent one at a time and kept until they
 ## are, rather than running out on a clock: two dashes you are saving is a plan,
@@ -63,6 +69,16 @@ enum Class { THROWABLE, ULTIMATE }
 ## rider takes one jolt on the way by rather than two. That is the intended
 ## shape now - the cable is the delivery, the sky is the weapon.
 @export var travel_speed := 600.0
+
+## Seconds a RAIL_BOMB has left from the moment it stops - whether it stopped
+## because it ran out of rope or because it saw somebody worth stopping for.
+##
+## Set, not subtracted, so the hover is the same length however long the climb
+## took. active_time is the budget for everything before that: waiting to be
+## pointed, and the climb itself. This is the part that does the work, and a
+## bomb that had spent most of its cell getting up a long rope would otherwise
+## arrive at the top with nothing left to do there.
+@export var hover_time := 10.0
 
 ## How far a RAIL_BOMB can reach once it is holding station at the end of the
 ## cable, in pixels.
