@@ -46,6 +46,25 @@ const SIGHT_INSET := 8.0
 ## resource with the rest of the gadget's numbers rather than being typed twice.
 const RAIL: GadgetData = preload("res://resources/gadgets/live_rail.tres")
 
+## Seconds between jolts, and this number is not a feel dial - it is a
+## constraint. Player.invulnerable_time is 0.35s of immunity after any hit,
+## there so a burst cannot delete you, and it does not care that this is not a
+## burst. Spread the rail's damage across frames as `damage * delta` and all but
+## the first jolt of every 0.35s is swallowed: the first version of this did
+## exactly that and delivered 0.8 damage a second against the 55 it was asking
+## for, continuously, silently, and only visible because a networked test
+## measured the health bar rather than trusting the call.
+##
+## So the current arrives as discrete jolts spaced wider than that window, and
+## each one is a number worth seeing on the bar. Anything below invulnerable_time
+## here quietly throws damage away again.
+const JOLT_INTERVAL := 0.4
+
+## When each rider is next due a jolt, by instance id. Cleared the moment they
+## step off, which is what makes stepping back on immediate rather than resuming
+## somebody else's clock.
+var _next_jolt := {}
+
 ## How near a cable Player.arc_at has to fall for the current to be this cable's.
 ## Generous on purpose: arc_at is the midpoint of whatever cable was in reach
 ## when it was cast, so an exact match is the normal case and this only has to
@@ -164,26 +183,22 @@ func _lift_above_the_dark() -> void:
 ## on this particular cable - which is the whole trick, because the cable they
 ## are on is not replicated and does not need to be.
 func _process(delta: float) -> void:
-	# Damage every frame, but only once we already know the cable is hot. Who is
-	# powering it is re-asked on the watch interval below with everything else -
-	# scanning every player from every cable in the level sixty times a second
-	# is a lot of work to keep answering "nobody", and there are a hundred
-	# cables on the quarry. The cost of asking at 10Hz is up to a tenth of a
-	# second of grace at either end of the effect, which is the same tolerance
-	# the warning colour has always had.
+	# Every frame, not on the watch interval. Stepping onto a hot cable has to
+	# cost you from the first frame - a tenth of a second of free riding is a
+	# tenth of the damage, and worse, it is a tenth of a second in which the
+	# thing plainly is not doing what it looks like it is doing.
+	#
+	# Cheap anyway, because the scan of who is arcing happens once per frame for
+	# the whole level rather than once per cable - see _arcs_this_frame. A
+	# hundred cables asking it is a hundred walks of a list that is empty almost
+	# all of the time.
+	_powered_by = _current_through_me()
+	_live = _powered_by != 0
 	if _live:
 		_arc_phase += delta
 		_electrocute(delta, _powered_by)
 		queue_redraw()
-
-	_watch_timer -= delta
-	if _watch_timer > 0.0:
-		return
-	_watch_timer = WATCH_INTERVAL
-
-	_powered_by = _current_through_me()
-	_live = _powered_by != 0
-	if _live != _was_live:
+	elif _was_live:
 		queue_redraw()
 	_was_live = _live
 	var lit := _someone_is_riding() and _at_an_end(Net.local_player)
@@ -201,17 +216,12 @@ func _process(delta: float) -> void:
 ## Returns the peer id of whoever is powering it, or 0 for a dead cable - so the
 ## kill goes to the person who threw the switch rather than to nobody.
 func _current_through_me() -> int:
-	for body in Net.players():
-		if body == null or not is_instance_valid(body):
-			continue
-		var left: Variant = body.get(&"arc_left")
-		if typeof(left) != TYPE_FLOAT or left <= 0.0:
-			continue
-		var at: Variant = body.get(&"arc_at")
-		if typeof(at) != TYPE_VECTOR2:
-			continue
+	# Net gathers these once a frame for the whole level, so a hundred cables
+	# asking is a hundred walks of a list that is almost always empty.
+	for arc in Net.live_rails:
+		var at: Vector2 = arc["at"]
 		if closest_point(at).distance_to(at) <= ARC_MATCH:
-			return (body as Node).get_multiplayer_authority()
+			return int(arc["by"])
 	return 0
 
 
@@ -234,17 +244,26 @@ func _electrocute(delta: float, powered_by: int) -> void:
 		if (body as Node).get_multiplayer_authority() == powered_by:
 			continue   # your own rail does not bite you
 		var rides: Variant = body.get(&"riding")
-		if typeof(rides) != TYPE_BOOL or not rides:
+		var on_it: bool = (typeof(rides) == TYPE_BOOL and rides
+			and in_reach(body.global_position) and body.has_method(&"take_damage"))
+		var key := body.get_instance_id()
+		if not on_it:
+			_next_jolt.erase(key)
 			continue
-		if not in_reach(body.global_position):
+
+		# Somebody who was not on it a frame ago is jolted now, this frame, with
+		# no wait at all. Everyone else is on the clock.
+		var due: float = _next_jolt.get(key, 0.0) - delta
+		if due > 0.0:
+			_next_jolt[key] = due
 			continue
-		if not body.has_method(&"take_damage"):
-			continue
+		_next_jolt[key] = JOLT_INTERVAL
+
 		# Aimed at the body's own centre, which Damage.resolve reads as a body
 		# shot: current is not a projectile and should not be rolling headshots.
 		# Along the rope for a direction, because that is the way it is running.
 		Net.attributing_to = powered_by
-		body.take_damage(RAIL.damage * delta, body.global_position, direction())
+		body.take_damage(RAIL.damage, body.global_position, direction())
 		Net.attributing_to = 0
 
 

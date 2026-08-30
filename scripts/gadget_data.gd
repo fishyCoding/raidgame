@@ -24,8 +24,10 @@ enum Class { THROWABLE, ULTIMATE }
 ## cable you have to be standing to put current through it.
 @export var radius := 160.0
 ## Peak damage at the centre, falling off to nothing at the edge (FRAG). For
-## LIVE_RAIL it is damage per second to anyone on the cable, so the cost of
-## being caught on one is set by how far along it you were.
+## LIVE_RAIL it is damage per jolt, and the cable jolts every
+## Zipline.JOLT_INTERVAL - not per second, because a player has invulnerability
+## frames after any hit and damage spread thinly across frames is damage thrown
+## away. Three jolts is a kill on an unarmoured rider.
 @export var damage := 120.0
 ## How long the effect lingers (SMOKE), and how long the screen stays white
 ## after a FLASH goes off in your face.

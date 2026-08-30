@@ -147,7 +147,6 @@ func _cast_half() -> void:
 		cable.closest_point(player.arc_at).distance_to(player.arc_at) <= 24.0)
 	_check("live for the gadget's active_time",
 		absf(player.arc_left - gadget.active_time) < 0.2)
-	_check("the cable agrees it is powered", cable._current_through_me() != 0)
 
 	# --- and what it does to somebody on it ---------------------------------
 	#
@@ -159,17 +158,31 @@ func _cast_half() -> void:
 	# The caster has to be in that dict too or the cable cannot find the current.
 	net._players[net.peer_id()] = player
 
+	# One frame, so Net can gather the live rails. Which cables are hot is
+	# worked out once a frame by Net and read by every cable from there, so a
+	# rail cast this instant is known to the level on the next tick - 1/60s in
+	# play, and a thing a test has to actually wait for rather than assume.
+	var spun := 0
+	while net.live_rails.is_empty() and spun < 10:
+		await process_frame
+		spun += 1
+	_check("Net gathered the rail", not net.live_rails.is_empty())
+	_check("the cable agrees it is powered", cable._current_through_me() != 0)
 	_check("host resolves the damage here", net.deals_damage())
 	# Two ticks on purpose. Who is powering a cable is re-asked on the watch
 	# interval, not per frame - so the first tick is the one that notices and
 	# the second is the one that hurts. Up to a tenth of a second of grace, and
 	# the test says so rather than papering over it.
-	cable._process(0.2)
-	_check("nothing is hurt before the cable notices", victim.taken == 0.0)
-	cable._process(0.5)
-	_check("a rider on a hot cable is hurt", victim.taken > 0.0)
-	_check("hurt by roughly damage x time",
-		absf(victim.taken - gadget.damage * 0.5) < 1.0)
+	cable._process(0.016)
+	_check("jolted on the very first tick", victim.taken > 0.0)
+	_check("a whole jolt, not a slice of one", is_equal_approx(victim.taken, gadget.damage))
+	# Immunity frames are why this cannot be damage-per-frame: a body ignores
+	# anything inside 0.35s of the last hit, so the cable has to wait too.
+	victim.taken = 0.0
+	cable._process(0.016)
+	_check("no second jolt straight away", victim.taken == 0.0)
+	cable._process(0.4)
+	_check("another once the interval is up", is_equal_approx(victim.taken, gadget.damage))
 
 	# Standing at the end of it is safe - the gadget denies the rope, not the
 	# ledge, and that distinction is the whole shape of it.
@@ -186,7 +199,13 @@ func _cast_half() -> void:
 	_check("your own rail does not bite you", victim.taken == 0.0)
 
 	# --- it runs out --------------------------------------------------------
+	#
+	# A frame has to pass first. Who is arcing is worked out once per frame and
+	# shared by every cable in the level, so the answer is up to one frame stale
+	# by design - invisible in play, and worth being explicit about here rather
+	# than letting the test look like it caught something.
 	player.arc_left = 0.0
+	await process_frame
 	_check("a spent rail is a dead cable", cable._current_through_me() == 0)
 
 
