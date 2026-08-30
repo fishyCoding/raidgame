@@ -24,6 +24,21 @@ const BOTTOM_COLOUR := Color(0.36, 0.72, 1.0)
 const OCCUPIED_COLOUR := Color(1.0, 0.78, 0.2, 0.95)
 const OCCUPIED_WIDTH := 3.5
 
+## And what it turns while a rail bomb is on it.
+##
+## Yellow rather than the amber above, and a harder yellow than that one is: the
+## two states mean different things and the difference has to survive being seen
+## out of the corner of an eye. Amber is "somebody is coming up this"; this is
+## "do not get on this at all".
+##
+## Unconditional, unlike the amber. That one is a courtesy shown to a man
+## standing at an end who could actually see the rider, and it is deliberately
+## withheld through a wall. This is not a courtesy - it is the hazard itself,
+## visible to anyone who can see the rope, because a bomb you only find out
+## about by grabbing the cable is a bomb the rope lied about.
+const BOMBED_COLOUR := Color(1.0, 0.92, 0.15, 1.0)
+const BOMBED_WIDTH := 4.5
+
 ## How close to an end you have to be standing for the cable to warn you.
 ##
 ## Two seconds of travel on a default cable, not one. 340 px was the distance a
@@ -105,6 +120,12 @@ var _watch_timer := 0.0
 ## every machine off replicated numbers - see _carry_the_bomb - so it is not a
 ## thing that is spawned or despawned across the wire.
 var _bomb: RailBomb = null
+
+## True while that bomb is actually on the rope, which is what turns the cable
+## yellow. Goes false again the moment it runs out of rope and lets go: at that
+## point the cable is just a cable and the danger is the thing in the air above
+## it, which is drawing plenty of attention to itself.
+var _bombed := false
 
 
 func _ready() -> void:
@@ -188,6 +209,7 @@ func _carry_the_bomb() -> void:
 			if is_instance_valid(_bomb):
 				_bomb.queue_free()
 			_bomb = null
+		_set_bombed(false)
 		return
 
 	if _bomb == null or not is_instance_valid(_bomb):
@@ -209,6 +231,17 @@ func _carry_the_bomb() -> void:
 		at = clampf(at + float(way) * travelled / length, 0.0, 1.0)
 	var out_of_rope := way != 0 and (at <= 0.0 or at >= 1.0)
 	_bomb.place(at, way, out_of_rope)
+	_set_bombed(not out_of_rope)
+
+
+## Only redraws on the edge. The cable is static scenery for the whole raid and
+## a queue_redraw every frame on every rope in the level is a hundred redraws a
+## frame for a picture that changes twice.
+func _set_bombed(now: bool) -> void:
+	if now == _bombed:
+		return
+	_bombed = now
+	queue_redraw()
 
 
 ## The bomb belonging to this cable, or an empty dictionary.
@@ -305,13 +338,26 @@ func _draw() -> void:
 	# A rope with somebody on it, seen from the end they are heading for. The
 	# cable is scenery for the whole raid until this moment, which is exactly why
 	# a colour is enough - nothing else about it ever changes.
-	var line := OCCUPIED_COLOUR if _warning_lit else colour
-	var width := OCCUPIED_WIDTH if _warning_lit else 2.0
+	#
+	# The bomb outranks the rider warning when both are true, and that is the
+	# right way round: one of them is telling you somebody is coming and the
+	# other is telling you the rope itself will kill you, and there is no reading
+	# of a fight in which the first is the more useful thing to know.
+	var line := colour
+	var width := 2.0
+	var anchor := 5.0
+	if _bombed:
+		line = BOMBED_COLOUR
+		width = BOMBED_WIDTH
+		anchor = 7.0
+	elif _warning_lit:
+		line = OCCUPIED_COLOUR
+		width = OCCUPIED_WIDTH
+		anchor = 6.0
 	draw_line(bottom, top, line, width, true)
 	# Anchors at both ends, so it reads as fixed to the structure.
 	for point in [top, bottom]:
-		draw_circle(point, 6.0 if _warning_lit else 5.0,
-			Color(line.r, line.g, line.b, 0.9))
+		draw_circle(point, anchor, Color(line.r, line.g, line.b, 0.9))
 	if Engine.is_editor_hint() and show_guides:
 		_draw_guides()
 

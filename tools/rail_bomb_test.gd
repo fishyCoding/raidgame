@@ -167,6 +167,9 @@ func _bomb_half() -> void:
 	await _wait(20)
 	_check("and it does not move until it is told",
 		bomb.global_position.distance_to(parked) < 1.0)
+	# The rope says so from the moment it is clamped on, not from the moment it
+	# starts moving - a bomb sitting still on a cable is exactly as bad to grab.
+	_check("the rope has gone yellow", bool(cable._bombed))
 
 	# --- pointed up ----------------------------------------------------------
 	#
@@ -231,6 +234,10 @@ func _bomb_half() -> void:
 	var above: float = cable.world_top().y - bomb.global_position.y
 	_say("holding station %.0f px above the top of the cable" % above)
 	_check("hovering above the end of it", above > 20.0)
+	# And the rope is a rope again. The danger has left it and is now a thing in
+	# the air saying so on its own account; a cable still flying a hazard colour
+	# under it would be warning about something that is no longer there.
+	_check("the rope is not yellow any more", not bool(cable._bombed))
 
 	# --- and shoots what it can see ------------------------------------------
 	var seen := _stub_rider(level, bomb.global_position + Vector2(80.0, 40.0))
@@ -254,6 +261,7 @@ func _bomb_half() -> void:
 	await _wait(4)
 	_check("a flat cell is no bomb anywhere",
 		get_nodes_in_group(&"rail_bomb").is_empty())
+	_check("and no yellow left behind on the rope", not bool(cable._bombed))
 
 
 func _wait(frames: int) -> void:
