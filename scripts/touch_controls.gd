@@ -935,10 +935,21 @@ func _live_buttons() -> Array:
 	return out
 
 
-## Whether there is a cable close enough to catch hold of.
+## Whether there is a cable close enough to catch hold of, and whether you are
+## allowed to.
+##
+## The cooldown counts here and not only in Player. This is the button that
+## turns into ZIP, and it is the same button as JUMP - so a rope you cannot
+## grab for another ten seconds would otherwise take the jump away from you for
+## ten seconds while you stood under it, and hand you a button that does
+## nothing in exchange. On a phone that is not a missing prompt, it is a
+## missing verb.
 func _cable_in_reach() -> bool:
 	var player := Net.local_player
 	if player == null:
+		return false
+	var cooling: Variant = player.get(&"zipline_cooldown_left")
+	if typeof(cooling) == TYPE_FLOAT and float(cooling) > 0.0:
 		return false
 	return Zipline.nearest(get_tree(), player.global_position) != null
 

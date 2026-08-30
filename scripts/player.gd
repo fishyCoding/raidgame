@@ -187,6 +187,20 @@ extends CharacterBody2D
 ## The hop you get for letting go, so stepping off lands you somewhere.
 @export var zipline_release_hop := 220.0
 
+## Seconds after stepping off a cable before you may grab one again.
+##
+## Any cable, not just the one you left, and that is the whole point of it. A
+## zipline is meant to be a commitment - you are in the open, moving
+## predictably, and someone gets to shoot you for it. Strung end to end the way
+## they are on the quarry, that commitment was refundable: ride, step off, grab
+## the next one, and you crossed the map without ever being somewhere a person
+## could get to you. Ten seconds is long enough that the second rope is a
+## decision you make on the ground.
+##
+## Timed from stepping off rather than from grabbing, so a long haul does not
+## come with its own cooldown already half spent.
+@export_range(0.0, 60.0, 0.5, "or_greater") var zipline_cooldown := 10.0
+
 @export_group("Slinging the gun")
 ## Seconds to get the gun out of the way when both hands are wanted for a rope.
 ## Short: this is the part you do not get to think about, and the cost is the
@@ -562,6 +576,10 @@ var zipline: Zipline = null
 ## A bool rather than the cable itself: which rope it is does not travel, and the
 ## position already does.
 var riding := false
+## Seconds left before this body may grab a cable again. Not replicated: the
+## only machine that ever asks is the one holding the key, and a replica of you
+## is not grabbing anything.
+var zipline_cooldown_left := 0.0
 ## Where a replica was last frame, to tell a rider who is moving from one who is
 ## hanging still. A rider's velocity is pinned to zero, so it cannot be read off
 ## that the way a walk can.
@@ -1168,6 +1186,7 @@ func _update_timers(delta: float) -> void:
 
 	_buffer_timer -= delta
 	_invulnerable = maxf(_invulnerable - delta, 0.0)
+	zipline_cooldown_left = maxf(zipline_cooldown_left - delta, 0.0)
 
 	if _drop_timer > 0.0:
 		_drop_timer -= delta
@@ -1428,6 +1447,18 @@ func _update_zipline(delta: float) -> bool:
 		# which made any cable next to a corpse unusable - so whichever is
 		# actually nearer wins, and the loot path is told the press was spent.
 		var cable := Zipline.nearest(get_tree(), global_position)
+		# Still winded from the last one. A cable you cannot grab is not a cable
+		# as far as this press is concerned: it does not win the contest below
+		# against a body at your feet, and the key falls through to the loot path
+		# exactly as it would if there were no rope here - so going through
+		# somebody who died under a zipline still works while you wait.
+		if cable and zipline_cooldown_left > 0.0:
+			# Only worth saying when there is nothing else the press could have
+			# meant. Otherwise the loot screen is opening over the top of it.
+			if loot_target == null:
+				_say_loot("too soon after the last ride - %ds"
+					% maxi(roundi(ceilf(zipline_cooldown_left)), 1))
+			cable = null
 		if cable and loot_target:
 			var to_body := global_position.distance_to(loot_target.global_position)
 			var to_cable := global_position.distance_to(cable.closest_point(global_position))
@@ -1451,6 +1482,10 @@ func _update_zipline(delta: float) -> bool:
 func _leave_zipline(hop := true) -> void:
 	zipline = null
 	riding = false
+	# Every way off starts it, including being knocked down mid-ride. One rule
+	# with no exceptions in it is a rule you can hold in your head at the top of
+	# a rope, which is where you have to hold it.
+	zipline_cooldown_left = zipline_cooldown
 	# However far down the cable brought you, the fall starts here.
 	_fall_apex = global_position.y
 	_fall_last_y = global_position.y
