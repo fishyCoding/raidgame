@@ -1213,7 +1213,16 @@ func _update_timers(delta: float) -> void:
 ## and never pretends to read a key.
 func _update_shield(delta: float) -> void:
 	if PlayerInput.is_shield_just_pressed() and not is_downed:
-		armored = not armored
+		# Not on a rope. You need both hands for a cable and both hands for the
+		# plates, and the grab already refuses while you are wearing them - so
+		# letting the press through here would be the same rule enforced in one
+		# direction only: barred from grabbing armoured, free to armour up the
+		# moment you were on. Half a rule is worse than none, because the half
+		# that is missing is the one people find.
+		if riding:
+			_say_loot("not while you are hanging off a cable")
+		else:
+			armored = not armored
 	# Nothing to put the plates up for, and nothing holding them there.
 	if is_downed or not is_alive:
 		armored = false
@@ -1233,6 +1242,18 @@ func _ramp_shield(delta: float) -> void:
 ## back down would make dropping it free.
 func is_shielded() -> bool:
 	return shield >= 1.0
+
+
+## True only with the plates all the way *down*, which is what a cable asks for.
+##
+## The ramp, not the intent. Gating on `armored` alone would let you press the
+## key and grab the rope on the next frame with the plates still ninety per cent
+## up - visibly wearing the thing you are not allowed to wear, and covered by it
+## for the whole first second of the ride, since the ramp is what take_damage
+## reads. So dropping them to get on a cable costs the full two seconds, the
+## same way putting them on does.
+func plates_are_down() -> bool:
+	return not armored and shield <= 0.0
 
 
 func _update_crouch(delta: float) -> void:
@@ -1467,6 +1488,14 @@ func _update_zipline(delta: float) -> bool:
 			if loot_target == null:
 				_say_loot("too soon after the last ride - %ds"
 					% maxi(roundi(ceilf(zipline_cooldown_left)), 1))
+			cable = null
+		# Plates and ropes are the same pair of hands. Refused the same way the
+		# cooldown refuses - the cable stops being a cable for this press rather
+		# than swallowing it - so a body under the rope is still lootable while
+		# you are plated.
+		if cable and not plates_are_down():
+			if loot_target == null:
+				_say_loot("drop your plates before you touch that cable")
 			cable = null
 		if cable and loot_target:
 			var to_body := global_position.distance_to(loot_target.global_position)

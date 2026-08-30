@@ -1,6 +1,7 @@
 extends SceneTree
 
-## Riding a cable, and the ten seconds you owe for having done it.
+## Riding a cable: what it costs afterwards, and what you may not be wearing
+## while you do it.
 ##
 ##   godot --headless --path . --script res://tools/zipline_test.gd
 ##
@@ -137,30 +138,50 @@ func _run() -> void:
 	_check("once it is up, a rope is a rope again", _player.get(&"zipline") != null)
 	await _press_interact()
 
-	# --- plated up, on a rope ------------------------------------------------
+	# --- and not while you are wearing your plates ---------------------------
 	#
-	# The plates and the cable are two different hands' worth of commitment and
-	# neither one cancels the other. Riding armoured is slow and loud and you
-	# cannot stop, which is cost enough - being made to strip before you may
-	# touch a rope would only mean nobody ever climbs one in a fight, which is
-	# the exact moment the level's routes are worth having.
+	# Both hands are on the rope. Armour is a stance you take standing on
+	# something, and the cable is the one place in the level where you cannot
+	# fight back or break off - being allowed to hang there plated made the ride
+	# the safest way to cross a map that is built around it being the most
+	# exposed.
 	_say("")
-	_say("-- and you can ride it in your plates --")
+	_say("-- and not in your plates --")
 	_player.set(&"zipline_cooldown_left", 0.0)
 	_player.set(&"armored", true)
-	# All the way up before we ask, because half-raised plates are not armour -
-	# see Player.is_shielded.
+	# All the way up before we ask. Half-raised plates are not armour - see
+	# Player.is_shielded - and this has to be the real refusal, not the ramp.
 	var raise_time: float = _player.get(&"shield_raise_time")
 	await _wait(roundi(raise_time * 60.0) + 10)
 	_check("the plates are up", bool(_player.call(&"is_shielded")))
 	_say("they took %.1fs to raise" % raise_time)
 
 	await _stand_at(cable)
+	_check("the rope is right there", cable.in_reach(_player.global_position))
 	await _press_interact()
-	_check("you can still catch a cable in them", _player.get(&"zipline") != null)
-	await _wait(30)
-	_check("and the ride does not knock them down",
-		bool(_player.call(&"is_shielded")) and _player.get(&"zipline") != null)
+	_check("but you cannot catch it in them", _player.get(&"zipline") == null)
+	_check("and it says why", "plates" in str(_player.get(&"loot_message")))
+
+	# Dropping them costs the whole ramp. Half-down plates still stop take_damage
+	# reading a bare body, so half-down has to still stop the grab.
+	_player.set(&"armored", false)
+	await _wait(6)
+	_check("still refused on the way down",
+		float(_player.get(&"shield")) > 0.0 and not bool(_player.call(&"plates_are_down")))
+	await _press_interact()
+	_check("a rope is still refused mid-drop", _player.get(&"zipline") == null)
+
+	await _wait(roundi(raise_time * 60.0) + 10)
+	_check("the plates are all the way down", bool(_player.call(&"plates_are_down")))
+	await _stand_at(cable)
+	await _press_interact()
+	_check("and then the rope is yours again", _player.get(&"zipline") != null)
+
+	# And you cannot put them back on once you are up there.
+	_player.set(&"armored", false)
+	await _press_shield()
+	_check("no plating up mid-ride", not bool(_player.get(&"armored")))
+	_check("still on the cable", _player.get(&"zipline") != null)
 	await _press_interact()
 
 	# --- and it does not reach everywhere ------------------------------------
@@ -183,6 +204,16 @@ func _stand_at(cable: Node2D) -> void:
 func _press_interact() -> void:
 	_input.touch_interact_pressed = true
 	await _wait(6)
+
+
+## One press of the plates key. The shield has no touch flag - the pad drives
+## the real action for it - so this presses the action itself, which is the same
+## edge a keyboard gives Player._update_shield.
+func _press_shield() -> void:
+	Input.action_press(&"shield")
+	await physics_frame
+	Input.action_release(&"shield")
+	await _wait(5)
 
 
 ## The longest cable in the level, which is the one with room to ride.

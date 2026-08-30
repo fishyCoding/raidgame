@@ -157,20 +157,11 @@ const RIDE_BUTTONS := [
 		"mode": "press"},
 	{"action": &"interact", "label": "LET GO", "at": Vector2(-500.0, -320.0), "r": 60.0,
 		"mode": "press"},
-	# The plates come with you onto the rope. Nothing in the game ever stopped a
-	# man riding in his armour - it is slow and loud and you cannot stop, which
-	# is cost enough - but this pad used to drop the button for the length of the
-	# ride, so a phone could hold a stance it could not change. That was survivable
-	# while the ramp was a third of a second. At two seconds the raise is longer
-	# than plenty of rides, and starting it as you step off the top is the whole
-	# difference between arriving covered and arriving in the open.
-	#
-	# Above LET GO rather than where it sits on the ground: the ground position is
-	# 60 px from this cluster's LET GO with 120 px of radius between them, so
-	# keeping it would have put a stance change under the thumb reaching for the
-	# way off a rope.
-	{"action": &"shield", "label": "PLATES", "at": Vector2(-500.0, -480.0), "r": 60.0,
-		"mode": "press"},
+	# No PLATES button here, and its absence is the rule rather than a shortage
+	# of room: you cannot armour up on a rope, so a button that only ever
+	# answered "not while you are hanging off a cable" would be a control that
+	# exists to be refused. Player._update_shield turns the press down anyway -
+	# this just stops the pad offering it.
 ]
 
 ## The rest of it, as pills along the top - a deliberate press rather than a
@@ -964,6 +955,11 @@ func _cable_in_reach() -> bool:
 		return false
 	var cooling: Variant = player.get(&"zipline_cooldown_left")
 	if typeof(cooling) == TYPE_FLOAT and float(cooling) > 0.0:
+		return false
+	# Same for the plates. Offering ZIP to a man in his armour would be offering
+	# a button whose whole behaviour is to tell him no - and taking his jump
+	# away to do it, since they are the same button.
+	if player.has_method(&"plates_are_down") and not bool(player.call(&"plates_are_down")):
 		return false
 	return Zipline.nearest(get_tree(), player.global_position) != null
 

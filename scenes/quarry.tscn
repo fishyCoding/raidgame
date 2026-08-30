@@ -370,6 +370,14 @@ position = Vector2(-3435, -2237)
 size = Vector2(271.60303, 24)
 color = Color(0.231373, 0.278431, 0.341176, 1)
 
+[node name="MastCeiling77" parent="World" unique_id=2095836450 instance=ExtResource("8_i5su0")]
+texture_filter = 4
+texture_repeat = 2
+position = Vector2(-3120.2847, -2285.984)
+rotation = -0.26373428
+size = Vector2(398.82422, 24)
+color = Color(0.231373, 0.278431, 0.341176, 1)
+
 [node name="MastCeiling54" parent="World" unique_id=1376503742 instance=ExtResource("8_i5su0")]
 texture_filter = 4
 texture_repeat = 2
@@ -2785,12 +2793,6 @@ speed = 800.0
 position = Vector2(-1136, -2107)
 top = Vector2(160.92981, -475.66852)
 bottom = Vector2(14.729492, 94.87659)
-speed = 800.0
-
-[node name="ZipYard10" parent="." unique_id=1318936710 instance=ExtResource("9_dnabq")]
-position = Vector2(-3128, -2176)
-top = Vector2(214.31067, -183.56335)
-bottom = Vector2(-210.69531, -100.17618)
 speed = 800.0
 
 [node name="ZipYard28" parent="." unique_id=2022512792 instance=ExtResource("9_dnabq")]
