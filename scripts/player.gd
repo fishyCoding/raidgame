@@ -614,22 +614,36 @@ var _extract_held := 0.0
 ## crossing ground you could not otherwise cross, or leaving somewhere fast.
 var overload_left := 0.0
 
-## Seconds of current left in a cable, and a point on the cable carrying it.
+## The rail bomb: five numbers, and the five of them are the whole message.
 ##
-## Both replicated, and the pair is the whole message. There is no rpc for this
-## and no node for the effect: the cable a rider is on is not replicated either
-## (see Zipline._someone_is_riding), and this works the same way - every machine
-## has every player's arc_at and arc_left, so every machine can ask a cable "is
-## one of those points on you" and get the same answer without a word being
-## sent about it.
+## There is no rpc for this and no spawner. Every machine has all five off the
+## man who threw it, so every machine builds its own copy of the bomb and works
+## out where it is by arithmetic - see RailBomb, which does that arithmetic, and
+## Zipline._rail_bomb, which is what actually holds the local copy. The cable a
+## rider is on is not replicated either (Zipline._someone_is_riding); this is
+## the same trick applied to a thing that moves.
 ##
 ## arc_at is a point rather than a node path for the same reason a rider is
 ## matched by position: a NodePath to a level node is a thing the two machines
-## would have to agree a shorthand for, and the point is already unambiguous -
-## two cables would have to overlap for it to pick the wrong one, and then
-## electrifying both is the right answer anyway.
+## would have to agree a shorthand for, and the point is already unambiguous.
+## It is the cable's *midpoint*, which names the rope; where the bomb actually
+## sits on that rope is arc_from, because either end of a cable is a place a
+## second cable can also end and the middle of one belongs to one rope only.
 var arc_at := Vector2.ZERO
+## Seconds of cell left. When this hits zero the bomb is gone everywhere at
+## once, without anybody being told, because everybody is counting the same
+## number down.
 var arc_left := 0.0
+## Where it is clamped, 0 at the bottom of that cable and 1 at the top.
+var arc_from := 0.0
+## Which way it was pointed: 0 while it is still waiting to be told, +1 up the
+## cable, -1 down it.
+var arc_way := 0
+## What arc_left read at the moment it was sent, so every machine can work out
+## how long it has been travelling without being told when it started. A bomb
+## waiting for orders is burning the same clock, which is why this is recorded
+## rather than assumed to be active_time.
+var arc_launch := 0.0
 
 ## How white the screen is, 0 to 1, and how long it has left. Set by a flash
 ## grenade going off somewhere this body could see it - see Grenade._blind, which
@@ -1059,6 +1073,10 @@ func _physics_process(delta: float) -> void:
 		return
 	_update_timers(delta)
 	weapon.tick(delta)
+	# Before the cable and before the jump. A bomb waiting for orders owns W and
+	# S until it has them - see _update_rail_bomb - and a press it takes must not
+	# reach _update_jump underneath it.
+	var bomb_took_the_press := _update_rail_bomb()
 	if _update_zipline(delta):
 		# Riding is a whole movement mode: no running, no gravity, no jumping -
 		# and deliberately no move_and_slide either. The rider's position is set
@@ -1121,7 +1139,7 @@ func _physics_process(delta: float) -> void:
 		_charge_ultimate(delta)
 		_update_focus(delta)
 		if not is_grappling() and not is_dashing():
-			_update_jump(delta)
+			_update_jump(delta, bomb_took_the_press)
 		_update_weapon()
 	_update_reticle()
 	_update_shake(delta)
@@ -1513,6 +1531,44 @@ func _update_zipline(delta: float) -> bool:
 			return true
 		_interact_spent = true
 	return false
+
+
+## Pointing a rail bomb that is sitting on a cable waiting to be told.
+##
+## Returns true if the press was spent here, which is the whole reason this runs
+## before _update_jump: the two orders are W and S, and W is also the jump key.
+## Left to run afterwards, sending a bomb up a rope would also hop you into the
+## air, and the one frame you spend deciding would be a frame you spent leaving
+## the ground.
+##
+## The window is narrow and you opened it yourself - it exists only between
+## clamping a bomb on and pointing it - so eating a jump inside it costs nothing
+## anybody was going to miss.
+func _update_rail_bomb() -> bool:
+	if arc_left <= 0.0 or arc_way != 0:
+		return false
+	# Not from the rope. Up and down are how you ride a cable, and a bomb
+	# waiting for orders would take both of them off a man hanging on one - so
+	# he could neither climb nor descend, and the first thing he did to get
+	# moving would launch a bomb up the rope he is holding. Point it before you
+	# get on. Its clock is running either way, which is the cost of dithering.
+	if riding:
+		return false
+	var way := 0
+	if PlayerInput.is_jump_just_pressed():
+		way = 1
+	elif PlayerInput.is_down_just_pressed():
+		way = -1
+	if way == 0:
+		return false
+	arc_way = way
+	# What the clock read as it left, so every machine can work out how far it
+	# has travelled from a number it already has. See RailBomb.
+	arc_launch = arc_left
+	_say_loot("bomb away - climbing" if way > 0 else "bomb away - going down")
+	if _audio:
+		_audio.reload_finished(global_position)
+	return true
 
 
 ## Stepping off. The hop is for letting go mid-cable or at the top, where you
@@ -2019,8 +2075,8 @@ func _mouse_drag() -> Vector2:
 	return PlayerInput.take_mouse_drag(DRAG_MIN)
 
 
-func _update_jump(delta: float) -> void:
-	if PlayerInput.is_jump_just_pressed():
+func _update_jump(delta: float, spent := false) -> void:
+	if not spent and PlayerInput.is_jump_just_pressed():
 		_buffer_timer = jump_buffer_time
 
 	if _buffer_timer > 0.0 and _coyote_timer > 0.0:
@@ -2214,7 +2270,7 @@ func _use_ultimate(slot := 0) -> void:
 	# near a zipline costs nothing - the same rule the screen and the projection
 	# already follow, and the only one that keeps a positional ultimate from
 	# being a thing you can waste by standing in the wrong place.
-	if ult.gadget.kind == GadgetData.Kind.LIVE_RAIL:
+	if ult.gadget.kind == GadgetData.Kind.RAIL_BOMB:
 		if ult.charge < 1.0:
 			_say_loot("ultimate at %d%%" % roundi(ult.charge * 100.0))
 			return
@@ -2225,10 +2281,25 @@ func _use_ultimate(slot := 0) -> void:
 		ult.charge = 0.0
 		# The midpoint, not the end you are standing at. Either end is a place a
 		# second cable can also end - they are strung end to end all over this
-		# map - and the middle of a rope belongs to one rope only.
+		# map - and the middle of a rope belongs to one rope only. Where on that
+		# rope it actually sits is arc_from, below.
 		arc_at = (cable.world_top() + cable.world_bottom()) * 0.5
+		# Clamped onto the rope at the point nearest you, so it starts where you
+		# were standing when you reached up and fixed it there.
+		var length := cable.cable_length()
+		var grip := cable.closest_point(global_position)
+		arc_from = (0.0 if length < 1.0
+			else clampf(grip.distance_to(cable.world_bottom()) / length, 0.0, 1.0))
+		# Pointed at nothing yet. It sits on the cable, lamp pulsing, until you
+		# tell it which way to go - see _update_rail_bomb. The clock is already
+		# running: standing there deciding costs cell, which is what stops the
+		# waiting state from being a free timer you park a bomb in.
+		arc_way = 0
 		arc_left = ult.gadget.active_time
-		_say_loot("LIVE RAIL - that cable is hot for %ds" % roundi(arc_left))
+		arc_launch = ult.gadget.active_time
+		_say_loot("RAIL BOMB clamped on - UP or DOWN to send it"
+			if PlayerInput.is_touch()
+			else "RAIL BOMB clamped on - W to send it up, S to send it down")
 		if _audio:
 			_audio.reload_finished(global_position)
 		return

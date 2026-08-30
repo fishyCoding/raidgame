@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Does a live rail cross the wire, and does it bite the moment you are on it?
+## Does a rail bomb cross the wire, and does it bite a man on the rope?
 ##
 ## Two clients against a real server:
 ##
@@ -10,14 +10,16 @@ extends SceneTree
 ##
 ## `server/test_rail.ps1` does all three.
 ##
-## The solo test covers casting it - the reach rule, the charge, the damage
-## maths. What only two machines can answer is whether the *other* one ever
-## hears about it, which is the part that has no rpc behind it and therefore the
-## part most likely to be quietly doing nothing.
+## The solo test covers clamping one on and following it up - the reach rule,
+## the charge, the climb, the hover, the damage maths. What only two machines
+## can answer is whether the *other* one ever builds a bomb at all, which is the
+## part that has no rpc behind it and therefore the part most likely to be
+## quietly doing nothing.
 ##
-## Peer 1 lights a cable. Peer 2 looks at peer 1's replica, then at the cable,
-## then rides it. Nothing here names Zipline or Player - both reach Net, and a
-## --script tool compiles before the autoloads exist.
+## Peer 1 clamps one on and points it up. Peer 2 looks at peer 1's replica, then
+## at its own copy of the bomb, then gets on the rope in front of it. Nothing
+## here names Zipline or Player - both reach Net, and a --script tool compiles
+## before the autoloads exist.
 
 var _tag := "CLIENT"
 var _host := "127.0.0.1"
@@ -106,13 +108,20 @@ func _run() -> void:
 		return
 	var midpoint: Vector2 = (cable.world_top() + cable.world_bottom()) * 0.5
 
-	# --- peer 1 lights it ----------------------------------------------------
+	# --- peer 1 clamps one on and points it up -------------------------------
+	#
+	# Set rather than pressed. Which key sends it is the solo test's business;
+	# what this one is asking is whether the numbers reach the other machine and
+	# turn into a bomb there.
 	if _first:
 		mine.global_position = midpoint
 		await _wait(10)
 		mine.arc_at = midpoint
-		mine.arc_left = 9.0
-		_say("lit the cable at %s" % str(midpoint))
+		mine.arc_from = 0.5
+		mine.arc_left = 12.0
+		mine.arc_launch = 12.0
+		mine.arc_way = 1
+		_say("clamped one on at %s and sent it up" % str(midpoint))
 	await _wait(90)
 
 	# --- peer 2 checks it arrived --------------------------------------------
@@ -120,40 +129,56 @@ func _run() -> void:
 		_check("their arc_left crossed the wire", float(theirs.get(&"arc_left")) > 0.0)
 		_check("their arc_at crossed the wire",
 			(theirs.get(&"arc_at") as Vector2).distance_to(midpoint) < 40.0)
-		_check("and this machine calls the cable live", cable._current_through_me() != 0)
-		_check("powered by them, not by nobody",
-			cable._current_through_me() == theirs.get_multiplayer_authority())
+		_check("and which way they sent it", int(theirs.get(&"arc_way")) == 1)
+		# The bomb itself, built on this machine off those numbers alone.
+		var bombs: Array = get_nodes_in_group(&"rail_bomb")
+		_check("this machine built the bomb", bombs.size() == 1)
+		if not bombs.is_empty():
+			var bomb: Node2D = bombs[0]
+			var off: float = cable.closest_point(bomb.global_position).distance_to(
+				bomb.global_position)
+			_say("their bomb is %.0f px off the rope on my screen" % off)
+			_check("and put it on the right rope", off < 60.0)
 
-		# --- and that being on it costs, straight away -----------------------
+		# --- and that standing in front of it costs --------------------------
+		#
+		# Put on the rope just above where the bomb has got to, so it climbs
+		# into me. Not at the midpoint: the thing has been travelling for a
+		# second and a half by now and is nowhere near where it was clamped,
+		# which is the whole difference between this gadget and the one it
+		# replaced.
 		#
 		# Both halves of the ride state, not just the flag. `riding` alone is
 		# what a body looks like for one frame before its own update notices
 		# there is no cable under it and turns it off again - which is a fine
 		# way to write a test that proves nothing.
 		var before: float = mine.health
-		mine.global_position = midpoint
+		var meet := midpoint
+		if not bombs.is_empty():
+			meet = (bombs[0] as Node2D).global_position + Vector2(0.0, -40.0)
+		mine.global_position = cable.clamp_to_cable(meet)
 		mine.zipline = cable
 		mine.riding = true
 
-		# Six frames, not one. The host decides you were hit and tells your own
-		# machine so (Net.tell_owner_hit), and that is a round trip - health
-		# cannot fall here on the same frame it is worked out there. What is
-		# being checked is that the first jolt lands on contact rather than
-		# waiting out an interval, so the window is as small as the wire allows.
-		await _wait(6)
-		var after_first: float = mine.health
-		_check("first jolt lands on contact", after_first < before)
-
-		# Long enough for two more at 0.4s apart, and the reason this is
-		# measured rather than assumed: spread thinly across frames instead,
-		# nearly all of it is eaten by the 0.35s of immunity a body gets after
-		# any hit, and the rail quietly does about a fiftieth of its damage.
-		await _wait(50)
+		# Long enough for it to cover those forty pixels and a little more. The
+		# host decides you were hit and tells your own machine so
+		# (Net.tell_owner_hit), and that is a round trip - health cannot fall
+		# here on the same frame it is worked out there.
+		await _wait(40)
 		var dealt: float = before - mine.health
-		_say("health %.0f -> %.0f after ~0.93s on it (dealt %.0f)"
-			% [before, mine.health, dealt])
-		_check("it keeps jolting while you stay on", mine.health < after_first)
-		_check("three jolts in, not one", dealt > 60.0)
+		var phase := "on the rope"
+		if not bombs.is_empty() and bool((bombs[0] as Node2D).get(&"hovering")):
+			# Short cables exist and this one may already have run out of rope
+			# by now. Which phase it caught me in is not the claim being made -
+			# that their bomb reached this machine and cost me health is - but
+			# saying which one keeps the number below readable.
+			phase = "holding station"
+		_say("health %.0f -> %.0f with it %s (dealt %.0f)"
+			% [before, mine.health, phase, dealt])
+		_check("somebody else's bomb hurts me here", mine.health < before)
+		# One whole jolt at least, not a per-frame slice of one - which is what
+		# a body's 0.35s of immunity turns thin damage into, silently.
+		_check("a whole jolt, not a sliver", dealt >= 20.0)
 		mine.riding = false
 		mine.zipline = null
 

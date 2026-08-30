@@ -164,6 +164,22 @@ const RIDE_BUTTONS := [
 	# this just stops the pad offering it.
 ]
 
+## A rail bomb sitting on a cable waiting to be told which way to go. Two
+## buttons and nothing else changes: you are standing on the ground with a
+## decision to make, not in a mode.
+##
+## SEND UP takes the JUMP slot, the same slot ZIP takes and for the same reason -
+## you are necessarily standing next to a cable at this moment, so the button
+## that would otherwise offer to jump has something better to do with itself.
+## SEND DOWN sits well clear of it rather than next to it: they are opposite
+## orders given under time pressure and the wrong one is unrecoverable.
+const ORDER_BUTTONS := [
+	{"action": &"jump", "label": "SEND UP", "at": Vector2(-330.0, -420.0), "r": 66.0,
+		"mode": "press"},
+	{"action": &"move_down", "label": "SEND DOWN", "at": Vector2(-500.0, -480.0), "r": 60.0,
+		"mode": "press"},
+]
+
 ## The rest of it, as pills along the top - a deliberate press rather than a
 ## thumb that happens to be nearby. Split down the same seam: kit and information
 ## on the left, things you spend on the right, and the centre of the top edge
@@ -916,7 +932,14 @@ func _live_buttons() -> Array:
 		out.append_array(RIDE_BUTTONS)
 		return out
 
+	# A bomb waiting on orders owns the jump slot until it has them - see
+	# Player._update_rail_bomb, which takes the same press on a keyboard.
+	var pointing := _pointing_a_bomb()
 	for button in BUTTONS:
+		if pointing and button.get("zip", false):
+			out.append(ORDER_BUTTONS[0])
+			out.append(ORDER_BUTTONS[1])
+			continue
 		# One button for jumping and for catching a rope, showing whichever the
 		# ground under you actually offers.
 		if button.get("zip", false) and _cable_in_reach():
@@ -938,6 +961,21 @@ func _live_buttons() -> Array:
 	if _over_loot():
 		out.append(LOOT_BUTTON)
 	return out
+
+
+## Whether this player has a rail bomb clamped on and unpointed.
+func _pointing_a_bomb() -> bool:
+	var player := Net.local_player
+	if player == null:
+		return false
+	var left: Variant = player.get(&"arc_left")
+	if typeof(left) != TYPE_FLOAT or float(left) <= 0.0:
+		return false
+	# Not from the rope - the ride cluster owns up and down there, and the body
+	# refuses the order anyway.
+	if bool(player.get(&"riding")):
+		return false
+	return int(player.get(&"arc_way")) == 0
 
 
 ## Whether there is a cable close enough to catch hold of, and whether you are

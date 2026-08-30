@@ -469,7 +469,7 @@ func request_character() -> void:
 ## show a frozen number for ten seconds, so everyone counts their own clock down
 ## between announcements and the host's word overrides it whenever it arrives.
 func _process(delta: float) -> void:
-	_refresh_live_rails()
+	_refresh_rail_bombs()
 	if match_state != Match.COUNTDOWN:
 		return
 	seconds_left = maxf(seconds_left - delta, 0.0)
@@ -531,16 +531,21 @@ func level_settled() -> bool:
 ## quarry against a list that is empty almost always. Held rather than returned
 ## from a function so reading it costs nothing at all.
 ##
+## Six fields, not two, since the effect stopped being a cable that is simply
+## hot and became a thing with a position, a heading and a launch time. All six
+## are read off replicated properties, which is what keeps the whole gadget free
+## of rpcs - see RailBomb.
+##
 ## Rebuilt in _process, which the engine calls once a frame. An earlier version
 ## cached inside Zipline keyed on Engine.get_process_frames(), and that number
 ## does not advance in step with a node's own _process in every context - the
 ## cache went stale, a spent rail stayed live, and it took a test printing both
 ## sides to see it. One owner, one refresh, no key.
-var live_rails: Array[Dictionary] = []
+var rail_bombs: Array[Dictionary] = []
 
 
-func _refresh_live_rails() -> void:
-	live_rails.clear()
+func _refresh_rail_bombs() -> void:
+	rail_bombs.clear()
 	for id in _players:
 		var body := _players[id] as Node2D
 		if not is_instance_valid(body):
@@ -551,7 +556,14 @@ func _refresh_live_rails() -> void:
 		var at: Variant = body.get(&"arc_at")
 		if typeof(at) != TYPE_VECTOR2:
 			continue
-		live_rails.append({"at": at as Vector2, "by": body.get_multiplayer_authority()})
+		rail_bombs.append({
+			"at": at as Vector2,
+			"by": body.get_multiplayer_authority(),
+			"from": float(body.get(&"arc_from")),
+			"way": int(body.get(&"arc_way")),
+			"left": float(left),
+			"launch": float(body.get(&"arc_launch")),
+		})
 
 
 ## How many players are in this match, waiting or deployed. Known everywhere.

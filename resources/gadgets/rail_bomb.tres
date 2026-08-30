@@ -4,14 +4,16 @@
 
 [resource]
 script = ExtResource("1_gadget")
-display_name = "Live Rail"
-short_name = "LIVE"
+display_name = "Rail Bomb"
+short_name = "BOMB"
 kind = 8
 gadget_class = 1
 price = 1200
 radius = 220.0
+travel_speed = 200.0
+sight_range = 520.0
 damage = 34.0
 charge_time = 45.0
-active_time = 9.0
+active_time = 14.0
 tint = Color(0.55, 0.85, 1.0, 1)
 grid_size = Vector2i(2, 1)

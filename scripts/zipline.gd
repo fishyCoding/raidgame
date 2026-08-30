@@ -42,42 +42,16 @@ const WARN_RANGE := 680.0
 const SIGHT_MASK := Layers.WORLD
 const SIGHT_INSET := 8.0
 
-## The Live Rail ultimate, read for its damage so the number lives in the
-## resource with the rest of the gadget's numbers rather than being typed twice.
-const RAIL: GadgetData = preload("res://resources/gadgets/live_rail.tres")
+## The Rail Bomb ultimate, read for the numbers the bomb runs on so they live in
+## the resource with the rest of the gadget's numbers rather than being typed
+## twice. The bomb's own behaviour is in RailBomb; this file only carries it.
+const BOMB: GadgetData = preload("res://resources/gadgets/rail_bomb.tres")
 
-## Seconds between jolts, and this number is not a feel dial - it is a
-## constraint. Player.invulnerable_time is 0.35s of immunity after any hit,
-## there so a burst cannot delete you, and it does not care that this is not a
-## burst. Spread the rail's damage across frames as `damage * delta` and all but
-## the first jolt of every 0.35s is swallowed: the first version of this did
-## exactly that and delivered 0.8 damage a second against the 55 it was asking
-## for, continuously, silently, and only visible because a networked test
-## measured the health bar rather than trusting the call.
-##
-## So the current arrives as discrete jolts spaced wider than that window, and
-## each one is a number worth seeing on the bar. Anything below invulnerable_time
-## here quietly throws damage away again.
-const JOLT_INTERVAL := 0.4
-
-## When each rider is next due a jolt, by instance id. Cleared the moment they
-## step off, which is what makes stepping back on immediate rather than resuming
-## somebody else's clock.
-var _next_jolt := {}
-
-## How near a cable Player.arc_at has to fall for the current to be this cable's.
+## How near a cable Player.arc_at has to fall for the bomb to be this cable's.
 ## Generous on purpose: arc_at is the midpoint of whatever cable was in reach
 ## when it was cast, so an exact match is the normal case and this only has to
 ## survive the two ends being dragged since.
 const ARC_MATCH := 24.0
-
-## What a hot cable looks like, and how fast it crawls.
-const LIVE_COLOUR := Color(0.62, 0.92, 1.0, 1.0)
-const LIVE_CORE := Color(1.0, 1.0, 1.0, 0.9)
-const LIVE_WIDTH := 4.0
-const ARC_SEGMENTS := 14
-const ARC_SPREAD := 5.0
-const ARC_HZ := 18.0
 
 ## How often the cable checks whether anyone is on it. Cheap either way - a
 ## handful of players against one segment - but this runs on every cable in the
@@ -127,12 +101,10 @@ const WATCH_INTERVAL := 0.1
 var _warning_lit := false
 var _watch_timer := 0.0
 
-## True while somebody's Live Rail is running through this cable. Worked out on
-## every machine rather than sent - see _current_through_me.
-var _live := false
-var _was_live := false
-var _powered_by := 0
-var _arc_phase := 0.0
+## The rail bomb riding this cable, if there is one. Built and freed locally on
+## every machine off replicated numbers - see _carry_the_bomb - so it is not a
+## thing that is spawned or despawned across the wire.
+var _bomb: RailBomb = null
 
 
 func _ready() -> void:
@@ -176,95 +148,82 @@ func _lift_above_the_dark() -> void:
 	global_transform = was
 
 
-## Watching for riders.
+## Watching for riders, and carrying whatever is clamped to the rope.
 ##
-## Nothing is sent for this. A rider's `riding` flag is already replicated and so
-## is their position, so every machine can work out for itself that somebody is
-## on this particular cable - which is the whole trick, because the cable they
-## are on is not replicated and does not need to be.
-func _process(delta: float) -> void:
-	# Every frame, not on the watch interval. Stepping onto a hot cable has to
-	# cost you from the first frame - a tenth of a second of free riding is a
-	# tenth of the damage, and worse, it is a tenth of a second in which the
-	# thing plainly is not doing what it looks like it is doing.
+## Nothing is sent for either. A rider's `riding` flag is already replicated and
+## so is their position, so every machine can work out for itself that somebody
+## is on this particular cable - which is the whole trick, because the cable
+## they are on is not replicated and does not need to be. The bomb is the same
+## idea applied to a thing that moves.
+func _process(_delta: float) -> void:
+	# Every frame, not on the watch interval. A bomb whose position is only
+	# refreshed ten times a second is a bomb that visibly stutters up the rope,
+	# and one that jolts a rider it passed a tenth of a second ago is one that
+	# plainly is not doing what it looks like it is doing.
 	#
-	# Cheap anyway, because the scan of who is arcing happens once per frame for
-	# the whole level rather than once per cable - see _arcs_this_frame. A
-	# hundred cables asking it is a hundred walks of a list that is empty almost
-	# all of the time.
-	_powered_by = _current_through_me()
-	_live = _powered_by != 0
-	if _live:
-		_arc_phase += delta
-		_electrocute(delta, _powered_by)
-		queue_redraw()
-	elif _was_live:
-		queue_redraw()
-	_was_live = _live
+	# Cheap anyway, because the scan of who has a bomb out happens once per
+	# frame for the whole level rather than once per cable - see
+	# Net.rail_bombs. A hundred cables asking it is a hundred walks of a list
+	# that is empty almost all of the time.
+	_carry_the_bomb()
 	var lit := _someone_is_riding() and _at_an_end(Net.local_player)
 	if lit != _warning_lit:
 		_warning_lit = lit
 		queue_redraw()
 
 
-## Whether somebody has put current through this particular cable.
+## The rail bomb clamped to this cable, if there is one, kept in step with the
+## five numbers it is derived from.
 ##
-## Read off the players rather than told to us, the same way riders are. Every
-## machine has every player's arc_at and arc_left, so every machine reaches this
-## answer on its own and the effect needs no message of its own - see
-## Player.arc_at.
-## Returns the peer id of whoever is powering it, or 0 for a dead cable - so the
-## kill goes to the person who threw the switch rather than to nobody.
-func _current_through_me() -> int:
+## Every machine runs this and every machine reaches the same answer, because
+## the five numbers are replicated and the arithmetic is the same everywhere -
+## see RailBomb for what they are and why none of it is sent. The cable owns the
+## local copy because the cable is the thing the bomb is attached to and the
+## thing that knows where its own ends are; when the cell runs flat the bomb is
+## freed here, on every machine at once, without anybody being told.
+func _carry_the_bomb() -> void:
+	var mine := _bomb_on_me()
+	if mine.is_empty():
+		if _bomb != null:
+			if is_instance_valid(_bomb):
+				_bomb.queue_free()
+			_bomb = null
+		return
+
+	if _bomb == null or not is_instance_valid(_bomb):
+		_bomb = RailBomb.new()
+		# Onto the same overlay this cable lives on, so the thing climbing the
+		# rope is drawn in the same place and the same light as the rope.
+		add_child(_bomb)
+		_bomb.arm(self, int(mine["by"]), BOMB.damage, BOMB.sight_range)
+
+	var length := cable_length()
+	var way := int(mine["way"])
+	var at := float(mine["from"])
+	if way != 0 and length >= 1.0:
+		# How far it has climbed since it was pointed, worked out from the clock
+		# rather than accumulated - a position that is integrated frame by frame
+		# drifts apart between machines, and one that is a function of a
+		# replicated number cannot.
+		var travelled: float = (float(mine["launch"]) - float(mine["left"])) * BOMB.travel_speed
+		at = clampf(at + float(way) * travelled / length, 0.0, 1.0)
+	var out_of_rope := way != 0 and (at <= 0.0 or at >= 1.0)
+	_bomb.place(at, way, out_of_rope)
+
+
+## The bomb belonging to this cable, or an empty dictionary.
+##
+## Matched on the cable's midpoint, which is what arc_at holds: either end of a
+## rope is a place a second rope can also end, and the middle of one belongs to
+## one rope only.
+func _bomb_on_me() -> Dictionary:
 	# Net gathers these once a frame for the whole level, so a hundred cables
 	# asking is a hundred walks of a list that is almost always empty.
-	for arc in Net.live_rails:
-		var at: Vector2 = arc["at"]
+	for bomb in Net.rail_bombs:
+		var at: Vector2 = bomb["at"]
 		if closest_point(at).distance_to(at) <= ARC_MATCH:
-			return int(arc["by"])
-	return 0
-
-
-## Hurts whoever is hanging off a live cable.
-##
-## Host only, like every other source of damage in the game - see
-## Net.deals_damage. Every machine draws the sparks; one of them decides what
-## they cost.
-##
-## Riders only. Standing at either end of a hot cable is safe, and that is the
-## point of it: the gadget does not deny the ledge, it denies the rope. A ride
-## is already a commitment you cannot break off halfway, so what this really
-## does is turn one that is already underway into a mistake.
-func _electrocute(delta: float, powered_by: int) -> void:
-	if not Net.deals_damage():
-		return
-	for body in Net.players():
-		if body == null or not is_instance_valid(body):
-			continue
-		if (body as Node).get_multiplayer_authority() == powered_by:
-			continue   # your own rail does not bite you
-		var rides: Variant = body.get(&"riding")
-		var on_it: bool = (typeof(rides) == TYPE_BOOL and rides
-			and in_reach(body.global_position) and body.has_method(&"take_damage"))
-		var key := body.get_instance_id()
-		if not on_it:
-			_next_jolt.erase(key)
-			continue
-
-		# Somebody who was not on it a frame ago is jolted now, this frame, with
-		# no wait at all. Everyone else is on the clock.
-		var due: float = _next_jolt.get(key, 0.0) - delta
-		if due > 0.0:
-			_next_jolt[key] = due
-			continue
-		_next_jolt[key] = JOLT_INTERVAL
-
-		# Aimed at the body's own centre, which Damage.resolve reads as a body
-		# shot: current is not a projectile and should not be rolling headshots.
-		# Along the rope for a direction, because that is the way it is running.
-		Net.attributing_to = powered_by
-		body.take_damage(RAIL.damage, body.global_position, direction())
-		Net.attributing_to = 0
+			return bomb
+	return {}
 
 
 ## Whether somebody *other than you* is hanging off this cable.
@@ -346,9 +305,6 @@ func _draw() -> void:
 	# A rope with somebody on it, seen from the end they are heading for. The
 	# cable is scenery for the whole raid until this moment, which is exactly why
 	# a colour is enough - nothing else about it ever changes.
-	if _live:
-		_draw_live()
-		return
 	var line := OCCUPIED_COLOUR if _warning_lit else colour
 	var width := OCCUPIED_WIDTH if _warning_lit else 2.0
 	draw_line(bottom, top, line, width, true)
@@ -358,37 +314,6 @@ func _draw() -> void:
 			Color(line.r, line.g, line.b, 0.9))
 	if Engine.is_editor_hint() and show_guides:
 		_draw_guides()
-
-
-## A hot cable, drawn as a rope with something wrong with it.
-##
-## Deliberately unmissable and deliberately not the amber warning. Amber means
-## somebody is on this rope; this means the rope will kill you, and reading one
-## as the other in the second you have to decide is the whole cost of the
-## gadget being subtle. The zigzag is seeded off a clock so it crawls, because a
-## static lightning bolt reads as a decal rather than as current.
-func _draw_live() -> void:
-	var span := top - bottom
-	var length := span.length()
-	if length < 1.0:
-		return
-	var along := span / length
-	var side := along.orthogonal()
-	var points := PackedVector2Array()
-	for i in ARC_SEGMENTS + 1:
-		var t := float(i) / float(ARC_SEGMENTS)
-		var wobble := 0.0
-		if i > 0 and i < ARC_SEGMENTS:
-			# Two waves at odds with each other, so it never looks like a sine.
-			wobble = (sin(t * 22.0 + _arc_phase * ARC_HZ)
-				+ sin(t * 9.0 - _arc_phase * ARC_HZ * 0.6)) * 0.5 * ARC_SPREAD
-		points.append(bottom + along * (length * t) + side * wobble)
-	draw_polyline(points, LIVE_COLOUR, LIVE_WIDTH, true)
-	# A straight white core under the crackle: the rope is still there, and
-	# where it runs is still the thing you are judging.
-	draw_line(bottom, top, LIVE_CORE, 1.5, true)
-	for point in [top, bottom]:
-		draw_circle(point, 7.0, LIVE_COLOUR)
 
 
 func world_top() -> Vector2:

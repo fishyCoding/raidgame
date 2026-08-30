@@ -68,6 +68,8 @@ var touch_jump_held := false
 
 ## Held while a HUD "down" button is down (drop through one-way platforms).
 var touch_down_held := false
+## Tapped rather than held - see is_down_just_pressed.
+var touch_down_pressed := false
 
 ## Held while the fire button is down. The just-pressed edge is derived from it,
 ## so an auto-fire button and a tap both work.
@@ -433,6 +435,19 @@ func is_jump_held() -> bool:
 
 func is_down_held() -> bool:
 	return touch_down_held or Input.is_action_pressed(&"move_down")
+
+
+## True on the frame down is pressed, the mirror of is_jump_just_pressed.
+##
+## Down had only ever been a held direction - you hold it to ride a cable
+## downwards - and an edge was not worth having until something needed to read
+## "he chose down" once rather than "he is still holding it". Sending a rail
+## bomb down its cable is that something.
+func is_down_just_pressed() -> bool:
+	if touch_down_pressed:
+		touch_down_pressed = false
+		return true
+	return Input.is_action_just_pressed(&"move_down")
 
 
 func is_fire_just_pressed() -> bool:

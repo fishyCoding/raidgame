@@ -8,7 +8,7 @@ extends Resource
 ## that recharge over the course of a raid. Both are bought before you go in,
 ## which is what makes the shop a decision rather than a shopping list.
 
-enum Kind { FRAG, SMOKE, OVERLOAD, RECON_BOW, PROJECTION, FLASH, DASH, SCREEN, LIVE_RAIL }
+enum Kind { FRAG, SMOKE, OVERLOAD, RECON_BOW, PROJECTION, FLASH, DASH, SCREEN, RAIL_BOMB }
 enum Class { THROWABLE, ULTIMATE }
 
 @export var display_name := "Gadget"
@@ -20,14 +20,14 @@ enum Class { THROWABLE, ULTIMATE }
 @export_group("Throwable")
 ## Seconds from leaving your hand to going off.
 @export var fuse := 1.6
-## How far the effect reaches, in pixels. For LIVE_RAIL it is how close to a
-## cable you have to be standing to put current through it.
+## How far the effect reaches, in pixels. For RAIL_BOMB it is how close to a
+## cable you have to be standing to clamp one onto it.
 @export var radius := 160.0
 ## Peak damage at the centre, falling off to nothing at the edge (FRAG). For
-## LIVE_RAIL it is damage per jolt, and the cable jolts every
-## Zipline.JOLT_INTERVAL - not per second, because a player has invulnerability
-## frames after any hit and damage spread thinly across frames is damage thrown
-## away. Three jolts is a kill on an unarmoured rider.
+## RAIL_BOMB it is damage per jolt, and it jolts every RailBomb.JOLT_INTERVAL -
+## not per second, because a player has invulnerability frames after any hit and
+## damage spread thinly across frames is damage thrown away. Three jolts is a
+## kill on an unarmoured man.
 @export var damage := 120.0
 ## How long the effect lingers (SMOKE), and how long the screen stays white
 ## after a FLASH goes off in your face.
@@ -48,6 +48,22 @@ enum Class { THROWABLE, ULTIMATE }
 ## How long a screen may be, in player heights. It has to reach something solid
 ## at one end, so this is the leash on where "something solid" is allowed to be.
 @export var reach_in_heights := 5.0
+
+## How fast a RAIL_BOMB climbs its cable, in pixels per second.
+##
+## Deliberately slower than a man rides. The thing is a threat you can watch
+## coming and, if you are quick, get off the rope ahead of - a bomb that arrived
+## faster than you could react to would be a cable that simply kills whoever is
+## on it, which is the gadget it is replacing.
+@export var travel_speed := 200.0
+
+## How far a RAIL_BOMB can reach once it is holding station at the end of the
+## cable, in pixels.
+##
+## It needs line of sight as well as range, so this is the outer limit of a
+## thing it has to be able to see anyway - and the reason the answer to one
+## parked over the yard is a wall rather than distance.
+@export var sight_range := 520.0
 
 @export_group("Look")
 @export var tint := Color(0.8, 0.8, 0.85)
