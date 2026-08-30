@@ -644,6 +644,15 @@ var arc_way := 0
 ## waiting for orders is burning the same clock, which is why this is recorded
 ## rather than assumed to be active_time.
 var arc_launch := 0.0
+## What arc_left read when it got off the rope early, or 0 while it is still on
+## it. Frozen rather than recomputed: where a bomb stopped depends on what could
+## be seen at some moment, and no machine can work that out afterwards from what
+## can be seen now.
+##
+## Written on this machine only, by the cable carrying the bomb, and replicated
+## outward like the five above it - which is what keeps a decision about sight
+## lines from being made twice and answered differently. See RailBomb.
+var arc_stop := 0.0
 
 ## How white the screen is, 0 to 1, and how long it has left. Set by a flash
 ## grenade going off somewhere this body could see it - see Grenade._blind, which
@@ -2297,6 +2306,9 @@ func _use_ultimate(slot := 0) -> void:
 		arc_way = 0
 		arc_left = ult.gadget.active_time
 		arc_launch = ult.gadget.active_time
+		# Cleared, or the last bomb's stopping point freezes this one on the
+		# frame it is clamped on.
+		arc_stop = 0.0
 		_say_loot("RAIL BOMB clamped on - UP or DOWN to send it"
 			if PlayerInput.is_touch()
 			else "RAIL BOMB clamped on - W to send it up, S to send it down")
@@ -3404,9 +3416,15 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 	# the alternative is moving health onto a second, host-owned synchroniser.
 	if Net.is_networked() and not is_local():
 		Net.tell_owner_hit(get_multiplayer_authority(), amount, at, direction,
-			Net.attributing_to, Net.piercing, Net.armor_wear)
+			Net.attributing_to, Net.piercing, Net.armor_wear, Net.relentless)
 		return
-	if not is_alive or _invulnerable > 0.0:
+	if not is_alive:
+		return
+	# The immunity window, and the one kind of damage that is allowed through it
+	# - see Net.relentless. Current held against you on a rope is not a burst,
+	# and the rule that stops a burst deleting you is the rule that made this do
+	# a third of what it asked for.
+	if _invulnerable > 0.0 and not Net.relentless:
 		return
 
 	# Already on the ground: this is someone finishing the job. Armour is not
@@ -3454,7 +3472,12 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 
 	amount = hit.amount
 	health = maxf(health - amount, 0.0)
-	_invulnerable = invulnerable_time
+	# Relentless damage does not renew the window either. Ticking through it and
+	# then resetting it would cover its own victim from everybody else's gunfire
+	# for a third of a second at a time, and the man being cooked on a rope would
+	# be the hardest man in the level to shoot.
+	if not Net.relentless:
+		_invulnerable = invulnerable_time
 	health_changed.emit(health, max_health)
 
 	# Your own aim goes with it. Charged on what got through rather than on what

@@ -3,18 +3,19 @@ extends Node2D
 
 ## A charge you clamp to a zipline, point up or down, and let climb.
 ##
-## It goes where the cable goes, kills anybody hanging off it on the way past,
-## and when it runs out of rope it lets go and holds station there - a thing in
-## the air over the yard that shoots whoever it can see until its cell runs
-## flat. The cable is its rail and its ladder; the ledge at the top is where it
-## ends up, and that is the point of it. A zipline is the fastest way onto high
-## ground, and this is the answer to somebody owning that high ground.
+## It goes where the cable goes and cooks anybody hanging off it on the way past.
+## It lets go of the rope for one of two reasons - it ran out of rope, or it saw
+## somebody worth stopping for - and then holds station there, a thing in the air
+## over the yard shooting whoever it can see until its cell runs flat. The cable
+## is its rail and its ladder; where it gets off is wherever the shooting is. A
+## zipline is the fastest way onto high ground, and this is the answer to
+## somebody owning that high ground.
 ##
 ## ## Nothing about this is sent
 ##
-## Not one byte, and not one rpc. Every machine builds its own copy off five
+## Not one byte, and not one rpc. Every machine builds its own copy off six
 ## numbers that are already replicated on the man who threw it - see
-## Player.arc_at and the four beside it - and works out where the bomb is by
+## Player.arc_at and the five beside it - and works out where the bomb is by
 ## arithmetic that comes out the same everywhere:
 ##
 ##   which cable   the cable whose midpoint is arc_at (Zipline.ARC_MATCH)
@@ -22,32 +23,60 @@ extends Node2D
 ##   which way     arc_way, 0 while it waits for orders, +1 up, -1 down
 ##   how long left arc_left, counting down on its owner's clock
 ##   since when    arc_launch, the value arc_left had when it was sent
+##   where it quit arc_stop, the clock reading at which it got off the rope
 ##
-## Position is `arc_from + arc_way * (arc_launch - arc_left) * speed / length`,
-## clamped to the rope. A machine that has those five numbers has the bomb, and
-## a machine that stops having them stops having it. This is the same trick the
-## Live Rail used before it and it is the reason this whole feature adds no rpc
-## to net.gd - which matters more than it sounds, because an rpc added there
-## renumbers every other one and breaks any client that has not shipped with it.
+## Position is `arc_from + arc_way * (arc_launch - max(arc_left, arc_stop)) *
+## speed / length`, clamped to the rope. A machine that has those six numbers
+## has the bomb, and a machine that stops having them stops having it.
+##
+## arc_stop is what keeps "it stops when it sees somebody" from tearing the
+## whole scheme apart. Deciding to get off is a judgement about sight lines, and
+## two machines will not always make it on the same frame - so exactly one
+## machine makes it, the one that owns the numbers, and every other machine is
+## told the answer as a number rather than asked to reach it. Latched rather
+## than re-evaluated, because a position that depends on what was true at some
+## moment cannot be recovered from what is true now.
+##
+## This is the same trick the Live Rail used before it and it is the reason the
+## whole feature adds no rpc to net.gd - which matters more than it sounds,
+## because an rpc added there renumbers every other one and breaks any client
+## that has not shipped with it.
 ##
 ## The host still decides all damage, the way it decides every other kind - see
 ## Net.deals_damage. Every machine draws the lightning; one of them charges for
 ## it.
 
-## Seconds between jolts, and this is not a feel dial - it is a constraint.
-## Player.invulnerable_time is 0.35s of immunity after any hit, there so a burst
-## cannot delete you. Spread damage across frames instead and all but the first
-## jolt inside every 0.35s window is swallowed: the gadget this replaces did
-## exactly that and delivered about a fiftieth of what it was asking for,
-## silently. Anything below invulnerable_time here throws damage away again.
+## Seconds between jolts while it is holding station, shooting at range.
+##
+## Above Player.invulnerable_time, which is 0.35s of immunity after any hit,
+## because at range this is a weapon like any other and the rule that stops a
+## burst deleting you should apply to it. Anything below that number here would
+## be thrown away silently, which is what the gadget this replaces did for a
+## while - about a fiftieth of the damage it was asking for, and only visible
+## because a networked test measured the health bar instead of trusting the call.
 const JOLT_INTERVAL := 0.4
+
+## Seconds between jolts against somebody on the rope with it, which is a
+## different thing entirely and is priced as one.
+##
+## At range it is shooting at you. Here it is being dragged along a cable you
+## are hanging off, holding a live contact against you, and there is nowhere on
+## that rope to be that is not next to it. So it ticks nearly four times as
+## fast, and it goes through the immunity window rather than waiting for it -
+## see Net.relentless, which exists for this and is used by nothing else.
+##
+## The number this multiplies out to matters: at 0.11s and 34 a jolt, a man who
+## stays on the rope is dead in about a second. That is the intended answer to
+## "should I stay on this cable", and it is meant to be an easy question.
+const ROPE_JOLT_INTERVAL := 0.11
 
 ## How close the bomb has to pass a rider to take a bite out of them.
 ##
 ## Generous next to the cable's own grab range, because a man on a rope and a
 ## bomb on the same rope are on the same line by definition - what this is
-## really deciding is how long the window is as it goes by, and at 200 px/s this
-## is about half a second of being shot at.
+## really deciding is how long the window is as it goes by. At 600 px/s that is
+## under two tenths of a second, which is why the tick inside it is what it is:
+## the pass has to cost something even when the pass is that quick.
 const STRIKE_RANGE := 54.0
 
 ## How far above the end of the cable it climbs once the rope runs out, and how
@@ -88,8 +117,15 @@ var way := 0
 ## Where it is along the cable, 0 at the bottom and 1 at the top.
 var along := 0.0
 
-## True once it has run out of rope and let go.
+## True once it has let go of the rope - either because it ran out of it, or
+## because it saw somebody worth stopping for.
 var hovering := false
+
+## True on the machine that owns this bomb, once its sights have found somebody
+## while it was still climbing. Read by the Zipline, which is what turns it into
+## the replicated number every other machine stops the bomb by - see
+## Zipline._carry_the_bomb and Player.arc_stop.
+var wants_off := false
 
 ## What it is shooting at this frame, in world space, for the draw. Held rather
 ## than recomputed in _draw because the host works it out anyway and a client
@@ -106,6 +142,16 @@ var _reach := 0.0
 
 func _ready() -> void:
 	add_to_group(&"rail_bomb")
+	# Taken by the dark, like a grapple line and a dash trail and for the same
+	# reason: a thing that tells you where somebody's attention is should have to
+	# be looked at to be learned. VisionSystem walks this group and turns each
+	# one on or off by line of sight from wherever you are standing, so a bomb
+	# working a yard on the far side of a wall is a bomb you have to go and see.
+	#
+	# "shadowed" rather than "hideable" - hideable means a body the recon arrow
+	# can paint and pin a marker to, and a diamond hovering over somebody's
+	# gadget is not what that arrow is for.
+	add_to_group(&"shadowed")
 	z_index = 40
 	set_process(true)
 
@@ -160,18 +206,24 @@ func _process(delta: float) -> void:
 ## what makes this fair is that being on the rope is a thing you chose and can
 ## stop choosing.
 func _work_the_rope(delta: float) -> void:
+	wants_off = false
 	for body in Net.players():
 		if not _is_a_target(body):
 			continue
+		var at: Vector2 = body.global_position
 		var rides: Variant = body.get(&"riding")
-		if typeof(rides) != TYPE_BOOL or not rides:
-			_next_jolt.erase(body.get_instance_id())
+		var on_the_rope: bool = typeof(rides) == TYPE_BOOL and bool(rides)
+		if on_the_rope and at.distance_to(global_position) <= STRIKE_RANGE:
+			_arcs.append(at)
+			_jolt(body, delta, ROPE_JOLT_INTERVAL, true)
 			continue
-		if body.global_position.distance_to(global_position) > STRIKE_RANGE:
-			_next_jolt.erase(body.get_instance_id())
-			continue
-		_arcs.append(body.global_position)
-		_jolt(body, delta)
+		_next_jolt.erase(body.get_instance_id())
+		# Anybody else it can see is a reason to stop climbing. It is a weapon
+		# looking for a firing position, not a train with a timetable - and the
+		# top of the rope is only where it goes when nothing better presents
+		# itself on the way.
+		if at.distance_to(global_position) <= _reach and _can_see(at):
+			wants_off = true
 
 
 ## Holding station: anybody it can see, rider or not.
@@ -187,7 +239,7 @@ func _work_the_air(delta: float) -> void:
 			_next_jolt.erase(body.get_instance_id())
 			continue
 		_arcs.append(at)
-		_jolt(body, delta)
+		_jolt(body, delta, JOLT_INTERVAL, false)
 
 
 ## Whether a body is something this bomb is willing to shoot.
@@ -220,7 +272,7 @@ func _can_see(at: Vector2) -> bool:
 ##
 ## Host only. Everyone runs the loops above so that everyone draws the same
 ## lightning; only the host turns any of it into damage.
-func _jolt(body: Node2D, delta: float) -> void:
+func _jolt(body: Node2D, delta: float, interval: float, through: bool) -> void:
 	if not Net.deals_damage():
 		return
 	var key := body.get_instance_id()
@@ -230,12 +282,14 @@ func _jolt(body: Node2D, delta: float) -> void:
 	if due > 0.0:
 		_next_jolt[key] = due
 		return
-	_next_jolt[key] = JOLT_INTERVAL
+	_next_jolt[key] = interval
 	# Aimed at the body's own centre, which Damage.resolve reads as a body shot:
 	# this is current, not a projectile, and should not be rolling headshots.
 	Net.attributing_to = owner_peer
+	Net.relentless = through
 	body.take_damage(_damage, body.global_position,
 		(body.global_position - global_position).normalized())
+	Net.relentless = false
 	Net.attributing_to = 0
 
 

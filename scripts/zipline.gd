@@ -214,24 +214,54 @@ func _carry_the_bomb() -> void:
 
 	if _bomb == null or not is_instance_valid(_bomb):
 		_bomb = RailBomb.new()
-		# Onto the same overlay this cable lives on, so the thing climbing the
-		# rope is drawn in the same place and the same light as the rope.
-		add_child(_bomb)
+		# Deliberately *not* a child of this cable. A zipline is lifted onto the
+		# overlay that the ambient dark cannot reach, because a route is map
+		# knowledge you were already shown on the briefing - see
+		# _lift_above_the_dark. A bomb is the opposite of map knowledge: it is
+		# news about somebody, it is somewhere different every raid, and hung off
+		# the rope it inherited a permanent floodlight and could be read across a
+		# blacked-out yard through two walls.
+		#
+		# So it lives in the ordinary world with the grenades, where the dark
+		# tints it, and it carries the "shadowed" group so line of sight decides
+		# whether you see it at all. Its position is set in global coordinates
+		# either way, so nothing about the climb depends on who its parent is.
+		var into := Net.effect_root()
+		if into == null:
+			_bomb = null
+			return
+		into.add_child(_bomb)
 		_bomb.arm(self, int(mine["by"]), BOMB.damage, BOMB.sight_range)
 
 	var length := cable_length()
 	var way := int(mine["way"])
 	var at := float(mine["from"])
+	var stopped := float(mine["stop"])
 	if way != 0 and length >= 1.0:
 		# How far it has climbed since it was pointed, worked out from the clock
 		# rather than accumulated - a position that is integrated frame by frame
 		# drifts apart between machines, and one that is a function of a
 		# replicated number cannot.
-		var travelled: float = (float(mine["launch"]) - float(mine["left"])) * BOMB.travel_speed
+		#
+		# The clock stops where it got off. Once arc_stop is set the whole
+		# expression is frozen, which is how a bomb that broke off early sits in
+		# the same spot on every screen.
+		var clock: float = maxf(float(mine["left"]), stopped)
+		var travelled: float = (float(mine["launch"]) - clock) * BOMB.travel_speed
 		at = clampf(at + float(way) * travelled / length, 0.0, 1.0)
-	var out_of_rope := way != 0 and (at <= 0.0 or at >= 1.0)
-	_bomb.place(at, way, out_of_rope)
-	_set_bombed(not out_of_rope)
+	var off_the_rope := way != 0 and (stopped > 0.0 or at <= 0.0 or at >= 1.0)
+	_bomb.place(at, way, off_the_rope)
+	_set_bombed(not off_the_rope)
+
+	# Whether to break off, decided once and on one machine. This is the owner's
+	# copy of the bomb, so this is the machine whose sight lines count; every
+	# other one reads the answer off arc_stop as a number - see RailBomb.
+	if off_the_rope or way == 0 or not _bomb.wants_off:
+		return
+	var mine_to_stop := Net.local_player
+	if mine_to_stop == null or mine_to_stop.get_multiplayer_authority() != int(mine["by"]):
+		return
+	mine_to_stop.arc_stop = float(mine["left"])
 
 
 ## Only redraws on the edge. The cable is static scenery for the whole raid and

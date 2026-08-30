@@ -175,6 +175,21 @@ var piercing := 0.0
 ## damage call and read back out exactly the way piercing is - see the note
 ## above it, which applies here word for word.
 var armor_wear := 1.0
+## Whether the damage being resolved ignores a body's invulnerability window.
+## Set around the damage call, the same way the two above are.
+##
+## Player.invulnerable_time is 0.35s of immunity after any hit, and it is there
+## so a burst cannot delete you. That rule is right for bullets and wrong for
+## being dragged along a cable by something holding a live contact against you:
+## the whole point of that is that it does not let up, and at 0.35s the fastest
+## it could ever hurt is under three times a second no matter what interval it
+## asks for.
+##
+## So this exists, and it is deliberately narrow. It does not refresh the window
+## either - see Player.take_damage. A source that both ignored immunity and
+## renewed it would hand its victim a third of a second of cover from everybody
+## else's gunfire with every tick, which is the opposite of what it is for.
+var relentless := false
 
 
 func _ready() -> void:
@@ -563,6 +578,7 @@ func _refresh_rail_bombs() -> void:
 			"way": int(body.get(&"arc_way")),
 			"left": float(left),
 			"launch": float(body.get(&"arc_launch")),
+			"stop": float(body.get(&"arc_stop")),
 		})
 
 
@@ -904,7 +920,7 @@ func _make_grenade(gadget_path: String, at: Vector2, velocity: Vector2, mask: in
 	grenade.setup(data, velocity, mask)
 	grenade.global_position = at
 	grenade.thrower_id = thrower
-	_effect_root().add_child(grenade)
+	effect_root().add_child(grenade)
 
 
 # --- the projection -----------------------------------------------------------
@@ -1155,7 +1171,7 @@ func _build_hook(origin: Vector2, aim: Vector2, thrower: int) -> GrappleHook:
 	var body := player_for(thrower)
 	if body == null:
 		return null
-	var root := _effect_root()
+	var root := effect_root()
 	var wanted := "Hook_%d" % thrower
 	# The previous one is still reeling itself in. It is nobody's line any more -
 	# it is only finishing an animation - so it gives up the name at once rather
@@ -1205,7 +1221,7 @@ func _ask_hook_news(anchor: Vector2) -> void:
 
 @rpc("authority", "reliable")
 func _hook_news(who: int, anchor: Vector2) -> void:
-	var hook := _effect_root().get_node_or_null(NodePath("Hook_%d" % who)) as GrappleHook
+	var hook := effect_root().get_node_or_null(NodePath("Hook_%d" % who)) as GrappleHook
 	if hook == null:
 		return
 	if anchor.is_finite():
@@ -1616,7 +1632,11 @@ func _release_bodies_of(id: int) -> void:
 
 ## Where rounds and grenades live. Named rather than guessed, so every machine
 ## puts them in the same place and nothing depends on who fired.
-func _effect_root() -> Node:
+##
+## Public, because a rail bomb wants the same answer for a different reason: it
+## has to hang off the ordinary world rather than off the cable it climbs, or
+## the ambient dark never touches it - see Zipline._carry_the_bomb.
+func effect_root() -> Node:
 	var scene := get_tree().current_scene
 	if scene == null:
 		return get_tree().root
@@ -1647,13 +1667,14 @@ func deals_damage() -> bool:
 ## every machine from the moment it starts and has been exchanging rounds and
 ## match state since before anybody had a body.
 func tell_owner_hit(owner_id: int, amount: float, at: Vector2, direction: Vector2,
-		from: int, pierce := 0.0, wear := 1.0) -> void:
-	_hit_body.rpc_id(owner_id, owner_id, amount, at, direction, from, pierce, wear)
+		from: int, pierce := 0.0, wear := 1.0, through := false) -> void:
+	_hit_body.rpc_id(owner_id, owner_id, amount, at, direction, from, pierce, wear,
+		through)
 
 
 @rpc("any_peer", "reliable")
 func _hit_body(owner_id: int, amount: float, at: Vector2, direction: Vector2,
-		from: int, pierce: float, wear: float) -> void:
+		from: int, pierce: float, wear: float, through: bool) -> void:
 	# Only the host resolves damage, so only the host may say this.
 	if multiplayer.get_remote_sender_id() != 1:
 		return
@@ -1666,9 +1687,11 @@ func _hit_body(owner_id: int, amount: float, at: Vector2, direction: Vector2,
 	attributing_to = from
 	piercing = pierce
 	armor_wear = wear
+	relentless = through
 	body.take_damage(amount, at, direction)
 	piercing = 0.0
 	armor_wear = 1.0
+	relentless = false
 	attributing_to = 0
 
 

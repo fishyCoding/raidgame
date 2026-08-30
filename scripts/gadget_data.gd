@@ -51,11 +51,18 @@ enum Class { THROWABLE, ULTIMATE }
 
 ## How fast a RAIL_BOMB climbs its cable, in pixels per second.
 ##
-## Deliberately slower than a man rides. The thing is a threat you can watch
-## coming and, if you are quick, get off the rope ahead of - a bomb that arrived
-## faster than you could react to would be a cable that simply kills whoever is
-## on it, which is the gadget it is replacing.
-@export var travel_speed := 200.0
+## Around what a man rides at, and on the quicker ropes rather less - so getting
+## off ahead of one is a thing you have to have already started doing, not a
+## thing you do when you see it. It was a third of this to begin with, which
+## made the climb the whole gadget and the arrival an afterthought; at this
+## speed the rope is a short unpleasant moment and the thing that matters is
+## where it ends up.
+##
+## The trade is paid on the way past: the faster it goes, the less time anybody
+## on the rope spends inside RailBomb.STRIKE_RANGE, and past about this speed a
+## rider takes one jolt on the way by rather than two. That is the intended
+## shape now - the cable is the delivery, the sky is the weapon.
+@export var travel_speed := 600.0
 
 ## How far a RAIL_BOMB can reach once it is holding station at the end of the
 ## cable, in pixels.

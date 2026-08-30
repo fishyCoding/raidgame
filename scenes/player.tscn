@@ -82,6 +82,9 @@ properties/18/replication_mode = 1
 properties/19/path = NodePath(".:arc_launch")
 properties/19/spawn = true
 properties/19/replication_mode = 1
+properties/20/path = NodePath(".:arc_stop")
+properties/20/spawn = true
+properties/20/replication_mode = 1
 
 [node name="Player" type="CharacterBody2D" groups=["player"]]
 collision_layer = 4

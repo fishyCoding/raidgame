@@ -17,6 +17,11 @@ extends SceneTree
 
 const BOMB := "res://resources/gadgets/rail_bomb.tres"
 
+## How far a bomb holding station may wander and still count as parked - it bobs
+## up and down on purpose, so "stays where it stopped" cannot mean "does not
+## move a pixel".
+const HOVER_SLACK := 20.0
+
 var _ok := true
 
 
@@ -163,6 +168,13 @@ func _bomb_half() -> void:
 	_check("the cable has built the bomb", bomb != null)
 	if bomb == null:
 		return
+	# It hangs off the world, not off the cable, so the dark can have it - the
+	# rope is deliberately always lit and a bomb inheriting that floodlight
+	# could be read across a blacked-out yard through two walls.
+	_check("the dark can take it", bomb.is_in_group(&"shadowed"))
+	_check("and it is not hung off the always-lit rope",
+		not cable.is_ancestor_of(bomb))
+
 	var parked: Vector2 = bomb.global_position
 	await _wait(20)
 	_check("and it does not move until it is told",
@@ -187,32 +199,125 @@ func _bomb_half() -> void:
 		absf(player.global_position.y - was_y) < 24.0)
 
 	# --- it climbs -----------------------------------------------------------
+	#
+	# A third of a second, not three quarters. At 600 px/s a longer window puts
+	# the bomb off the top of most ropes in the level and turns a speed check
+	# into a clamp check.
 	var from := bomb.global_position
-	await _wait(45)
+	var span := 20
+	await _wait(span)
+	var seconds := float(span) / 60.0
 	var climbed: float = from.y - bomb.global_position.y
-	_say("climbed %.0f px in 0.75s (want about %.0f)"
-		% [climbed, gadget.travel_speed * 0.75])
-	_check("it goes up the rope", climbed > 60.0)
-	_check("at about the speed it is meant to",
-		absf(climbed - gadget.travel_speed * 0.75) < 60.0)
+	var want: float = gadget.travel_speed * seconds
+	_say("climbed %.0f px in %.2fs (want about %.0f)" % [climbed, seconds, want])
+	_check("it goes up the rope", climbed > 40.0)
+	# A quarter, not a fixed number of pixels: the first frame or two are spent
+	# on the launch edge, and that lag is a fraction of the speed rather than a
+	# constant, so a tolerance in pixels is tight at one speed and meaningless
+	# at another.
+	_check("at about the speed it is meant to", absf(climbed - want) < want * 0.25)
 
 	# --- and takes a bite out of somebody on the rope ------------------------
 	var victim := _stub_rider(level, bomb.global_position + Vector2(0.0, -60.0))
 	net._players[4242] = victim
 	await _wait(40)
-	_say("the rider took %.0f" % victim.taken)
+	_say("a rider it went past took %.0f (%.1f jolts of %.0f)"
+		% [victim.taken, victim.taken / gadget.damage, gadget.damage])
 	_check("a rider it passes gets hit", victim.taken > 0.0)
-	_check("a whole jolt, not a slice of one",
-		is_equal_approx(victim.taken, gadget.damage)
-		or victim.taken >= gadget.damage)
-	# Off the rope is out of it. The bomb does not chase people who are not on
-	# the cable with it.
-	victim.set(&"riding", false)
+	_check("a whole jolt, not a slice of one", victim.taken >= gadget.damage)
+
+	# Out of its reach entirely: no jolts, and no reason to break off either.
 	victim.taken = 0.0
-	await _wait(30)
-	_check("somebody not on the rope is left alone", victim.taken == 0.0)
+	victim.global_position = bomb.global_position + Vector2(gadget.sight_range + 600.0, 0.0)
+	await _wait(20)
+	_check("and leaves alone somebody it cannot reach", victim.taken == 0.0)
 	net._players.erase(4242)
 	victim.queue_free()
+
+	# --- and the rope tick is the fast one -----------------------------------
+	#
+	# A fresh bomb low on the rope, because by now the last one is at the top and
+	# holding station, and the two phases tick at deliberately different rates -
+	# measuring the wrong one was how the first draft of this check quietly
+	# passed for the wrong reason.
+	ult.charge = 1.0
+	player.arc_stop = 0.0
+	player.global_position = cable.world_bottom() + Vector2(0.0, -20.0)
+	await physics_frame
+	player._use_ultimate(0)
+	await _wait(3)
+	bomb = get_first_node_in_group(&"rail_bomb")
+	Input.action_press(&"jump")
+	await physics_frame
+	Input.action_release(&"jump")
+	await physics_frame
+
+	# Pinned to it, so the fly-past becomes a stay and what is measured is the
+	# interval rather than how long the pass lasts. Made a rider and held in
+	# strike range from the first frame, which is also what keeps it out of the
+	# "somebody worth stopping for" branch.
+	var clung := _stub_rider(level, bomb.global_position)
+	net._players[4245] = clung
+	var held := 24
+	var still_climbing := true
+	for i in held:
+		clung.global_position = bomb.global_position
+		await physics_frame
+		if bool(bomb.hovering):
+			still_climbing = false
+	var seconds_held := float(held) / 60.0
+	var jolts: float = clung.taken / gadget.damage
+	_say("held against it for %.2fs on the rope: %.0f damage, %.1f jolts"
+		% [seconds_held, clung.taken, jolts])
+	_check("it was still on the rope for that", still_climbing)
+	_check("staying on the rope with it ticks fast", jolts >= 3.0)
+	# Which is only possible because it goes through the immunity window. A body
+	# ignores anything inside invulnerable_time of the last hit, so without
+	# Net.relentless this could never beat one jolt per 0.35s however often the
+	# bomb asked.
+	_check("faster than the immunity window would allow on its own",
+		jolts > seconds_held / _player_iframes(player))
+	net._players.erase(4245)
+	clung.queue_free()
+
+	# --- it gets off early if it sees somebody -------------------------------
+	#
+	# A man standing off the rope, in the open, well inside its reach. The bomb
+	# is still climbing and has no business with him - until it looks up.
+	ult.charge = 1.0
+	player.arc_stop = 0.0
+	player.global_position = cable.world_bottom() + Vector2(0.0, -20.0)
+	await physics_frame
+	player._use_ultimate(0)
+	await _wait(3)
+	bomb = get_first_node_in_group(&"rail_bomb")
+	var seen_early := _stub_rider(level,
+		cable.world_bottom() + Vector2(120.0, -260.0))
+	seen_early.set(&"riding", false)
+	net._players[4244] = seen_early
+	Input.action_press(&"jump")
+	await physics_frame
+	Input.action_release(&"jump")
+	await _wait(30)
+	_say("stopped at %.2f of the way up, %.0f px short of the top"
+		% [bomb.along, cable.world_top().distance_to(bomb.global_position)])
+	_check("it broke off before the top", bomb.along < 0.9)
+	_check("and let go of the rope", bool(bomb.hovering))
+	_check("the stop was written down", player.arc_stop > 0.0)
+	_check("and the rope is not yellow any more", not bool(cable._bombed))
+	# Frozen there. Every other machine reads that number rather than deciding
+	# for itself, and the number has to stop moving for that to be worth
+	# anything.
+	var stopped_at: Vector2 = bomb.global_position
+	var stop_reading: float = player.arc_stop
+	await _wait(30)
+	_check("and it stays where it stopped",
+		bomb.global_position.distance_to(stopped_at) < HOVER_SLACK)
+	_check("without the stopping point drifting",
+		is_equal_approx(player.arc_stop, stop_reading))
+	_check("shooting the man it stopped for", seen_early.taken > 0.0)
+	net._players.erase(4244)
+	seen_early.queue_free()
 
 	# --- to the top, and then it holds station -------------------------------
 	#
@@ -224,6 +329,8 @@ func _bomb_half() -> void:
 	await physics_frame
 	player._use_ultimate(0)
 	_check("clamped on near the top", player.arc_from > 0.8)
+	_check("and the last bomb's stopping point went with it",
+		is_zero_approx(player.arc_stop))
 	Input.action_press(&"jump")
 	await physics_frame
 	Input.action_release(&"jump")
@@ -267,6 +374,13 @@ func _bomb_half() -> void:
 func _wait(frames: int) -> void:
 	for i in frames:
 		await physics_frame
+
+
+## A body's immunity window, in seconds. Read off the body rather than typed,
+## because the claim being made about the rope tick is a claim relative to it.
+func _player_iframes(body: Node2D) -> float:
+	var window: float = body.get(&"invulnerable_time")
+	return maxf(window, 0.001)
 
 
 ## A body that can be on a rope and remembers being hurt, and nothing else.
