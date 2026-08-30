@@ -325,7 +325,10 @@ func _slug_through_a_plate(mine: Node2D, theirs: Node2D) -> void:
 		# is the whole point of the V key - and the ramp takes a moment, so this
 		# waits for shield rather than for armored.
 		mine.armored = true
-	await _wait(60)
+	# Off the body's own ramp time, not a flat second - the plates take two
+	# seconds to come up now and a fixed wait here would be checking armour that
+	# is still on its way.
+	await _wait(roundi(float(mine.shield_raise_time) * 60.0) + 10)
 
 	if not _hosting:
 		_check(mine.inventory.get_worn(Inventory.Wear.VEST) != null,

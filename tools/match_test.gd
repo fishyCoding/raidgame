@@ -356,7 +356,7 @@ func _run() -> void:
 func _shield_travels(mine: Node2D, theirs: Node2D) -> void:
 	if _first:
 		mine.armored = true
-		await _wait(60)
+		await _ramped(mine)
 		_check("my own plates came up", mine.is_shielded())
 		return
 
@@ -368,8 +368,16 @@ func _shield_travels(mine: Node2D, theirs: Node2D) -> void:
 	_check("I can see their plates go up", theirs.armored)
 	# The ramp is local, so a replica has to run it out to full on its own off
 	# the bool rather than being told each step of it.
-	await _wait(60)
+	await _ramped(theirs)
 	_check("and the ramp ran out on this machine too", theirs.is_shielded())
+
+
+## Long enough for the plates to finish coming up, read off the body rather than
+## fixed. This was a flat second, which was three times the ramp when the ramp
+## was 0.3s and half of it the day it became 2s - a test that fails because a
+## designer changed a number is a test that has to be re-read to be believed.
+func _ramped(body: Node2D) -> void:
+	await _wait(roundi(float(body.shield_raise_time) * 60.0) + 10)
 
 
 ## Client 1 shoots client 2. Both run this; which side you are decides whether

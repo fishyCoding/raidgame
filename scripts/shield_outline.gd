@@ -62,8 +62,11 @@ func _draw() -> void:
 	if edge.is_empty():
 		return
 	# Half up is half there. The line fades and thickens into place rather than
-	# appearing, so the 0.3s the plates take is something you can watch happen -
-	# on your own body and, more usefully, on somebody else's.
+	# appearing, so the two seconds the plates take is something you can watch
+	# happen - on your own body and, more usefully, on somebody else's. Worth
+	# far more at two seconds than it was at a third of one: a man halfway
+	# through putting his armour on is now a man you have time to shoot, and
+	# this line is how you know that is what you are looking at.
 	var strength := clampf(_drawn, 0.0, 1.0)
 	draw_polyline(edge, Color(GLOW, GLOW.a * strength), 6.0 * strength, true)
 	draw_polyline(edge, Color(OUTLINE, strength), 2.0, true)

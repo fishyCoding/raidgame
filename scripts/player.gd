@@ -15,11 +15,18 @@ extends CharacterBody2D
 @export_group("Shield")
 ## Seconds to bring the plates up, and the same to drop them.
 ##
-## The whole mechanic is in this number. Long enough that flicking it on as a
-## round arrives does not save you - you are only protected once it is fully up -
-## and short enough that switching stance mid-fight is a thing you do rather than
-## a thing you commit to at the start of one.
-@export var shield_raise_time := 0.3
+## The whole mechanic is in this number, and at two seconds it says something
+## different than it used to. At 0.3 the plates were a stance you flicked
+## between inside a single fight; two seconds is a decision you take before one,
+## and being caught halfway through it is now a real way to die - you are
+## protected only once they are all the way up, and equally naked all the way
+## back down.
+##
+## That is the point of the long version: armour you can put on in the time it
+## takes to hear a shot is not a choice, it is a reflex. This makes plating up
+## something you do behind cover, having decided, and it makes the two seconds
+## after you change your mind a window somebody else can use.
+@export var shield_raise_time := 2.0
 ## Top speed with the plates up, as a fraction of normal.
 ##
 ## This used to be 0.45, which was priced against a shield that was the only
@@ -194,14 +201,14 @@ extends CharacterBody2D
 ## predictably, and someone gets to shoot you for it. Strung end to end the way
 ## they are on the quarry, that commitment was refundable: ride, step off, grab
 ## the next one, and you crossed the map without ever being somewhere a person
-## could get to you. Five seconds is long enough that the second rope is a
+## could get to you. Three seconds is long enough that the second rope is a
 ## decision you make on the ground, and short enough that it is not a punishment
 ## for having used the level as it is built - ten put you at the foot of a cable
 ## watching a number, which is the wrong thing to be doing in a raid.
 ##
 ## Timed from stepping off rather than from grabbing, so a long haul does not
 ## come with its own cooldown already half spent.
-@export_range(0.0, 60.0, 0.5, "or_greater") var zipline_cooldown := 5.0
+@export_range(0.0, 60.0, 0.5, "or_greater") var zipline_cooldown := 3.0
 
 @export_group("Slinging the gun")
 ## Seconds to get the gun out of the way when both hands are wanted for a rope.

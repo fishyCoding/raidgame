@@ -376,6 +376,14 @@ func _run() -> void:
 	_check("UP is offered", riding.has(&"jump"))
 	_check("DOWN is offered", riding.has(&"move_down"))
 	_check("LET GO is offered", riding.has(&"interact"))
+	# The stance you can change on a keyboard mid-ride has to be changeable here
+	# too, or the two control schemes are playing different games on the same
+	# rope. It is well clear of LET GO - see RIDE_BUTTONS.
+	_check("PLATES comes along too", riding.has(&"shield"))
+	var let_go: Vector2 = (riding[&"interact"] as Dictionary).at
+	var plates: Vector2 = (riding[&"shield"] as Dictionary).at
+	_check("and is not under the thumb reaching for LET GO",
+		let_go.distance_to(plates) > 120.0)
 	_check("and the move stick is gone", not _pad._holding(&"move_left"))
 
 	var rode_from: Vector2 = player.global_position

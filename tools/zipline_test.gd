@@ -137,6 +137,32 @@ func _run() -> void:
 	_check("once it is up, a rope is a rope again", _player.get(&"zipline") != null)
 	await _press_interact()
 
+	# --- plated up, on a rope ------------------------------------------------
+	#
+	# The plates and the cable are two different hands' worth of commitment and
+	# neither one cancels the other. Riding armoured is slow and loud and you
+	# cannot stop, which is cost enough - being made to strip before you may
+	# touch a rope would only mean nobody ever climbs one in a fight, which is
+	# the exact moment the level's routes are worth having.
+	_say("")
+	_say("-- and you can ride it in your plates --")
+	_player.set(&"zipline_cooldown_left", 0.0)
+	_player.set(&"armored", true)
+	# All the way up before we ask, because half-raised plates are not armour -
+	# see Player.is_shielded.
+	var raise_time: float = _player.get(&"shield_raise_time")
+	await _wait(roundi(raise_time * 60.0) + 10)
+	_check("the plates are up", bool(_player.call(&"is_shielded")))
+	_say("they took %.1fs to raise" % raise_time)
+
+	await _stand_at(cable)
+	await _press_interact()
+	_check("you can still catch a cable in them", _player.get(&"zipline") != null)
+	await _wait(30)
+	_check("and the ride does not knock them down",
+		bool(_player.call(&"is_shielded")) and _player.get(&"zipline") != null)
+	await _press_interact()
+
 	# --- and it does not reach everywhere ------------------------------------
 	_player.global_position = cable.world_bottom() + Vector2(400.0, 0.0)
 	await _wait(6)
