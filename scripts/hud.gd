@@ -19,6 +19,13 @@ const RECON := Color(0.55, 0.85, 0.95, 0.95)
 ## for something in the world for the half second before you understand it.
 const GLINT := Color(0.92, 0.97, 1.0, 1.0)
 const PROJECTION := Color(0.62, 0.78, 1.0)
+## A headcount, on the screen of the man running one. Cold green, and the only
+## green on this HUD that is not the health bar - it is the one readout that is
+## about other people rather than about you.
+const HEADCOUNT := Color(0.58, 0.94, 0.72)
+## And on the screen of somebody being counted. The same hue washed most of the
+## way out, because it is never drawn as a symbol - only as light on the glass.
+const WATCHED := Color(0.62, 0.84, 0.76)
 ## The route line while a decoy is being placed. Red, and the only red on the
 ## screen that is not damage - it is a claim about where a body is going to walk,
 ## and it should read as a line drawn on a map rather than as part of the ghost.
@@ -78,6 +85,35 @@ var _scanned_left := 0.0
 ## telling you to move, and it should be out of the way while you do.
 const SCANNED_TIME := 2.4
 
+## Seconds left of the mark a Headcount leaves on your screen. Kept here for the
+## same reason _scanned_left is: it is a thing on a screen and nothing else, and
+## dying should not leave it frozen mid-fade.
+var _watched_left := 0.0
+
+## How long that mark lingers after the last tap.
+##
+## Longer than Player.COUNT_PING, so a count that is still running draws as one
+## unbroken swell rather than a strobe at the tick rate - and short enough that
+## walking out of somebody's reach clears your screen in about a second, with no
+## second message ever having to be sent to say you have gone.
+const WATCHED_FADE := 1.35
+## How far in from the edge the vignette reaches, as a fraction of the shorter
+## side.
+const WATCHED_DEPTH := 0.22
+## Seconds for the sweep line to cross the screen once.
+const WATCHED_SWEEP := 3.2
+
+## The dial's radius on screen, and how many bearings it is willing to tell
+## apart.
+##
+## Twelve sectors is thirty degrees each, and the coarseness is the gadget
+## rather than a shortcut: what was paid for is "somebody is that way", not a
+## firing solution. Distance is not drawn at all for the same reason - every
+## contact sits on the same ring whether it is thirty metres off or on the far
+## edge of reach.
+const COUNT_RING := 104.0
+const COUNT_SECTORS := 12
+
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -89,6 +125,7 @@ func _ready() -> void:
 	if _player:
 		_weapon = _player.weapon
 		_player.scanned.connect(_on_scanned)
+		_player.counted.connect(_on_counted)
 
 
 ## Characters arrive after the level does now - spawned per peer rather than
@@ -100,10 +137,16 @@ func _on_player_spawned(body: Node) -> void:
 	_weapon = _player.weapon
 	if not _player.scanned.is_connected(_on_scanned):
 		_player.scanned.connect(_on_scanned)
+	if not _player.counted.is_connected(_on_counted):
+		_player.counted.connect(_on_counted)
 
 
 func _on_scanned() -> void:
 	_scanned_left = SCANNED_TIME
+
+
+func _on_counted() -> void:
+	_watched_left = WATCHED_FADE
 
 
 func _process(delta: float) -> void:
@@ -112,6 +155,7 @@ func _process(delta: float) -> void:
 	if _player and _ult_left() > _overload_span:
 		_overload_span = _ult_left()
 	_scanned_left = maxf(_scanned_left - delta, 0.0)
+	_watched_left = maxf(_watched_left - delta, 0.0)
 	queue_redraw()
 
 
@@ -122,10 +166,13 @@ func _fade(color: Color) -> Color:
 
 
 func _draw() -> void:
-	# Before every early return below it. Being painted is worth knowing whether
-	# you are holding a gun, holding nothing, or lying on the floor bleeding -
-	# and on the floor it is the most useful thing on the screen, because it
-	# means somebody is on their way.
+	# Both of these before every early return below them, and the vignette under
+	# the banner. Being watched is worth knowing whether you are holding a gun,
+	# holding nothing, or lying on the floor bleeding - and on the floor it is
+	# the most useful thing on the screen, because it means somebody is on their
+	# way.
+	if _watched_left > 0.0:
+		_draw_watched()
 	if _scanned_left > 0.0:
 		_draw_scanned()
 	if _weapon == null:
@@ -303,6 +350,12 @@ func _draw_health() -> void:
 		_draw_overload()
 	if _player.projection_left > 0.0:
 		_draw_projection()
+	# Not while you are on the floor. The clock is frozen down there along with
+	# the rest of your kit - see Player._charge_ultimate - and a dial that has
+	# stopped turning is worse than none, because every bearing on it is where
+	# somebody was standing at the moment you were shot.
+	if _player.count_left > 0.0 and not _player.is_downed:
+		_draw_headcount()
 	if _player.projection_aiming:
 		_draw_projection_aim()
 	if _player.screen_aiming:
@@ -612,6 +665,190 @@ func _draw_scanned() -> void:
 		HORIZONTAL_ALIGNMENT_CENTER, size.x, 16, Color(TEXT.r, TEXT.g, TEXT.b, alpha * 0.9))
 
 
+## A headcount running: how many people are inside it, and roughly where.
+##
+## Two pieces, and the split between them is the whole design. A tally, which is
+## exact - the number is the thing you paid for, and "three" and "one" are
+## different plans. And a dial, which is not: twelve sectors around your own
+## feet, lit where somebody is, with no distance in it at all. A man on the
+## boundary and a man in the next room light the same wedge.
+##
+## Coarse on purpose. It is bought to answer "is that building empty" before you
+## commit to crossing open ground, and an instrument that answered it precisely
+## enough to shoot from would replace the crossing rather than inform it.
+##
+## Everything here is recomputed at draw time off live positions rather than
+## cached at the ping. The taps that go out to the people being counted are on a
+## clock because they cost traffic; a picture on your own screen costs nothing,
+## and a dial lagging half a second behind the man walking past you is worse
+## than no dial.
+func _draw_headcount() -> void:
+	var contacts: Array = _player.headcount_contacts()
+	var clock := Time.get_ticks_msec() * 0.001
+	# The last second dims rather than cutting out, so the dial reads as running
+	# down instead of as having been switched off by something.
+	var fade := clampf(_player.count_left, 0.0, 1.0)
+
+	_draw_count_dial(clock, fade)
+
+	# Above the slot the overload and projection banners share, so two ultimates
+	# running at once do not print through each other.
+	var box := Rect2(Vector2(size.x * 0.5 - 130.0, 76.0), Vector2(260.0, 46.0))
+	var lit := Color(HEADCOUNT.r, HEADCOUNT.g, HEADCOUNT.b, fade)
+	draw_rect(box, Color(PANEL_BG.r, PANEL_BG.g, PANEL_BG.b, PANEL_BG.a * fade))
+	draw_rect(Rect2(box.position, Vector2(3.0, box.size.y)), lit)
+	draw_string(_font, box.position + Vector2(14.0, 20.0), "HEADCOUNT",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 17, lit)
+	draw_string(_font, box.position + Vector2(0.0, 20.0), "%.1fs" % _player.count_left,
+		HORIZONTAL_ALIGNMENT_RIGHT, box.size.x - 14.0, 15,
+		Color(TEXT.r, TEXT.g, TEXT.b, fade))
+
+	# The number is the readout. An empty count is worth saying in words rather
+	# than as a nought, because "nobody" is the answer that changes what you do
+	# next and it should not have to be read off a digit.
+	var heard := contacts.size()
+	var note := "nobody within reach"
+	if heard > 0:
+		note = "%d other%s within reach" % [heard, "" if heard == 1 else "s"]
+	draw_string(_font, box.position + Vector2(14.0, 36.0), note,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
+		Color(DIM.r, DIM.g, DIM.b, fade) if heard == 0 else lit)
+
+	var bar := Rect2(box.position + Vector2(14.0, 40.0), Vector2(box.size.x - 28.0, 4.0))
+	draw_rect(bar, Color(0.16, 0.18, 0.22, fade))
+	var span: float = maxf(_ult_span(GadgetData.Kind.HEADCOUNT), 0.01)
+	draw_rect(Rect2(bar.position, Vector2(
+		bar.size.x * clampf(_player.count_left / span, 0.0, 1.0), bar.size.y)), lit)
+
+
+## Which of the twelve wedges the dial is lighting, right now.
+##
+## Public and kept out of the drawing for the same reason flash_core_radius is:
+## "does it point the right way" is the thing worth asserting about a compass,
+## and it is not a question a headless run can answer by looking at a canvas.
+##
+## Sector 0 is due east and they run clockwise on screen, because screen y is
+## down - so straight up is 9, not 3.
+##
+## Each wedge is *centred* on its direction rather than starting at it. That is
+## not tidiness: due east, due north and the diagonals are where people actually
+## end up relative to you on a map built out of floors, and a grid split on those
+## angles puts the commonest bearings exactly on a seam - where a pixel of drift
+## flips the mark to the neighbouring wedge, and where a man directly overhead
+## can be drawn thirty degrees off. Centred, every cardinal has half a wedge of
+## slack either side of it.
+func count_sectors() -> Array[int]:
+	var lit: Array[int] = []
+	if _player == null:
+		return lit
+	var wedge := TAU / float(COUNT_SECTORS)
+	for body in _player.headcount_contacts():
+		# World angles, not screen ones. The camera in this game never rotates,
+		# so the two agree - and a world delta is one subtraction rather than two
+		# projections, one of which can fail when there is no camera yet.
+		var offset: Vector2 = body.global_position - _player.global_position
+		var sector := int(floor(wrapf(offset.angle() + wedge * 0.5, 0.0, TAU) / wedge))
+		if not lit.has(sector):
+			lit.append(sector)
+	return lit
+
+
+## The bearings, as a ring of wedges around your own feet.
+##
+## Drawn on the character rather than in a corner of the screen, because every
+## angle on it is measured from where you are standing - a compass parked in the
+## corner would be read against the middle of the frame, which is not where you
+## are once the camera leans out to aim.
+func _draw_count_dial(clock: float, fade: float) -> void:
+	var here := _to_screen(_player.global_position)
+	if not here.is_finite():
+		return
+
+	# The unlit ring first, faint. It is what makes an empty sector read as
+	# "checked, nobody there" instead of as a dial that has not come on yet.
+	draw_arc(here, COUNT_RING, 0.0, TAU, 72,
+		Color(HEADCOUNT.r, HEADCOUNT.g, HEADCOUNT.b, 0.10 * fade), 1.5, true)
+
+	var wedge := TAU / float(COUNT_SECTORS)
+	# One slow pulse across the whole dial rather than one per contact, so three
+	# people read as three marks rather than as three separate flashing things
+	# competing for the corner of your eye.
+	var pulse := 0.72 + 0.28 * sin(clock * 3.4)
+	for sector in count_sectors():
+		# Back half a wedge, because a sector is centred on its bearing rather
+		# than beginning at it - see count_sectors.
+		var start: float = (float(sector) - 0.5) * wedge
+		# Held back off both ends so the wedges stay separated. Two adjacent
+		# sectors both lit should still read as two.
+		var pad := wedge * 0.12
+		draw_arc(here, COUNT_RING, start + pad, start + wedge - pad, 10,
+			Color(HEADCOUNT.r, HEADCOUNT.g, HEADCOUNT.b, 0.9 * pulse * fade), 4.0, true)
+
+
+## Somebody near you is counting heads.
+##
+## The whole of what the counted are told, and it is deliberately less than the
+## counter gets: no number, no bearing, no name, and not one word of text. What
+## it says is "you are on somebody's list, now" - which is enough to make you
+## move or make you wait, and not enough to tell you which of those is right.
+##
+## A vignette and a sweep, both faint. The vignette breathes so it does not read
+## as a graphics setting somebody left on; the sweep is the only part with a
+## direction to it, and it is what keeps the effect from being mistaken for
+## damage. You are not hurt. You are being looked for.
+func _draw_watched() -> void:
+	var t := clampf(_watched_left / WATCHED_FADE, 0.0, 1.0)
+	# About a second and a half a cycle - a breath, not a strobe. Fast enough to
+	# be alive in the corner of your eye, slow enough that it never becomes the
+	# thing you are looking at.
+	var breath := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.0007 * TAU)
+	var peak := 0.3 * t * (0.55 + 0.45 * breath)
+	var depth := minf(size.x, size.y) * WATCHED_DEPTH
+
+	# Four trapezoids, mitred at the corners, each one shading from the edge
+	# colour to nothing as it comes inwards.
+	#
+	# The first version of this was a stack of nested rectangle frames, which is
+	# the obvious way to fake a gradient out of draw_rect and does not survive
+	# being looked at: the steps between bands read as concentric rings drawn
+	# round the screen, and the corners - where two frames overlap - stack into a
+	# bright staircase. Per-vertex colour is the actual gradient, in four calls
+	# instead of sixty, and mitring means no pixel is painted twice.
+	var edge := Color(WATCHED.r, WATCHED.g, WATCHED.b, peak)
+	var gone := Color(WATCHED.r, WATCHED.g, WATCHED.b, 0.0)
+	var shade := PackedColorArray([edge, edge, gone, gone])
+	var w := size.x
+	var h := size.y
+	draw_polygon(PackedVector2Array([Vector2(0.0, 0.0), Vector2(w, 0.0),
+		Vector2(w - depth, depth), Vector2(depth, depth)]), shade)
+	draw_polygon(PackedVector2Array([Vector2(w, h), Vector2(0.0, h),
+		Vector2(depth, h - depth), Vector2(w - depth, h - depth)]), shade)
+	draw_polygon(PackedVector2Array([Vector2(0.0, h), Vector2(0.0, 0.0),
+		Vector2(depth, depth), Vector2(depth, h - depth)]), shade)
+	draw_polygon(PackedVector2Array([Vector2(w, 0.0), Vector2(w, h),
+		Vector2(w - depth, h - depth), Vector2(w - depth, depth)]), shade)
+
+	# The sweep. A hairline with a soft shoulder either side, crossing top to
+	# bottom over and over for as long as somebody is counting. It is the only
+	# part of this with a direction to it, and that is what keeps the effect from
+	# reading as damage: you are not hurt, you are being looked for.
+	var y := fmod(Time.get_ticks_msec() * 0.001, WATCHED_SWEEP) / WATCHED_SWEEP * h
+	draw_rect(Rect2(Vector2(0.0, y - 18.0), Vector2(w, 36.0)),
+		Color(WATCHED.r, WATCHED.g, WATCHED.b, 0.028 * t))
+	draw_rect(Rect2(Vector2(0.0, y - 1.0), Vector2(w, 2.0)),
+		Color(WATCHED.r, WATCHED.g, WATCHED.b, 0.075 * t))
+
+
+## How long a gadget of this kind runs for, taken off the one actually in the
+## kit. The drain bars need it and the item is the only thing that knows.
+func _ult_span(kind: int) -> float:
+	var box: Inventory = _player.inventory if _player else null
+	if box == null:
+		return 0.0
+	var item := box.get_ultimate(box.slot_of_kind(kind))
+	return item.gadget.active_time if item and item.gadget else 0.0
+
+
 ## Standing in an exit: a bar that fills while you hold the ground. It empties
 ## twice as fast as it fills if you step out, so leaving early costs you.
 func _draw_extraction(point) -> void:
@@ -654,13 +891,20 @@ func _ult_running(item: Item) -> float:
 			return _player.overload_left
 		GadgetData.Kind.PROJECTION:
 			return _player.projection_left
+		GadgetData.Kind.HEADCOUNT:
+			return _player.count_left
 	return 0.0
 
 
 ## The colour for one gadget, whether or not it happens to be running.
 func _ult_tint(item: Item) -> Color:
-	if item and item.gadget and item.gadget.kind == GadgetData.Kind.PROJECTION:
-		return PROJECTION
+	if item == null or item.gadget == null:
+		return OVERLOAD
+	match item.gadget.kind:
+		GadgetData.Kind.PROJECTION:
+			return PROJECTION
+		GadgetData.Kind.HEADCOUNT:
+			return HEADCOUNT
 	return OVERLOAD
 
 
@@ -729,7 +973,11 @@ func _draw_ult_tile(box: Rect2, ult: Item, key: String) -> void:
 
 	# Draining while it runs, filling while it charges. Same bar either way,
 	# because it is the same question asked from the two ends.
-	var spent := clampf(burning / maxf(_overload_span, 0.01), 0.0, 1.0)
+	# The gadget's own duration rather than the remembered one. _overload_span is
+	# a single high-water mark shared by every tile on the strip, so a fifteen
+	# second ultimate in one slot left the eight second one beside it drawing a
+	# bar pinned at full for its first seven seconds.
+	var spent := clampf(burning / maxf(ult.gadget.active_time, 0.01), 0.0, 1.0)
 	var fraction := spent if running else clampf(ult.charge, 0.0, 1.0)
 	var bar := Rect2(box.position + Vector2(12.0, 28.0), Vector2(box.size.x - 24.0, 6.0))
 	draw_rect(bar, Color(0.16, 0.18, 0.22))

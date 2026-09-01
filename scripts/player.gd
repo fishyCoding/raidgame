@@ -456,6 +456,21 @@ signal health_changed(health: float, max_health: float)
 ## wall for eight seconds and the first you know of it is being shot.
 signal scanned()
 
+## Somebody nearby is running a Headcount, and this body is one of the numbers
+## in it.
+##
+## Repeated for as long as it lasts - once every Player.COUNT_PING seconds -
+## rather than fired once at the cast, because what the other end is entitled to
+## know is "somebody is counting *now*", and that stops being true the moment
+## you walk out of their reach. The HUD lets it lapse on its own clock, so
+## leaving the circle ends the effect without anybody having to send a second
+## message saying so.
+##
+## Presentation only, like scanned, and even more so: there is no text and no
+## number in what it draws. You learn that you are on somebody's list. You do
+## not learn whose, or from which way, and that asymmetry is the gadget.
+signal counted()
+
 ## Raised when a landing was heavy enough to carry. The reveal itself is Net's
 ## business - this is for anything local that wants to react to it.
 signal landed_hard(drop: float)
@@ -613,6 +628,21 @@ var _extract_held := 0.0
 ## faster and you jump further. The gun is untouched - spending it is about
 ## crossing ground you could not otherwise cross, or leaving somewhere fast.
 var overload_left := 0.0
+
+## Seconds of Headcount left, and how far it is hearing while it runs.
+##
+## The reach is copied off the gadget at the cast rather than read back out of
+## the inventory every frame, so a count already running is not re-tuned by
+## dropping the thing that started it.
+##
+## Both are local. Nothing about this ultimate is replicated: the tally and the
+## bearings are worked out here from the positions every machine already has,
+## and the only thing that travels is the tap on the shoulder each person in it
+## gets - see _update_headcount.
+var count_left := 0.0
+var count_reach := 0.0
+## Counts down to the next round of taps. See COUNT_PING.
+var _count_ping_in := 0.0
 
 ## The rail bomb: five numbers, and the five of them are the whole message.
 ##
@@ -1146,6 +1176,7 @@ func _physics_process(delta: float) -> void:
 	# has to take the fight away from you, or it is just a slower walk.
 	if not is_downed:
 		_charge_ultimate(delta)
+		_update_headcount(delta)
 		_update_focus(delta)
 		if not is_grappling() and not is_dashing():
 			_update_jump(delta, bomb_took_the_press)
@@ -2188,6 +2219,7 @@ func _update_weapon() -> void:
 ## plus trouble: standing around fills it slowly, a fight fills it faster.
 func _charge_ultimate(delta: float) -> void:
 	overload_left = maxf(overload_left - delta, 0.0)
+	count_left = maxf(count_left - delta, 0.0)
 	arc_left = maxf(arc_left - delta, 0.0)
 	projection_left = maxf(projection_left - delta, 0.0)
 	if projection_left > 0.0 and not _projection_standing():
@@ -2337,6 +2369,18 @@ func _use_ultimate(slot := 0) -> void:
 			_say_loot("SLIPSTREAM - swipe to dash, %d of them" % dashes_left
 				if PlayerInput.is_touch()
 				else "SLIPSTREAM - flick the mouse to dash, %d of them" % dashes_left)
+		GadgetData.Kind.HEADCOUNT:
+			count_left = ult.gadget.active_time
+			count_reach = ult.gadget.count_range
+			# Zero rather than a full interval, so the first round of taps goes
+			# out on the frame it is cast. The people already standing inside it
+			# should find out at the same moment the caster does, not half a
+			# second after he has read their bearings off the ring.
+			_count_ping_in = 0.0
+			var heard := headcount_contacts().size()
+			_say_loot("HEADCOUNT - nobody within reach" if heard == 0
+				else "HEADCOUNT - %d other%s in reach" % [
+					heard, "" if heard == 1 else "s"])
 		GadgetData.Kind.RECON_BOW:
 			# Q only brings the bow out. The charge is not spent until an arrow
 			# actually leaves it, so thinking better of the shot costs nothing.
@@ -2346,6 +2390,67 @@ func _use_ultimate(slot := 0) -> void:
 			_say_loot("bow out - hold fire to draw, release to loose")
 	if _audio:
 		_audio.reload_finished(global_position)
+
+
+## How often the people inside a running Headcount are told they are in it.
+##
+## Slow on purpose. It is one reliable rpc per person per tick, and what it
+## drives at the other end is a fade lasting several times as long - so a
+## quicker pulse buys no smoothness at all and costs traffic for every second
+## of every cast. The fade outliving the gap is the point: it is what lets
+## somebody walk out of the circle and have the effect lapse on its own,
+## without a second message ever being sent to say they have gone.
+const COUNT_PING := 0.5
+
+
+## The Headcount, while it runs: tap everybody it can hear.
+##
+## The tally and the bearings are not worked out here. The HUD asks for them at
+## draw time off headcount_contacts(), because they are a picture rather than a
+## fact about the world, and a picture should be built from where people are now
+## rather than from where they were when a timer last went off. What does have
+## to happen on a clock is the other half of the gadget: the people being
+## counted are on other machines, and there is no way for them to notice any of
+## this on their own.
+func _update_headcount(delta: float) -> void:
+	if count_left <= 0.0:
+		return
+	_count_ping_in -= delta
+	if _count_ping_in > 0.0:
+		return
+	_count_ping_in = COUNT_PING
+	for body in headcount_contacts():
+		Net.tell_scanned(body.get_multiplayer_authority(), true)
+
+
+## Everybody a running Headcount can hear: other players, alive, inside reach.
+##
+## Players only, and that falls out of asking Net rather than the tree. Guards
+## are not in Net.players() and neither is a projection - a count that included
+## either would be worthless in the exact situation this is bought for, which is
+## standing outside a building wanting to know whether the thing moving about
+## upstairs is a person.
+##
+## Down counts as present. A man on the floor is still somebody in the room, and
+## leaving him out would quietly turn this into a detector for who has just been
+## shot - which is a different and much better gadget than the one being paid
+## for here.
+##
+## No line of sight anywhere in it. Walls are what make the answer worth a
+## charge; see GadgetData.count_range.
+func headcount_contacts() -> Array[Node2D]:
+	var found: Array[Node2D] = []
+	if count_reach <= 0.0:
+		return found
+	for body in Net.players():
+		if body == self or not is_instance_valid(body):
+			continue
+		var alive: Variant = body.get(&"is_alive")
+		if typeof(alive) == TYPE_BOOL and not alive:
+			continue
+		if body.global_position.distance_to(global_position) <= count_reach:
+			found.append(body)
+	return found
 
 
 ## The nearest cable with any part of it within `reach` of this body.
@@ -3591,6 +3696,24 @@ func mark_scanned() -> void:
 	# something else at the time.
 	if _audio:
 		_audio.explosion(global_position, 0.2)
+
+
+## Told by Net that somebody near enough is running a Headcount over this body.
+##
+## Silent, and deliberately so. mark_scanned makes a noise because an arrow has
+## already landed and moving is the only answer left; this is somebody reading a
+## tally off a ring, and the whole shape of the gadget is that the counted get
+## less than the counter. A sound would tell you to stop and listen, which is
+## more than the man who cast it paid for.
+##
+## Only ever called on the machine the body belongs to - the message is
+## addressed to that peer. The one thing left to check is that we are still
+## alive: the caster does not count corpses, but half a second is a long time
+## and the tap can outlive the man it was sent to.
+func mark_counted() -> void:
+	if not is_alive:
+		return
+	counted.emit()
 
 
 ## A flash grenade went off where this body could see it.

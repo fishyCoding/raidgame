@@ -1,6 +1,7 @@
 extends SceneTree
 
-## A recon arrow paints somebody, and that somebody has to find out.
+## Being seen, from the far end. Both ways of finding out: a recon arrow, and a
+## Headcount.
 ##
 ##   godot --headless --path . -- --server=27785
 ##   godot --headless --path . --script res://tools/scanned_test.gd -- --peer=1 --port=27785
@@ -8,10 +9,15 @@ extends SceneTree
 ##
 ## `server/test_scanned.ps1` does both.
 ##
-## Client 1 looses the arrow, client 2 stands in it. The reveal itself is one
-## machine's business - the shooter is the one who gets to see through walls -
-## which is exactly why the warning has to travel: without it the only thing the
-## person being watched ever learns is that they have been shot.
+## Client 1 does the looking, client 2 is looked at. The reveal itself is one
+## machine's business in both cases - the watcher is the only one whose screen
+## changes - which is exactly why the warning has to travel: without it the only
+## thing the person being watched ever learns is that they have been shot.
+##
+## The two warnings ride down one rpc with a flag between them (see
+## Net.tell_scanned), so the thing most worth asserting here is that they do not
+## bleed into each other: a headcount must never raise the arrow's banner, and
+## the man running the headcount must not appear in his own count.
 
 var _tag := "CLIENT"
 var _host := "127.0.0.1"
@@ -22,6 +28,9 @@ var _main: Node
 var _ok := true
 ## Set by the signal, which is the whole point: nothing polls for this.
 var _was_scanned := false
+## Same again for the quieter of the two. Kept apart from _was_scanned on
+## purpose - telling them apart is most of what this file is for.
+var _was_counted := false
 
 
 func _initialize() -> void:
@@ -87,9 +96,44 @@ func _run() -> void:
 		_finish()
 		return
 
-	# The signal is what the HUD listens to, so it is what this listens to.
+	# The signals are what the HUD listens to, so they are what this listens to.
 	mine.scanned.connect(func() -> void: _was_scanned = true)
+	mine.counted.connect(func() -> void: _was_counted = true)
 	_check("not scanned before anybody shoots", not _was_scanned)
+	_check("and not counted either", not _was_counted)
+
+	# --- the headcount -------------------------------------------------------
+	#
+	# First, so the arrow below lands on a clean slate: the point of this half is
+	# that being counted leaves _was_scanned alone, and that is only worth
+	# checking while nothing has scanned anybody yet.
+	if _first:
+		var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
+		var ult: Object = maker.from_gadget(
+			load("res://resources/gadgets/headcount.tres"))
+		ult.charge = 1.0
+		# The second slot, so whatever the menu staged in the first is left alone.
+		mine.inventory.set_ultimate(ult, 1)
+		mine._use_ultimate(1)
+		# Widened after the cast. Two players insert at opposite ends of the map
+		# and the gap between them is a property of the level rather than of this
+		# gadget - a test that failed because the spawns are far apart would be
+		# measuring the wrong thing.
+		mine.count_reach = 100000.0
+		_say("counting heads for %.1fs across %.0fpx" % [
+			mine.count_left, mine.count_reach])
+		_check("the cast started a count", mine.count_left > 0.0)
+		_check("and they are in it", mine.headcount_contacts().has(theirs))
+
+	# Two ticks' worth of taps, and then some. See Player.COUNT_PING.
+	await _wait(90)
+
+	_say("counted=%s scanned=%s" % [_was_counted, _was_scanned])
+	if _first:
+		_check("I am not in my own count", not _was_counted)
+	else:
+		_check("I was told somebody is counting me", _was_counted)
+	_check("and a headcount is not an arrow - no banner", not _was_scanned)
 
 	# --- the arrow -----------------------------------------------------------
 	if _first:

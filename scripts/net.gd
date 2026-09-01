@@ -1765,17 +1765,30 @@ func _hit_landed(headshot: bool, killed: bool) -> void:
 ## loosed the arrow is the only one that worked out who it caught, and a forged
 ## one buys you nothing but a banner on your own screen. Reliable, because unlike
 ## a hitmarker there is no second chance to notice - the arrow lands once.
-func tell_scanned(who: int) -> void:
+## `soft` is the Headcount rather than an arrow: somebody near enough is
+## counting heads, and this body is one of the numbers. It rides on this call
+## rather than on one of its own because Godot checksums a node's rpcs by the
+## *set of method names* on it, so a thirty-first would have shifted every id
+## and locked out every client and server that had not updated together. A new
+## argument on a call that already exists costs nothing - the same trade
+## match_level makes on _set_match, and for the same reason.
+func tell_scanned(who: int, soft := false) -> void:
 	# You are never in your own hideable set, so your own arrow cannot paint you.
 	if not is_networked() or who == peer_id():
 		return
-	_scanned.rpc_id(who)
+	_scanned.rpc_id(who, soft)
 
 
 @rpc("any_peer", "reliable")
-func _scanned() -> void:
-	if local_player and local_player.has_method(&"mark_scanned"):
-		local_player.mark_scanned()
+func _scanned(soft := false) -> void:
+	if local_player == null:
+		return
+	# Two different messages down one wire. An arrow is a thing that has landed
+	# on you and the banner says so; a headcount is somebody reading a tally, and
+	# what it earns them at this end is a mark on the glass and nothing else.
+	var what := &"mark_counted" if soft else &"mark_scanned"
+	if local_player.has_method(what):
+		local_player.call(what)
 
 
 # --- peers coming and going ---------------------------------------------------

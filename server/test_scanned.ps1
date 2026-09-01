@@ -1,4 +1,4 @@
-# A recon arrow paints somebody, and that somebody has to find out.
+# Being seen, from the far end: a recon arrow, and a Headcount.
 #
 #   powershell -File server\test_scanned.ps1
 
@@ -47,7 +47,7 @@ try {
 	foreach ($c in $clients) { if ($c.ExitCode -ne 0) { $failed++ } }
 
 	Write-Host ''
-	if ($failed -eq 0) { Write-Host 'PASS - the arrow tells the person it painted' }
+	if ($failed -eq 0) { Write-Host 'PASS - both warnings reach the person they are about, and stay apart' }
 	else { Write-Host "FAIL - $failed client(s) failed" }
 	exit $failed
 }
