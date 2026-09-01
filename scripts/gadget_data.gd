@@ -83,23 +83,25 @@ enum Class { THROWABLE, ULTIMATE }
 
 ## How far a HEADCOUNT hears, in pixels.
 ##
-## Several screens across, and it wants to stay that way. It is not a second
-## pair of eyes - anything you could already see is not worth a charge - it is
-## the answer to "is this end of the map busy", asked before you commit to
-## crossing it. The useful part of this number is entirely the part that is off
-## the edge of the frame.
+## Wider than the screen, which is the whole gadget: it is not a second pair of
+## eyes - anything you could already see is not worth a charge - it is the answer
+## to "is this end of the map busy", asked before you commit to crossing it. The
+## useful part of this number is entirely the part that is off the edge of the
+## frame.
 ##
-## It started at 1400, which is barely wider than the viewport, and that was
-## simply too small to be worth casting: the map is over twenty thousand pixels
-## end to end, so a reach of one screen answered a question you could have
-## answered by looking. Three and a bit screens is a district rather than a
-## room, and a district is the unit this is meant to think in.
+## It started at 1400, barely wider than the viewport, which was too small to be
+## worth casting on a map twenty thousand pixels end to end; then it went to
+## 4500, three and a bit screens, which turned out to be too much of the map to
+## be a question at all - a single cast covered most of where anybody could be,
+## so the answer was always "yes, people, somewhere". Two screens and a bit is
+## the size that still has an outside: it takes in the ground you are about to
+## cross and the block on the far side of it, and nothing else.
 ##
 ## Walls do not stop it. There is no line-of-sight test anywhere in the count,
 ## because a count you only get on people you can already see is a count of
 ## nothing - and the price of that is paid at the other end, in what it tells
 ## you: a rough bearing and a tally, never a position.
-@export var count_range := 4500.0
+@export var count_range := 3000.0
 
 ## How far a RAIL_BOMB can reach once it is holding station at the end of the
 ## cable, in pixels.

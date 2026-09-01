@@ -102,32 +102,49 @@ const WATCHED_FADE := 1.35
 ##
 ## A rim, not a wash. It was nearly a quarter of the screen deep, which put a
 ## green haze over the ground you actually fight on; pulled back to a band round
-## the frame it is still the first thing you notice and none of it is anywhere
-## you are looking.
-const WATCHED_DEPTH := 0.11
+## the frame, and then back again to a hairline of one, it is something you catch
+## rather than something you are shown.
+const WATCHED_DEPTH := 0.065
+## How dark that rim gets at the top of its breath.
+##
+## Low on purpose, and lower than it was. The counted player is not being warned,
+## they are being given a feeling - and a feeling that is legible enough to read
+## off is one they can act on precisely, which is exactly what the counter did
+## not pay for. At this strength it is plainly there while you are still, and
+## easy to lose while you are shooting, which is the right way round.
+const WATCHED_PEAK := 0.17
 ## Seconds for the sweep line to cross the screen once.
-const WATCHED_SWEEP := 3.2
+##
+## Slower than it was. A sweep you can time is a clock, and this should read as
+## something passing over you rather than as an instrument with a period.
+const WATCHED_SWEEP := 4.6
 
 ## The dial's radius on screen, and how many bearings it is willing to tell
 ## apart.
 ##
-## Eight sectors is forty-five degrees each - the eight points of a compass, and
-## no finer. The coarseness is the gadget rather than a shortcut: what was paid
-## for is "somebody is over that way", not a firing solution. It was twelve, and
-## thirty-degree wedges were sharp enough to aim along once the reach grew to
-## several screens, which is the one thing this must never be.
+## Four sectors is ninety degrees each: ahead, behind, left, right, and nothing
+## finer than that. The coarseness is the gadget rather than a shortcut - what
+## was paid for is "somebody is over that way", not a firing solution. It was
+## twelve, then eight, and even forty-five-degree wedges turned out to be
+## something you could aim along: a wedge that narrow lands on one building at
+## the far end of the reach, which makes the dial a pointer. A quadrant lands on
+## a quarter of the map and can only ever be a direction to start walking in.
 ##
 ## Distance is not drawn at all, for the same reason. Every contact sits on the
 ## same ring whether it is a room away or on the far edge of reach.
 const COUNT_RING := 104.0
-const COUNT_SECTORS := 8
+const COUNT_SECTORS := 4
 ## How much wider than its wedge the soft halo behind each mark is drawn.
 ##
 ## The mark is meant to read as a smear over a direction rather than as a sector
 ## with edges. Hard-edged wedges look like a measurement even when the number
 ## behind them is coarse, and a player will believe the edges - so the bright
 ## core says the wedge and the halo spills past it to say "about here".
-const COUNT_SMEAR := 1.5
+##
+## Less overspill than the eight-wedge dial had, in fraction terms, because the
+## wedge underneath it is twice the size: a quadrant smeared half again as wide
+## is most of the ring, and a ring lit most of the way round says nothing at all.
+const COUNT_SMEAR := 1.25
 
 
 func _ready() -> void:
@@ -684,7 +701,7 @@ func _draw_scanned() -> void:
 ##
 ## Two pieces, and the split between them is the whole design. A tally, which is
 ## exact - the number is the thing you paid for, and "three" and "one" are
-## different plans. And a dial, which is not: twelve sectors around your own
+## different plans. And a dial, which is not: four quadrants around your own
 ## feet, lit where somebody is, with no distance in it at all. A man on the
 ## boundary and a man in the next room light the same wedge.
 ##
@@ -736,22 +753,23 @@ func _draw_headcount() -> void:
 		bar.size.x * clampf(_player.count_left / span, 0.0, 1.0), bar.size.y)), lit)
 
 
-## Which of the twelve wedges the dial is lighting, right now.
+## Which of the four quadrants the dial is lighting, right now.
 ##
 ## Public and kept out of the drawing for the same reason flash_core_radius is:
 ## "does it point the right way" is the thing worth asserting about a compass,
 ## and it is not a question a headless run can answer by looking at a canvas.
 ##
 ## Sector 0 is due east and they run clockwise on screen, because screen y is
-## down - so straight up is 6 of 8, not 2.
+## down - so straight up is 3 of 4, not 1.
 ##
 ## Each wedge is *centred* on its direction rather than starting at it. That is
-## not tidiness: due east, due north and the diagonals are where people actually
-## end up relative to you on a map built out of floors, and a grid split on those
-## angles puts the commonest bearings exactly on a seam - where a pixel of drift
-## flips the mark to the neighbouring wedge, and where a man directly overhead
-## can be drawn thirty degrees off. Centred, every cardinal has half a wedge of
-## slack either side of it.
+## not tidiness: due east and due north - along a corridor, or up through a
+## floor - are where people actually end up relative to you on a map built out of
+## rooms, and a grid split on those angles puts the commonest bearings exactly on
+## a seam, where a pixel of drift flips the mark to the neighbouring wedge and a
+## man directly overhead can be drawn a long way off. Centred, every cardinal has
+## a full forty-five degrees of slack either side of it, and the seams fall on
+## the diagonals where a wrong answer is the same size as a right one.
 func count_sectors() -> Array[int]:
 	var lit: Array[int] = []
 	if _player == null:
@@ -797,17 +815,20 @@ func _draw_count_dial(clock: float, fade: float) -> void:
 		# anybody can take a bearing off. Thick and dim rather than thin and
 		# bright: it should look like a direction somebody is roughly in.
 		var smear := wedge * COUNT_SMEAR * 0.5
-		draw_arc(here, COUNT_RING, middle - smear, middle + smear, 20,
-			Color(HEADCOUNT.r, HEADCOUNT.g, HEADCOUNT.b, 0.2 * pulse * fade),
-			13.0, true)
+		draw_arc(here, COUNT_RING, middle - smear, middle + smear, 28,
+			Color(HEADCOUNT.r, HEADCOUNT.g, HEADCOUNT.b, 0.22 * pulse * fade),
+			18.0, true)
 
 		# And the core over it, held back off both ends of the wedge so two
-		# adjacent sectors both lit still read as two.
+		# adjacent sectors both lit still read as two. Dimmer and thinner than it
+		# was: a quadrant is a wide enough arc that a bright hard line across it
+		# starts to look like a thing pointing at somebody rather than an area
+		# they are somewhere inside.
 		var pad := wedge * 0.1
 		draw_arc(here, COUNT_RING, middle - wedge * 0.5 + pad,
-			middle + wedge * 0.5 - pad, 12,
-			Color(HEADCOUNT.r, HEADCOUNT.g, HEADCOUNT.b, 0.75 * pulse * fade),
-			3.0, true)
+			middle + wedge * 0.5 - pad, 16,
+			Color(HEADCOUNT.r, HEADCOUNT.g, HEADCOUNT.b, 0.5 * pulse * fade),
+			2.0, true)
 
 
 ## Somebody near you is counting heads.
@@ -817,17 +838,23 @@ func _draw_count_dial(clock: float, fade: float) -> void:
 ## it says is "you are on somebody's list, now" - which is enough to make you
 ## move or make you wait, and not enough to tell you which of those is right.
 ##
-## A vignette and a sweep, both faint. The vignette breathes so it does not read
-## as a graphics setting somebody left on; the sweep is the only part with a
+## A vignette and a sweep, both very faint. The vignette breathes so it does not
+## read as a graphics setting somebody left on; the sweep is the only part with a
 ## direction to it, and it is what keeps the effect from being mistaken for
 ## damage. You are not hurt. You are being looked for.
+##
+## Everything here is pitched under the threshold where you would call it an
+## alert. It should be the sort of thing you notice you have been seeing, a
+## second after it started - because a warning you read cleanly is one you act on
+## cleanly, and the whole gadget is built on the counted player knowing something
+## is happening without knowing enough to answer it.
 func _draw_watched() -> void:
 	var t := clampf(_watched_left / WATCHED_FADE, 0.0, 1.0)
 	# About a second and a half a cycle - a breath, not a strobe. Fast enough to
 	# be alive in the corner of your eye, slow enough that it never becomes the
 	# thing you are looking at.
 	var breath := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.0007 * TAU)
-	var peak := 0.3 * t * (0.55 + 0.45 * breath)
+	var peak := WATCHED_PEAK * t * (0.55 + 0.45 * breath)
 	var depth := minf(size.x, size.y) * WATCHED_DEPTH
 
 	# Four trapezoids, mitred at the corners, each one shading from the edge
@@ -858,10 +885,10 @@ func _draw_watched() -> void:
 	# part of this with a direction to it, and that is what keeps the effect from
 	# reading as damage: you are not hurt, you are being looked for.
 	var y := fmod(Time.get_ticks_msec() * 0.001, WATCHED_SWEEP) / WATCHED_SWEEP * h
-	draw_rect(Rect2(Vector2(0.0, y - 11.0), Vector2(w, 22.0)),
-		Color(WATCHED.r, WATCHED.g, WATCHED.b, 0.03 * t))
+	draw_rect(Rect2(Vector2(0.0, y - 14.0), Vector2(w, 28.0)),
+		Color(WATCHED.r, WATCHED.g, WATCHED.b, 0.016 * t))
 	draw_rect(Rect2(Vector2(0.0, y - 1.0), Vector2(w, 2.0)),
-		Color(WATCHED.r, WATCHED.g, WATCHED.b, 0.075 * t))
+		Color(WATCHED.r, WATCHED.g, WATCHED.b, 0.035 * t))
 
 
 ## How long a gadget of this kind runs for, taken off the one actually in the
