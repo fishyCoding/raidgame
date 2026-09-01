@@ -67,11 +67,12 @@ func _run() -> void:
 		waited += 1
 
 	# Three people and a corpse. East is the sector-0 case and straight up is the
-	# one worth saying out loud, because screen y is down - so up is 9, not 3,
-	# and that is the kind of thing that is quietly wrong for months.
+	# one worth saying out loud, because screen y is down - so up is 6 of the
+	# eight, not 2, and that is the kind of thing that is quietly wrong for
+	# months.
 	var east := _stand_in(2, Vector2(320.0, 0.0))
 	var north := _stand_in(3, Vector2(0.0, -520.0))
-	var far := _stand_in(4, Vector2(4000.0, 0.0))
+	var far := _stand_in(4, Vector2(9000.0, 0.0))
 	var corpse := _stand_in(5, Vector2(-260.0, 0.0), false)
 	var roster: Dictionary = net._players
 	for body in _stand_ins:
@@ -89,7 +90,7 @@ func _run() -> void:
 		player.count_left, player.count_reach, ult.charge])
 	_check(is_equal_approx(snappedf(player.count_left, 0.5), 15.0),
 		"it runs for fifteen seconds")
-	_check(player.count_reach > 1000.0, "and hears well past the edge of the screen")
+	_check(player.count_reach > 4000.0, "and hears several screens out, not one")
 	_check(ult.charge < 1.0, "and the cast spends the meter")
 
 	# --- who is in it --------------------------------------------------------
@@ -98,7 +99,7 @@ func _run() -> void:
 		", ".join(heard.map(func(b): return str(b.name)))])
 	_check(heard.size() == 2, "two live players in reach, and only those two")
 	_check(heard.has(east) and heard.has(north), "the near two are both in it")
-	_check(not heard.has(far), "somebody 4000px away is not 'in the vicinity'")
+	_check(not heard.has(far), "somebody 9000px away is not 'in the vicinity'")
 	_check(not heard.has(corpse), "and the dead are not counted")
 	var counted_a_guard := false
 	for body in heard:
@@ -114,10 +115,20 @@ func _run() -> void:
 	# he actually is.
 	_anchor(player)
 	var lit: Array = hud.count_sectors()
-	print("-- dial lit sectors: %s (0 is east, 9 is straight up)" % [lit])
+	print("-- dial lit sectors: %s of 8 (0 is east, 6 is straight up)" % [lit])
 	_check(lit.size() == 2, "one wedge each, not one for every guard on the map")
 	_check(lit.has(0), "the man due east lights the east wedge")
-	_check(lit.has(9), "the man straight up lights the wedge above")
+	_check(lit.has(6), "the man straight up lights the wedge above")
+
+	# Vague on purpose, and this is where that is worth pinning down: a wedge is
+	# forty-five degrees, so a man well off due east still reads as east. An
+	# instrument sharp enough to separate these two is one you could shoot along.
+	east.set_meta(&"offset", Vector2(900.0, -300.0))
+	_anchor(player)
+	_check(hud.count_sectors().has(0),
+		"and eighteen degrees off east is still just 'east'")
+	east.set_meta(&"offset", Vector2(320.0, 0.0))
+	_anchor(player)
 
 	# It is a bearing and not a position: twice as far away is the same wedge.
 	east.set_meta(&"offset", Vector2(1100.0, 0.0))

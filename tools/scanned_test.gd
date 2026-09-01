@@ -135,8 +135,31 @@ func _run() -> void:
 		_check("I was told somebody is counting me", _was_counted)
 	_check("and a headcount is not an arrow - no banner", not _was_scanned)
 
-	# --- the arrow -----------------------------------------------------------
+	# The two clients are launched seconds apart and never resynchronise, so the
+	# shooter reaches every checkpoint first and the gap between them is not a
+	# fixed number - it is however long each took to connect and be given a body.
+	# Both sides of the arrow below therefore need slack, and the failures look
+	# nothing like the cause:
+	#
+	# - too little here and the arrow lands while the target is still on its way
+	#   to the assertion above, so the banner fails a check about the headcount.
+	#   It reads as the two messages having bled into each other.
+	# - too much, and the target has finished the whole run and disconnected
+	#   before the arrow is planted. That one reads as `global_position on a
+	#   previously freed object`, which sounds like a lifetime bug in the game.
+	#
+	# Four seconds here and ten at the end below, which holds for any stagger
+	# under about four seconds. Only the shooter waits here: the target is the
+	# one being outrun.
 	if _first:
+		await _wait(240)
+
+	# --- the arrow -----------------------------------------------------------
+	if _first and not is_instance_valid(theirs):
+		# Said plainly rather than left to fault on the next line. See the note
+		# on the wait above - this is the "too much slack" end of it.
+		_check("the target is still in the session to be shot at", false)
+	elif _first:
 		# Landed on them rather than fired at them: the bow's arc is not what is
 		# being tested, and leading a shot across the map from a headless client
 		# would be a test about ballistics.
@@ -156,7 +179,10 @@ func _run() -> void:
 		# hideable set, and a self-scan would fire the banner every ultimate.
 		_check("it did not scan me", not _was_scanned)
 
-	await _wait(240)
+	# Long, and deliberately so: it is what keeps the target in the session until
+	# the shooter - which may be seconds ahead of it - has actually got round to
+	# planting the arrow. See the note above.
+	await _wait(600)
 
 	_say("scanned=%s" % _was_scanned)
 	if _first:

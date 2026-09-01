@@ -99,20 +99,35 @@ var _watched_left := 0.0
 const WATCHED_FADE := 1.35
 ## How far in from the edge the vignette reaches, as a fraction of the shorter
 ## side.
-const WATCHED_DEPTH := 0.22
+##
+## A rim, not a wash. It was nearly a quarter of the screen deep, which put a
+## green haze over the ground you actually fight on; pulled back to a band round
+## the frame it is still the first thing you notice and none of it is anywhere
+## you are looking.
+const WATCHED_DEPTH := 0.11
 ## Seconds for the sweep line to cross the screen once.
 const WATCHED_SWEEP := 3.2
 
 ## The dial's radius on screen, and how many bearings it is willing to tell
 ## apart.
 ##
-## Twelve sectors is thirty degrees each, and the coarseness is the gadget
-## rather than a shortcut: what was paid for is "somebody is that way", not a
-## firing solution. Distance is not drawn at all for the same reason - every
-## contact sits on the same ring whether it is thirty metres off or on the far
-## edge of reach.
+## Eight sectors is forty-five degrees each - the eight points of a compass, and
+## no finer. The coarseness is the gadget rather than a shortcut: what was paid
+## for is "somebody is over that way", not a firing solution. It was twelve, and
+## thirty-degree wedges were sharp enough to aim along once the reach grew to
+## several screens, which is the one thing this must never be.
+##
+## Distance is not drawn at all, for the same reason. Every contact sits on the
+## same ring whether it is a room away or on the far edge of reach.
 const COUNT_RING := 104.0
-const COUNT_SECTORS := 12
+const COUNT_SECTORS := 8
+## How much wider than its wedge the soft halo behind each mark is drawn.
+##
+## The mark is meant to read as a smear over a direction rather than as a sector
+## with edges. Hard-edged wedges look like a measurement even when the number
+## behind them is coarse, and a player will believe the edges - so the bright
+## core says the wedge and the halo spills past it to say "about here".
+const COUNT_SMEAR := 1.5
 
 
 func _ready() -> void:
@@ -728,7 +743,7 @@ func _draw_headcount() -> void:
 ## and it is not a question a headless run can answer by looking at a canvas.
 ##
 ## Sector 0 is due east and they run clockwise on screen, because screen y is
-## down - so straight up is 9, not 3.
+## down - so straight up is 6 of 8, not 2.
 ##
 ## Each wedge is *centred* on its direction rather than starting at it. That is
 ## not tidiness: due east, due north and the diagonals are where people actually
@@ -775,14 +790,24 @@ func _draw_count_dial(clock: float, fade: float) -> void:
 	# competing for the corner of your eye.
 	var pulse := 0.72 + 0.28 * sin(clock * 3.4)
 	for sector in count_sectors():
-		# Back half a wedge, because a sector is centred on its bearing rather
-		# than beginning at it - see count_sectors.
-		var start: float = (float(sector) - 0.5) * wedge
-		# Held back off both ends so the wedges stay separated. Two adjacent
-		# sectors both lit should still read as two.
-		var pad := wedge * 0.12
-		draw_arc(here, COUNT_RING, start + pad, start + wedge - pad, 10,
-			Color(HEADCOUNT.r, HEADCOUNT.g, HEADCOUNT.b, 0.9 * pulse * fade), 4.0, true)
+		# Centred on the bearing rather than beginning at it - see count_sectors.
+		var middle: float = float(sector) * wedge
+
+		# The halo first, wider than the wedge and faint, so the mark has no edge
+		# anybody can take a bearing off. Thick and dim rather than thin and
+		# bright: it should look like a direction somebody is roughly in.
+		var smear := wedge * COUNT_SMEAR * 0.5
+		draw_arc(here, COUNT_RING, middle - smear, middle + smear, 20,
+			Color(HEADCOUNT.r, HEADCOUNT.g, HEADCOUNT.b, 0.2 * pulse * fade),
+			13.0, true)
+
+		# And the core over it, held back off both ends of the wedge so two
+		# adjacent sectors both lit still read as two.
+		var pad := wedge * 0.1
+		draw_arc(here, COUNT_RING, middle - wedge * 0.5 + pad,
+			middle + wedge * 0.5 - pad, 12,
+			Color(HEADCOUNT.r, HEADCOUNT.g, HEADCOUNT.b, 0.75 * pulse * fade),
+			3.0, true)
 
 
 ## Somebody near you is counting heads.
@@ -833,8 +858,8 @@ func _draw_watched() -> void:
 	# part of this with a direction to it, and that is what keeps the effect from
 	# reading as damage: you are not hurt, you are being looked for.
 	var y := fmod(Time.get_ticks_msec() * 0.001, WATCHED_SWEEP) / WATCHED_SWEEP * h
-	draw_rect(Rect2(Vector2(0.0, y - 18.0), Vector2(w, 36.0)),
-		Color(WATCHED.r, WATCHED.g, WATCHED.b, 0.028 * t))
+	draw_rect(Rect2(Vector2(0.0, y - 11.0), Vector2(w, 22.0)),
+		Color(WATCHED.r, WATCHED.g, WATCHED.b, 0.03 * t))
 	draw_rect(Rect2(Vector2(0.0, y - 1.0), Vector2(w, 2.0)),
 		Color(WATCHED.r, WATCHED.g, WATCHED.b, 0.075 * t))
 

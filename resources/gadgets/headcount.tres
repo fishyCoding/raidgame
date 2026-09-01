@@ -11,6 +11,6 @@ gadget_class = 1
 price = 900
 charge_time = 40.0
 active_time = 15.0
-count_range = 1400.0
+count_range = 4500.0
 tint = Color(0.58, 0.94, 0.72, 1)
 grid_size = Vector2i(2, 1)

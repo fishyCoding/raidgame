@@ -83,16 +83,23 @@ enum Class { THROWABLE, ULTIMATE }
 
 ## How far a HEADCOUNT hears, in pixels.
 ##
-## Deliberately wider than the screen, which is the whole gadget: it is not a
-## second pair of eyes, it is the answer to "is this building empty". Anything
-## you could already see is not worth a charge, so the useful part of this
-## number is the part that is off the edge of the frame.
+## Several screens across, and it wants to stay that way. It is not a second
+## pair of eyes - anything you could already see is not worth a charge - it is
+## the answer to "is this end of the map busy", asked before you commit to
+## crossing it. The useful part of this number is entirely the part that is off
+## the edge of the frame.
+##
+## It started at 1400, which is barely wider than the viewport, and that was
+## simply too small to be worth casting: the map is over twenty thousand pixels
+## end to end, so a reach of one screen answered a question you could have
+## answered by looking. Three and a bit screens is a district rather than a
+## room, and a district is the unit this is meant to think in.
 ##
 ## Walls do not stop it. There is no line-of-sight test anywhere in the count,
 ## because a count you only get on people you can already see is a count of
 ## nothing - and the price of that is paid at the other end, in what it tells
-## you: a bearing and a tally, never a position.
-@export var count_range := 1400.0
+## you: a rough bearing and a tally, never a position.
+@export var count_range := 4500.0
 
 ## How far a RAIL_BOMB can reach once it is holding station at the end of the
 ## cable, in pixels.
