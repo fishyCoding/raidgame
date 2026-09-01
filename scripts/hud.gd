@@ -119,32 +119,46 @@ const WATCHED_PEAK := 0.17
 ## something passing over you rather than as an instrument with a period.
 const WATCHED_SWEEP := 4.6
 
-## The dial's radius on screen, and how many bearings it is willing to tell
-## apart.
+## The dial's radius on screen.
 ##
-## Four sectors is ninety degrees each: ahead, behind, left, right, and nothing
-## finer than that. The coarseness is the gadget rather than a shortcut - what
-## was paid for is "somebody is over that way", not a firing solution. It was
-## twelve, then eight, and even forty-five-degree wedges turned out to be
-## something you could aim along: a wedge that narrow lands on one building at
-## the far end of the reach, which makes the dial a pointer. A quadrant lands on
-## a quarter of the map and can only ever be a direction to start walking in.
-##
-## Distance is not drawn at all, for the same reason. Every contact sits on the
-## same ring whether it is a room away or on the far edge of reach.
+## Distance is not drawn at all. Every contact sits on this same ring whether it
+## is a room away or on the far edge of reach - the gadget answers "which way",
+## and a mark that crept inwards as somebody closed would answer "how far", which
+## is most of a firing solution.
 const COUNT_RING := 104.0
-const COUNT_SECTORS := 4
-## How much wider than its wedge the soft halo behind each mark is drawn.
+
+## How wide a mark is drawn, in radians, and how it fades out at the ends.
 ##
-## The mark is meant to read as a smear over a direction rather than as a sector
-## with edges. Hard-edged wedges look like a measurement even when the number
-## behind them is coarse, and a player will believe the edges - so the bright
-## core says the wedge and the halo spills past it to say "about here".
+## The dial used to snap: twelve wedges, then eight, then four, with each contact
+## rounded into the nearest one. Every step made it vaguer and every step made it
+## worse, and quadrants made the fault plain - walking half the length of a
+## building does not change which quadrant somebody is in, so the mark sat dead
+## still while the world moved and read as a broken instrument rather than as a
+## coarse one. Snapping cannot be the source of the vagueness, because a mark
+## that only moves when it crosses a seam is a mark that is wrong right up until
+## it jumps.
 ##
-## Less overspill than the eight-wedge dial had, in fraction terms, because the
-## wedge underneath it is twice the size: a quadrant smeared half again as wide
-## is most of the ring, and a ring lit most of the way round says nothing at all.
-const COUNT_SMEAR := 1.25
+## So there are no sectors any more. A mark is centred on the live bearing and
+## slides with it, and the vagueness is in its *width*: a band this wide has no
+## point on it to aim along, and it is drawn flat rather than bright in the
+## middle precisely so that its centre is not a reading. What you can take off it
+## is a side of the compass, which is what was paid for.
+##
+## CORE is the flat middle, FLANK and FRINGE the two dimmer steps either side of
+## it - together about a hundred and thirty degrees, a bit over a third of the
+## ring, with soft ends so nothing about it looks measured.
+const COUNT_CORE := 0.42
+const COUNT_FLANK := 0.80
+const COUNT_FRINGE := 1.14
+## How far the drawn bearing wanders off the true one, radians, and how fast.
+##
+## Because a soft-ended band centred exactly on somebody is still centred exactly
+## on somebody, and a patient player would learn to read the middle of it. The
+## wobble is per-contact and slow - a long, shallow drift rather than a shake, so
+## the mark still tracks anybody who is actually moving and still cannot be
+## averaged out inside the fifteen seconds the count lasts.
+const COUNT_WOBBLE := 0.22
+const COUNT_WOBBLE_RATE := 0.31
 
 
 func _ready() -> void:
@@ -701,9 +715,10 @@ func _draw_scanned() -> void:
 ##
 ## Two pieces, and the split between them is the whole design. A tally, which is
 ## exact - the number is the thing you paid for, and "three" and "one" are
-## different plans. And a dial, which is not: four quadrants around your own
-## feet, lit where somebody is, with no distance in it at all. A man on the
-## boundary and a man in the next room light the same wedge.
+## different plans. And a dial, which is not: a ring around your own feet with a
+## wide soft band on it for each person in reach, no distance in it at all, and
+## no point on any band you could take a bearing off. A man on the boundary and a
+## man in the next room are drawn the same way.
 ##
 ## Coarse on purpose. It is bought to answer "is that building empty" before you
 ## commit to crossing open ground, and an instrument that answered it precisely
@@ -753,40 +768,47 @@ func _draw_headcount() -> void:
 		bar.size.x * clampf(_player.count_left / span, 0.0, 1.0), bar.size.y)), lit)
 
 
-## Which of the four quadrants the dial is lighting, right now.
+## Where the dial is putting its marks, right now, in radians.
 ##
 ## Public and kept out of the drawing for the same reason flash_core_radius is:
 ## "does it point the right way" is the thing worth asserting about a compass,
 ## and it is not a question a headless run can answer by looking at a canvas.
 ##
-## Sector 0 is due east and they run clockwise on screen, because screen y is
-## down - so straight up is 3 of 4, not 1.
+## Zero is due east and they run clockwise on screen, because screen y is down -
+## so straight up is -PI/2, not PI/2.
 ##
-## Each wedge is *centred* on its direction rather than starting at it. That is
-## not tidiness: due east and due north - along a corridor, or up through a
-## floor - are where people actually end up relative to you on a map built out of
-## rooms, and a grid split on those angles puts the commonest bearings exactly on
-## a seam, where a pixel of drift flips the mark to the neighbouring wedge and a
-## man directly overhead can be drawn a long way off. Centred, every cardinal has
-## a full forty-five degrees of slack either side of it, and the seams fall on
-## the diagonals where a wrong answer is the same size as a right one.
-func count_sectors() -> Array[int]:
-	var lit: Array[int] = []
+## These are the *drawn* bearings, wobble and all, rather than the true ones.
+## That is the point of the function: the thing worth pinning down is that the
+## mark follows a man who moves and still never sits exactly on him, and both
+## halves of that are lost if this hands back the honest angle and the lying one
+## is buried in a draw call.
+func count_bearings() -> Array[float]:
+	var marks: Array[float] = []
 	if _player == null:
-		return lit
-	var wedge := TAU / float(COUNT_SECTORS)
+		return marks
+	var clock := Time.get_ticks_msec() * 0.001
 	for body in _player.headcount_contacts():
 		# World angles, not screen ones. The camera in this game never rotates,
 		# so the two agree - and a world delta is one subtraction rather than two
 		# projections, one of which can fail when there is no camera yet.
 		var offset: Vector2 = body.global_position - _player.global_position
-		var sector := int(floor(wrapf(offset.angle() + wedge * 0.5, 0.0, TAU) / wedge))
-		if not lit.has(sector):
-			lit.append(sector)
-	return lit
+		marks.append(offset.angle() + _wobble(body, clock))
+	return marks
 
 
-## The bearings, as a ring of wedges around your own feet.
+## The lie told about one contact's bearing, in radians.
+##
+## Seeded off the body so two people are wrong in different directions, and off a
+## slow clock so each one's error drifts instead of sitting still. Sine rather
+## than noise because it wants to be smooth: a bearing that jitters frame to
+## frame reads as a rendering fault, and this has to read as an instrument that
+## is honestly imprecise.
+func _wobble(body: Node, clock: float) -> float:
+	var seed := float(body.get_instance_id() % 1000) * 0.017
+	return COUNT_WOBBLE * sin(clock * COUNT_WOBBLE_RATE * TAU + seed)
+
+
+## The bearings, as bands of light on a ring around your own feet.
 ##
 ## Drawn on the character rather than in a corner of the screen, because every
 ## angle on it is measured from where you are standing - a compass parked in the
@@ -797,38 +819,37 @@ func _draw_count_dial(clock: float, fade: float) -> void:
 	if not here.is_finite():
 		return
 
-	# The unlit ring first, faint. It is what makes an empty sector read as
+	# The unlit ring first, faint. It is what makes a dark stretch read as
 	# "checked, nobody there" instead of as a dial that has not come on yet.
 	draw_arc(here, COUNT_RING, 0.0, TAU, 72,
 		Color(HEADCOUNT.r, HEADCOUNT.g, HEADCOUNT.b, 0.10 * fade), 1.5, true)
 
-	var wedge := TAU / float(COUNT_SECTORS)
 	# One slow pulse across the whole dial rather than one per contact, so three
 	# people read as three marks rather than as three separate flashing things
 	# competing for the corner of your eye.
 	var pulse := 0.72 + 0.28 * sin(clock * 3.4)
-	for sector in count_sectors():
-		# Centred on the bearing rather than beginning at it - see count_sectors.
-		var middle: float = float(sector) * wedge
+	for middle in count_bearings():
+		# Outside in, and flat across the middle. A band that was brightest at
+		# its centre would be a needle with a glow around it - the eye finds the
+		# peak, and the peak is exactly the reading this must not give. Drawn as
+		# three even steps, the only thing it says is "somewhere along here".
+		_draw_count_band(here, middle, COUNT_FLANK, COUNT_FRINGE,
+			0.07 * pulse * fade)
+		_draw_count_band(here, middle, COUNT_CORE, COUNT_FLANK,
+			0.15 * pulse * fade)
+		draw_arc(here, COUNT_RING, middle - COUNT_CORE, middle + COUNT_CORE, 24,
+			Color(HEADCOUNT.r, HEADCOUNT.g, HEADCOUNT.b, 0.3 * pulse * fade),
+			9.0, true)
 
-		# The halo first, wider than the wedge and faint, so the mark has no edge
-		# anybody can take a bearing off. Thick and dim rather than thin and
-		# bright: it should look like a direction somebody is roughly in.
-		var smear := wedge * COUNT_SMEAR * 0.5
-		draw_arc(here, COUNT_RING, middle - smear, middle + smear, 28,
-			Color(HEADCOUNT.r, HEADCOUNT.g, HEADCOUNT.b, 0.22 * pulse * fade),
-			18.0, true)
 
-		# And the core over it, held back off both ends of the wedge so two
-		# adjacent sectors both lit still read as two. Dimmer and thinner than it
-		# was: a quadrant is a wide enough arc that a bright hard line across it
-		# starts to look like a thing pointing at somebody rather than an area
-		# they are somewhere inside.
-		var pad := wedge * 0.1
-		draw_arc(here, COUNT_RING, middle - wedge * 0.5 + pad,
-			middle + wedge * 0.5 - pad, 16,
-			Color(HEADCOUNT.r, HEADCOUNT.g, HEADCOUNT.b, 0.5 * pulse * fade),
-			2.0, true)
+## One symmetrical pair of arcs either side of a bearing - `from` out to `to`,
+## clockwise and anticlockwise. The steps of a band, drawn as two pieces because
+## the middle of it is already lit by the step inside this one.
+func _draw_count_band(here: Vector2, middle: float, from: float, to: float,
+		alpha: float) -> void:
+	var shade := Color(HEADCOUNT.r, HEADCOUNT.g, HEADCOUNT.b, alpha)
+	draw_arc(here, COUNT_RING, middle + from, middle + to, 14, shade, 9.0, true)
+	draw_arc(here, COUNT_RING, middle - to, middle - from, 14, shade, 9.0, true)
 
 
 ## Somebody near you is counting heads.

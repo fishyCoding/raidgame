@@ -115,26 +115,44 @@ func _run() -> void:
 	# still settling by a pixel or two, and a bearing is measured from wherever
 	# he actually is.
 	_anchor(player)
-	var lit: Array = hud.count_sectors()
-	print("-- dial lit sectors: %s of 4 (0 is east, 3 is straight up)" % [lit])
-	_check(lit.size() == 2, "one wedge each, not one for every guard on the map")
-	_check(lit.has(0), "the man due east lights the east wedge")
-	_check(lit.has(3), "the man straight up lights the wedge above")
+	var marks: Array = hud.count_bearings()
+	print("-- dial marks: %s (0 is east, -1.57 is straight up)" % [
+		marks.map(func(a): return "%.2f" % a)])
+	_check(marks.size() == 2, "one mark each, not one for every guard on the map")
+	_check(_near_any(marks, 0.0), "the man due east is drawn to the east")
+	_check(_near_any(marks, -PI * 0.5), "the man straight up is drawn above")
 
-	# Vague on purpose, and this is where that is worth pinning down: a wedge is
-	# ninety degrees now, so a man a long way off due east still reads as east. An
-	# instrument sharp enough to separate these two is one you could shoot along.
-	east.set_meta(&"offset", Vector2(900.0, -650.0))
+	# And they are drawn *near* him rather than on him. The band is a third of
+	# the ring wide and its centre wanders, both on purpose: a mark you can take
+	# a bearing off is a mark you can shoot along, and this was bought to answer
+	# "is that end of the map busy".
+	var truth := 0.0
+	var drawn := _nearest(marks, truth)
+	print("-- east mark is %.3f rad off the truth" % absf(drawn - truth))
+	_check(absf(drawn - truth) <= hud.COUNT_WOBBLE + 0.001,
+		"and it never wanders further off than the wobble allows")
+
+	# Vague, but not stuck. This is the one that snapped: with the dial rounding
+	# every contact into one of four quadrants, walking the length of a building
+	# did not move the mark at all, so it read as broken rather than as coarse.
+	east.set_meta(&"offset", Vector2(1200.0, 0.0))
 	_anchor(player)
-	_check(hud.count_sectors().has(0),
-		"and thirty-six degrees off east is still just 'east'")
+	var flat := _nearest(hud.count_bearings(), 0.0)
+	east.set_meta(&"offset", Vector2(1200.0, -520.0))
+	_anchor(player)
+	var lifted := _nearest(hud.count_bearings(), -0.41)
+	print("-- same man, moved up a floor: %.2f -> %.2f" % [flat, lifted])
+	_check(absf(lifted - flat) > 0.15,
+		"a man who moves swings the mark - it does not sit in a bin")
 	east.set_meta(&"offset", Vector2(320.0, 0.0))
 	_anchor(player)
 
-	# It is a bearing and not a position: twice as far away is the same wedge.
+	# It is a bearing and not a position: twice as far away is the same mark.
+	var near := _nearest(hud.count_bearings(), 0.0)
 	east.set_meta(&"offset", Vector2(1100.0, 0.0))
 	_anchor(player)
-	_check(hud.count_sectors().has(0), "and distance does not change the bearing")
+	_check(absf(_nearest(hud.count_bearings(), 0.0) - near) < 0.05,
+		"and distance does not change the bearing")
 	east.set_meta(&"offset", Vector2(320.0, 0.0))
 	_anchor(player)
 
@@ -186,6 +204,22 @@ func _stand_in(peer: int, offset: Vector2, alive := true) -> Node2D:
 func _anchor(player: Node2D) -> void:
 	for body in _stand_ins:
 		body.global_position = player.global_position + body.get_meta(&"offset")
+
+
+## The drawn mark closest to a bearing, wrapped into -PI..PI around it. Every
+## assertion here is "is somebody drawn roughly over there", and which entry of
+## the array that turns out to be is not the question.
+func _nearest(marks: Array, want: float) -> float:
+	var best := INF
+	for mark in marks:
+		var delta: float = wrapf(float(mark) - want, -PI, PI)
+		if absf(delta) < absf(best):
+			best = delta
+	return want + best
+
+
+func _near_any(marks: Array, want: float) -> bool:
+	return absf(_nearest(marks, want) - want) <= 0.35
 
 
 func _check(pass_: bool, says: String) -> void:
