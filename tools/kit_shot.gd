@@ -61,6 +61,19 @@ func _run() -> void:
 	await _wait(5)
 	await _save("res://tools/scr_kit_ammo.png")
 
+	# The two new shelves. The power sources, which is where the whole decision
+	# starts, and the gadgets, which is where it is spent - both worth a picture
+	# because a shelf that says what a thing costs in *cells* is the point.
+	_select(shop, "power")
+	shop._scroll = 0.0
+	await _wait(5)
+	await _save("res://tools/scr_kit_power.png")
+
+	_select(shop, "rack")
+	shop._scroll = 0.0
+	await _wait(5)
+	await _save("res://tools/scr_kit_rack.png")
+
 	print("kit_shot | saved")
 	quit()
 

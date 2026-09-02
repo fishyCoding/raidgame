@@ -716,6 +716,12 @@ func _label(entry: Dictionary) -> String:
 			return (load(entry.path) as GadgetData).display_name
 		"backpack":
 			return (load(entry.path) as BackpackData).display_name
+		# Named rather than left to the fallthrough, for the same reason the
+		# surgical kit is: everything unnamed down there comes out as a medkit,
+		# and a shelf of three identically-named medkits at different prices
+		# reads as a bug in the shop rather than a gap in this match.
+		"power":
+			return (load(entry.path) as PowerData).display_name
 		"ammo":
 			return "%s   x%d" % [entry.ammo, entry.rounds]
 		"revive":
@@ -748,10 +754,21 @@ func _detail(entry: Dictionary) -> String:
 		"gadget":
 			var gadget := load(entry.path) as GadgetData
 			if gadget.gadget_class == GadgetData.Class.ULTIMATE:
-				return "ultimate   charges in %ds" % roundi(gadget.charge_time)
+				return "ultimate   %dx%d in the rack   charges in %ds" % [
+					gadget.grid_size.x, gadget.grid_size.y,
+					roundi(gadget.charge_time)]
 			if gadget.kind == GadgetData.Kind.FLASH:
 				return "throwable   pair   blinds for %.0fs   needs line of sight" % gadget.duration
 			return "throwable   pair   %dpx radius" % roundi(gadget.radius)
+		"power":
+			var source := load(entry.path) as PowerData
+			# Numbers only. The card gives this line about forty characters
+			# before it clips mid-word, and the blurb is the half a reader can
+			# do without - "3x1, charges at 80%" already says what it is.
+			return "%dx%d rack   charges at %d%% speed   %d cells" % [
+				source.grid_size.x, source.grid_size.y,
+				roundi(100.0 / maxf(source.charge_scale, 0.01)),
+				source.grid_size.x * source.grid_size.y]
 		"ammo":
 			return "one stack, one cell"
 		"revive":
