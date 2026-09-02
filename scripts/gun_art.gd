@@ -26,6 +26,11 @@ extends RefCounted
 ##   grip_at   where the pistol grip hangs, along the receiver
 ##   mag_at    where the magazine hangs, along the receiver
 ##   stock     how far back the stock reaches, zero for none
+##   mag_w     how wide the magazine is, and with it the well it goes into
+##
+## mag_w is per gun because a 9mm stick and a belt-fed's box are not the same
+## object at different lengths. Drawn at one width for everything, the SMG came
+## out carrying a rifle magazine.
 ##
 ## The shapes are deliberately blunt. A silhouette this size reads as a class of
 ## weapon - long and thin is a rifle, short and deep is a shotgun - and detail
@@ -33,28 +38,28 @@ extends RefCounted
 const PROFILES := {
 	"PISTOL": {"receiver": Vector2(38.0, 10.5), "barrel": Vector2(6.0, 5.5),
 		"guard": 0.0, "grip_at": 8.0, "mag_at": 10.0, "stock": 0.0, "vents": 0,
-		"mark": "", "well": 0.0},
+		"mark": "", "well": 0.0, "mag_w": 6.5},
 	"SMG": {"receiver": Vector2(48.0, 11.5), "barrel": Vector2(20.0, 5.0),
-		"guard": 16.0, "grip_at": 16.0, "mag_at": 32.0, "stock": 18.0, "vents": 2,
-		"mark": "shroud", "well": 4.0},
+		"guard": 16.0, "grip_at": 16.0, "mag_at": 36.0, "stock": 18.0, "vents": 2,
+		"mark": "shroud", "well": 4.0, "mag_w": 4.6},
 	"AR": {"receiver": Vector2(58.0, 11.5), "barrel": Vector2(40.0, 4.2),
-		"guard": 28.0, "grip_at": 15.0, "mag_at": 35.0, "stock": 24.0, "vents": 4,
-		"mark": "carry", "well": 5.0},
+		"guard": 28.0, "grip_at": 15.0, "mag_at": 39.0, "stock": 24.0, "vents": 4,
+		"mark": "carry", "well": 5.0, "mag_w": 8.0},
 	"SHOTGUN": {"receiver": Vector2(52.0, 13.0), "barrel": Vector2(46.0, 6.5),
 		"guard": 32.0, "grip_at": 14.0, "mag_at": 0.0, "stock": 26.0, "vents": 0,
-		"mark": "tube", "well": 0.0},
+		"mark": "tube", "well": 0.0, "mag_w": 7.0},
 	"SLUG": {"receiver": Vector2(52.0, 13.0), "barrel": Vector2(50.0, 6.0),
 		"guard": 32.0, "grip_at": 14.0, "mag_at": 0.0, "stock": 26.0, "vents": 0,
-		"mark": "tube", "well": 0.0},
+		"mark": "tube", "well": 0.0, "mag_w": 7.0},
 	"LMG": {"receiver": Vector2(70.0, 14.5), "barrel": Vector2(48.0, 5.0),
-		"guard": 22.0, "grip_at": 18.0, "mag_at": 43.0, "stock": 26.0, "vents": 5,
-		"mark": "bipod", "well": 6.0},
+		"guard": 22.0, "grip_at": 18.0, "mag_at": 47.0, "stock": 26.0, "vents": 5,
+		"mark": "bipod", "well": 6.0, "mag_w": 9.5},
 	"SNIPER": {"receiver": Vector2(64.0, 11.0), "barrel": Vector2(64.0, 4.0),
-		"guard": 20.0, "grip_at": 18.0, "mag_at": 39.0, "stock": 32.0, "vents": 2,
-		"mark": "bolt", "well": 4.5},
+		"guard": 20.0, "grip_at": 18.0, "mag_at": 43.0, "stock": 32.0, "vents": 2,
+		"mark": "bolt", "well": 4.5, "mag_w": 7.0},
 	"GRD": {"receiver": Vector2(54.0, 11.0), "barrel": Vector2(32.0, 4.2),
-		"guard": 24.0, "grip_at": 15.0, "mag_at": 32.0, "stock": 20.0, "vents": 3,
-		"mark": "", "well": 4.0},
+		"guard": 24.0, "grip_at": 15.0, "mag_at": 36.0, "stock": 20.0, "vents": 3,
+		"mark": "", "well": 4.0, "mag_w": 7.0},
 }
 ## Anything not in the table is drawn as a rifle rather than as nothing.
 const FALLBACK := "AR"
@@ -244,10 +249,11 @@ static func draw_gun(canvas: CanvasItem, at: Vector2, zoom: float,
 			draw_part(canvas, at, zoom, gun, it)
 	if not has_mag and p["mag_at"] > 0.0:
 		var well: Vector2 = mounts(gun)[AttachmentData.Slot.MAGAZINE]
+		var mag_w: float = p["mag_w"] * 0.5
 		_shape(canvas, at, zoom, PackedVector2Array([
-			Vector2(well.x - 4.0, well.y - 1.0), Vector2(well.x + 4.0, well.y - 1.0),
-			Vector2(well.x + 3.2, well.y + 13.0),
-			Vector2(well.x - 5.6, well.y + 13.0)]))
+			Vector2(well.x - mag_w, well.y - 1.0), Vector2(well.x + mag_w, well.y - 1.0),
+			Vector2(well.x + mag_w * 0.8, well.y + 13.0),
+			Vector2(well.x - mag_w * 1.4, well.y + 13.0)]))
 
 	# The magwell last, over the magazine rather than under it.
 	#
@@ -262,7 +268,7 @@ static func draw_gun(canvas: CanvasItem, at: Vector2, zoom: float,
 	var well_deep: float = p["well"]
 	var well_at: float = p["mag_at"]
 	if well_deep > 0.0 and well_at > 0.0:
-		var well_wide := 11.0
+		var well_wide: float = p["mag_w"] + 2.5
 		_shape(canvas, at, zoom, PackedVector2Array([
 			Vector2(well_at - well_wide * 0.5 - 1.0, body.y * 0.30),
 			Vector2(well_at + well_wide * 0.5 + 1.0, body.y * 0.30),
