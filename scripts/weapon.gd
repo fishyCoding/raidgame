@@ -210,13 +210,13 @@ func equip_data(wanted: WeaponData) -> bool:
 		return false
 	for slot_id in [Inventory.Slot.PRIMARY, Inventory.Slot.SECONDARY]:
 		var held := inventory.get_slot(slot_id)
-		if held and held.weapon == wanted:
+		if held and held.is_gun(wanted):
 			slot = slot_id
 			_refresh(true)
 			return true
 	var stowed := inventory.stowed_weapons()
 	for i in stowed.size():
-		if stowed[i].weapon == wanted:
+		if stowed[i].is_gun(wanted):
 			return equip_backpack(i)
 	return false
 

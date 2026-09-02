@@ -29,7 +29,22 @@ const DEFAULT_STACK := 30
 
 var kind := Kind.WEAPON
 ## Set for weapons, null otherwise.
+##
+## For a gun with parts on it this is the *built* copy - the catalogue resource
+## with every attachment already folded into its numbers. Everything that reads a
+## weapon stat reads it from here and needs to know nothing about attachments.
+## See Gunsmith.build().
 var weapon: WeaponData
+## The gun as it comes off the shelf, before anything was bolted to it.
+##
+## Kept because parts come off as well as on: rebuilding from the original is the
+## only honest way to remove one, since a delta applied and then subtracted does
+## not survive clamping. It is also the identity of the gun - "is this an assault
+## rifle" is a question about this field, never about `weapon`, which for a
+## modified gun is a copy nothing else has a reference to.
+var base_weapon: WeaponData
+## What is bolted on, in no particular order, at most one per slot.
+var parts: Array[AttachmentData] = []
 ## Set for armour, null otherwise.
 var armor: ArmorData
 ## Durability left (ARMOR) - armour is spent, not permanent.
@@ -66,10 +81,64 @@ static func from_weapon(data: WeaponData, rounds := -1) -> Item:
 	var item := Item.new()
 	item.kind = Kind.WEAPON
 	item.weapon = data
+	item.base_weapon = data
 	item.ammo_type = data.ammo_type
 	item.size = data.grid_size
 	item.count = data.mag_size if rounds < 0 else clampi(rounds, 0, data.mag_size)
 	return item
+
+
+## Bolts a part on, replacing whatever was in that slot, and hands back what came
+## off so the shop can refund it.
+func fit(part: AttachmentData) -> AttachmentData:
+	if not is_weapon() or part == null:
+		return null
+	var was := strip(part.slot)
+	parts.append(part)
+	rebuild()
+	return was
+
+
+## Takes the part out of one slot, hands it back, and leaves the gun rebuilt
+## without it.
+func strip(which: int) -> AttachmentData:
+	if not is_weapon():
+		return null
+	for i in parts.size():
+		if parts[i].slot == which:
+			var was := parts[i]
+			parts.remove_at(i)
+			rebuild()
+			return was
+	return null
+
+
+func part_in(which: int) -> AttachmentData:
+	for part in parts:
+		if part.slot == which:
+			return part
+	return null
+
+
+## Re-adds the gun from the original plus whatever is currently bolted to it.
+##
+## Rounds in the magazine survive where they can: taking a drum off a gun holding
+## sixty rounds cannot leave sixty in a thirty-round magazine, so the count is
+## clamped rather than kept - the rounds that no longer fit are simply gone,
+## which is also what happens when you do it to a real one.
+func rebuild() -> void:
+	if not is_weapon() or base_weapon == null:
+		return
+	weapon = Gunsmith.build(base_weapon, parts)
+	size = weapon.grid_size
+	count = clampi(count, 0, weapon.mag_size)
+
+
+## Whether this is that gun off the shelf, parts or no parts. The question every
+## caller comparing weapons actually means - `item.weapon == data` is false the
+## moment anything is bolted on, because the gun is a copy by then.
+func is_gun(data: WeaponData) -> bool:
+	return is_weapon() and (base_weapon == data or weapon == data)
 
 
 static func from_ammo(calibre: StringName, rounds: int) -> Item:
@@ -202,7 +271,17 @@ func to_wire() -> Dictionary:
 		data = gadget
 	if data == null:
 		data = backpack
-	if data:
+	if is_weapon() and base_weapon:
+		# The gun that was bought, not the copy the workshop made of it. A built
+		# weapon has no resource_path to send, and the far end rebuilds the same
+		# copy from the same parts anyway.
+		out["path"] = base_weapon.resource_path
+		if not parts.is_empty():
+			var bolted: Array = []
+			for part in parts:
+				bolted.append(part.resource_path)
+			out["parts"] = bolted
+	elif data:
 		out["path"] = data.resource_path
 	if is_armor():
 		out["durability"] = durability
@@ -238,6 +317,16 @@ static func from_wire(wire: Dictionary) -> Item:
 			var gun := load(path) as WeaponData
 			if gun:
 				item = Item.from_weapon(gun, count_in)
+				# Parts before the round count is trusted: a drum changes what
+				# the magazine can hold, and from_weapon has already clamped
+				# against the bare gun.
+				for bolted in wire.get("parts", []):
+					var part := load(str(bolted)) as AttachmentData
+					if part:
+						item.parts.append(part)
+				if not item.parts.is_empty():
+					item.rebuild()
+					item.count = clampi(count_in, 0, item.weapon.mag_size)
 		Kind.ARMOR:
 			var plate := load(path) as ArmorData
 			if plate:
@@ -333,7 +422,8 @@ func cells() -> int:
 
 func title() -> String:
 	if is_weapon():
-		return weapon.short_name
+		return weapon.short_name if parts.is_empty() else "%s+%d" % [
+			weapon.short_name, parts.size()]
 	if is_armor():
 		return armor.short_name
 	if is_medkit():

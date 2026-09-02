@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="AttachmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/attachment_data.gd" id="1_att"]
+
+[resource]
+script = ExtResource("1_att")
+display_name = "Muzzle Brake"
+short_name = "BRAKE"
+slot = 1
+price = 550
+blurb = "Kills the climb outright and shakes the gun doing it."
+recoil_delta = -20.0
+stability_delta = -5.0
+handling_delta = -3.0
+loudness_delta = 3.0
+art_size = Vector2(18, 9)
+tint = Color(0.62, 0.6, 0.62, 1)

@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="AttachmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/attachment_data.gd" id="1_att"]
+
+[resource]
+script = ExtResource("1_att")
+display_name = "Compensator"
+short_name = "COMP"
+slot = 1
+price = 400
+blurb = "Vents gas up so the muzzle does not follow it. Louder for everyone."
+recoil_delta = -12.0
+stability_delta = 5.0
+loudness_delta = 2.0
+art_size = Vector2(14, 7)
+tint = Color(0.58, 0.62, 0.7, 1)

@@ -115,7 +115,7 @@ var _mouse_motion := Vector2.ZERO
 
 ## Groups whose screens need a real pointer. While any of them is on screen the
 ## cursor comes back; the rest of the time it is captured and hidden.
-const CURSOR_GROUPS := [&"shop", &"inventory_ui", &"map_screen"]
+const CURSOR_GROUPS := [&"shop", &"gunsmith", &"inventory_ui", &"map_screen"]
 
 ## Which way the game is being played.
 ##

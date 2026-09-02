@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="AttachmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/attachment_data.gd" id="1_att"]
+
+[resource]
+script = ExtResource("1_att")
+display_name = "Angled Grip"
+short_name = "A-GRIP"
+slot = 3
+price = 450
+blurb = "Onto a target faster. Less steady, but you are already shooting."
+stability_delta = 5.0
+handling_delta = 8.0
+ads_speed_scale = 1.2
+fits_sidearm = false
+art_size = Vector2(12, 11)
+tint = Color(0.46, 0.5, 0.56, 1)

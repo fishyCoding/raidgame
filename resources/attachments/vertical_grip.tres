@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="AttachmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/attachment_data.gd" id="1_att"]
+
+[resource]
+script = ExtResource("1_att")
+display_name = "Vertical Grip"
+short_name = "V-GRIP"
+slot = 3
+price = 400
+blurb = "Something to pull down with. The cone stops opening mid-burst."
+stability_delta = 14.0
+handling_delta = -3.0
+fits_sidearm = false
+art_size = Vector2(7, 15)
+tint = Color(0.4, 0.44, 0.5, 1)

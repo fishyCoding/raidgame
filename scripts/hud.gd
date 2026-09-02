@@ -102,17 +102,27 @@ const WATCHED_FADE := 1.35
 ##
 ## A rim, not a wash. It was nearly a quarter of the screen deep, which put a
 ## green haze over the ground you actually fight on; pulled back to a band round
-## the frame, and then back again to a hairline of one, it is something you catch
-## rather than something you are shown.
-const WATCHED_DEPTH := 0.065
+## the frame, it is something you catch rather than something you are shown.
+##
+## There is a floor under this and it was found by going through it. At 4.5% of
+## the short side the rim is a hairline, and a hairline at low alpha is not a
+## subtle effect - it is an invisible one, which is a different thing and not the
+## thing that was asked for. A shallow band you can see reads as quieter than a
+## sharp line you cannot, because the line looks like a border somebody drew and
+## the band looks like light.
+const WATCHED_DEPTH := 0.075
 ## How dark that rim gets at the top of its breath.
 ##
-## Low on purpose, and lower than it was. The counted player is not being warned,
-## they are being given a feeling - and a feeling that is legible enough to read
-## off is one they can act on precisely, which is exactly what the counter did
-## not pay for. At this strength it is plainly there while you are still, and
-## easy to lose while you are shooting, which is the right way round.
-const WATCHED_PEAK := 0.17
+## Low on purpose, and lower than it started. The counted player is not being
+## warned, they are being given a feeling - and a feeling that is legible enough
+## to read off is one they can act on precisely, which is exactly what the
+## counter did not pay for.
+##
+## It went 0.30 -> 0.17 -> 0.10 and 0.10 was too far: nothing on the screen at
+## all, which answers nobody. This is the setting where it is plainly there on a
+## still screen and easy to miss while you are shooting, which is the right way
+## round - whether you notice is part of what makes the gadget worth casting.
+const WATCHED_PEAK := 0.13
 ## Seconds for the sweep line to cross the screen once.
 ##
 ## Slower than it was. A sweep you can time is a clock, and this should read as
@@ -906,10 +916,10 @@ func _draw_watched() -> void:
 	# part of this with a direction to it, and that is what keeps the effect from
 	# reading as damage: you are not hurt, you are being looked for.
 	var y := fmod(Time.get_ticks_msec() * 0.001, WATCHED_SWEEP) / WATCHED_SWEEP * h
-	draw_rect(Rect2(Vector2(0.0, y - 14.0), Vector2(w, 28.0)),
-		Color(WATCHED.r, WATCHED.g, WATCHED.b, 0.016 * t))
+	draw_rect(Rect2(Vector2(0.0, y - 16.0), Vector2(w, 32.0)),
+		Color(WATCHED.r, WATCHED.g, WATCHED.b, 0.014 * t))
 	draw_rect(Rect2(Vector2(0.0, y - 1.0), Vector2(w, 2.0)),
-		Color(WATCHED.r, WATCHED.g, WATCHED.b, 0.035 * t))
+		Color(WATCHED.r, WATCHED.g, WATCHED.b, 0.032 * t))
 
 
 ## How long a gadget of this kind runs for, taken off the one actually in the

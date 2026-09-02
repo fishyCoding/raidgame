@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="AttachmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/attachment_data.gd" id="1_att"]
+
+[resource]
+script = ExtResource("1_att")
+display_name = "Extended Mag"
+short_name = "EXT MAG"
+slot = 0
+price = 350
+blurb = "More rounds before you think about it. Heavier, slower to change."
+handling_delta = -6.0
+mag_scale = 1.4
+reload_scale = 1.18
+art_size = Vector2(9, 18)
+tint = Color(0.55, 0.62, 0.72, 1)

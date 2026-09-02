@@ -70,15 +70,44 @@ func _run() -> void:
 		roster.erase(int(str(body.name).right(1)))
 		body.queue_free()
 	_stand_ins.clear()
-	await _wait(10)
+	await _wait(20)
+
+	# The same frame with nobody counting, first. The effect is quiet enough now
+	# that a picture of it on its own proves very little - what says whether it
+	# is there at all is the pair, and a pair is only worth anything if the two
+	# shots are of the same view.
+	await _save("res://tools/scr_headcount_unwatched.png")
+	print("headcount_shot | saved scr_headcount_unwatched.png - nobody counting")
+
 	# Tapped every frame, the way a count that is still running does every half
 	# second, so the shot is of the effect at full rather than half faded out.
-	for i in 90:
+	for i in 40:
 		player.mark_counted()
 		await process_frame
+	await _hold_for_the_breath(player)
 	await _save("res://tools/scr_headcount_watched.png")
 	print("headcount_shot | saved scr_headcount_watched.png - being counted")
 	quit()
+
+
+## Waits for the effect to be at the top of its breath, with the sweep somewhere
+## in the middle of the screen, and keeps the mark alive while it waits.
+##
+## Because the mark breathes and the sweep travels, and a shot taken on an
+## arbitrary frame is a shot of an arbitrary point on both - which for something
+## this faint is the difference between a picture of the effect and a picture of
+## an empty screen. Neither number is invented here: they are read back off the
+## HUD's own constants, so this follows any retuning rather than having to be
+## kept in step with it.
+func _hold_for_the_breath(player: Node) -> void:
+	for i in 900:
+		player.mark_counted()
+		await process_frame
+		var clock := Time.get_ticks_msec()
+		var breath := 0.5 + 0.5 * sin(clock * 0.0007 * TAU)
+		var sweep := fmod(clock * 0.001, 4.6) / 4.6
+		if breath > 0.9 and sweep > 0.3 and sweep < 0.7:
+			return
 
 
 func _save(path: String) -> void:

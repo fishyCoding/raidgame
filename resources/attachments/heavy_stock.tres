@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="AttachmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/attachment_data.gd" id="1_att"]
+
+[resource]
+script = ExtResource("1_att")
+display_name = "Heavy Stock"
+short_name = "HV STK"
+slot = 4
+price = 550
+blurb = "Weight where you want it. Holds a burst together, slows the rest."
+stability_delta = 16.0
+recoil_delta = -9.0
+handling_delta = -10.0
+aim_speed_scale = 0.88
+fits_sidearm = false
+art_size = Vector2(24, 13)
+tint = Color(0.42, 0.45, 0.5, 1)

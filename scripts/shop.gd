@@ -18,6 +18,12 @@ extends Control
 
 signal deployed()
 
+## The workshop, opened off a weapon slot. Built on demand and kept afterwards:
+## it is a whole screen and there is no reason to rebuild it every time somebody
+## looks at a scope.
+const SMITH_SCRIPT := preload("res://scripts/gunsmith_screen.gd")
+var _smith: Control = null
+
 ## Doubled again, to 16000, and this one is scaffolding rather than balance.
 ##
 ## Kitting out now costs more than it did: there is a third armour tier to buy
@@ -413,7 +419,27 @@ func _press(at: Vector2) -> void:
 				_buy(region.entry)
 			"clear":
 				_sell_back()
+			"smith":
+				_open_gunsmith(region.item)
 		return
+
+
+## Spends from the same pocket the shop does, for a screen that is not the shop.
+##
+## The gunsmith is a detour off this one rather than a shop of its own, so there
+## is one balance and one set of second thoughts. It asks rather than helping
+## itself so that "can you afford this" has a single answer - and a negative
+## `owed`, which is what swapping a dear part for a cheap one comes to, is a
+## refund and always succeeds.
+func try_spend(owed: int) -> bool:
+	if owed > credits:
+		return false
+	credits -= owed
+	return true
+
+
+func give_back(amount: int) -> void:
+	credits += amount
 
 
 ## Takes what is in the open slot back off the shelf, refunding what it cost.
@@ -449,6 +475,31 @@ func _sell_back() -> void:
 			_refund(item)
 	if _set_slot_item(id, null):
 		_refund(held)
+
+
+## Hands one gun to the workshop and gets out of the way.
+##
+## This screen hides rather than being drawn over. A kit screen still taking
+## clicks underneath a full-screen panel is a slot bought by accident, and the
+## two screens share a mouse.
+func _open_gunsmith(gun: Item) -> void:
+	if gun == null or not gun.is_weapon():
+		return
+	if _smith == null:
+		_smith = Control.new()
+		_smith.set_script(SMITH_SCRIPT)
+		_smith.name = "Gunsmith"
+		# A sibling, not a child: hiding this screen would hide a child with it,
+		# and hiding this screen is exactly what opening the workshop does.
+		get_parent().add_child(_smith)
+		_smith.closed.connect(_on_gunsmith_closed)
+	_smith.open(self, gun)
+	visible = false
+
+
+func _on_gunsmith_closed() -> void:
+	visible = true
+	_message = ""
 
 
 func _refund(item: Item) -> void:
@@ -703,10 +754,6 @@ func _draw_slots(at: Vector2) -> void:
 		var box := Rect2(Vector2(at.x, y), Vector2(SLOT_W, SLOT_H))
 		var item := _slot_item(slot.id)
 		var selected: bool = _open.get("id", "") == slot.id
-		_regions.append({
-			"kind": "slot", "rect": box, "id": slot.id,
-			"list": slot.list, "label": slot.label,
-		})
 
 		draw_rect(box, PANEL if selected else SLOT_BG)
 		draw_rect(box, ACCENT if selected else LINE, false, 2.0 if selected else 1.0)
@@ -717,9 +764,33 @@ func _draw_slots(at: Vector2) -> void:
 			_draw_footprint(item, Vector2(box.end.x - 14.0, box.position.y + 9.0))
 			draw_string(font, box.position + Vector2(10.0, 36.0), item.label(),
 				HORIZONTAL_ALIGNMENT_LEFT, SLOT_W - 90.0, 14, TEXT)
+			# A gun can be taken apart and put back together, and this is the way
+			# in. Registered before the slot's own region so the pill wins the
+			# click it is sitting inside - see _press, which takes the first hit.
+			if item.is_weapon():
+				var pill := Rect2(Vector2(box.end.x - 82.0, box.position.y + 24.0),
+					Vector2(72.0, 17.0))
+				# Every region carries an `id`, including this one. It is what
+				# the harnesses look regions up by, and a dictionary missing the
+				# key does not return false from `region.id == "buy"` - it raises
+				# and takes the whole lookup down with it.
+				_regions.push_back({"kind": "smith", "rect": pill,
+					"item": item, "id": "smith"})
+				var bolted := item.parts.size()
+				draw_rect(pill, Color(ACCENT, 0.16))
+				draw_rect(pill, Color(ACCENT, 0.55), false, 1.0)
+				draw_string(font, pill.position + Vector2(0.0, 13.0),
+					"MODIFY" if bolted == 0 else "MODIFY %d" % bolted,
+					HORIZONTAL_ALIGNMENT_CENTER, pill.size.x, 10, ACCENT)
 		else:
 			draw_string(font, box.position + Vector2(10.0, 36.0), "empty",
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(DIM, 0.7))
+		# Last, so anything drawn inside the box has already claimed its own
+		# clicks: the first region a press lands in wins.
+		_regions.append({
+			"kind": "slot", "rect": box, "id": slot.id,
+			"list": slot.list, "label": slot.label,
+		})
 		y += SLOT_H + SLOT_GAP
 
 	_draw_ammo_button(Vector2(at.x, y + 8.0))
@@ -1203,7 +1274,7 @@ func _rounds_of(calibre: StringName) -> int:
 
 func _is_equipped(data: WeaponData) -> bool:
 	for item in [_inventory.primary, _inventory.secondary]:
-		if item and item.weapon == data:
+		if item and item.is_gun(data):
 			return true
 	return false
 

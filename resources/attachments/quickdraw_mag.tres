@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="AttachmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/attachment_data.gd" id="1_att"]
+
+[resource]
+script = ExtResource("1_att")
+display_name = "Quickdraw Mag"
+short_name = "QD MAG"
+slot = 0
+price = 300
+blurb = "Fewer rounds, back in the gun far faster."
+handling_delta = 7.0
+mag_scale = 0.8
+reload_scale = 0.68
+art_size = Vector2(9, 12)
+tint = Color(0.62, 0.68, 0.78, 1)

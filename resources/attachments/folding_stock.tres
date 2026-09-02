@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="AttachmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/attachment_data.gd" id="1_att"]
+
+[resource]
+script = ExtResource("1_att")
+display_name = "Folding Stock"
+short_name = "FOLD"
+slot = 4
+price = 600
+blurb = "Folds away, so the gun takes a cell less in the bag."
+handling_delta = 6.0
+stability_delta = -4.0
+cells_delta = -1
+fits_sidearm = false
+art_size = Vector2(15, 8)
+tint = Color(0.54, 0.58, 0.64, 1)

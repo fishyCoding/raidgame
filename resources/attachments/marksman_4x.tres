@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="AttachmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/attachment_data.gd" id="1_att"]
+
+[resource]
+script = ExtResource("1_att")
+display_name = "Marksman 4x"
+short_name = "4X"
+slot = 2
+price = 1150
+blurb = "Reach, and a lens big enough to throw your position back."
+accuracy_delta = 13.0
+ads_zoom_delta = 1.5
+ads_speed_scale = 0.78
+handling_delta = -7.0
+adds_glint = true
+fits_sidearm = false
+art_size = Vector2(26, 12)
+tint = Color(0.55, 0.75, 0.9, 1)
