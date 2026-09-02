@@ -14,4 +14,4 @@ active_time = 20.0
 radius = 900.0
 hit_points = 3
 tint = Color(0.62, 0.72, 0.95, 1)
-grid_size = Vector2i(2, 2)
+grid_size = Vector2i(2, 1)

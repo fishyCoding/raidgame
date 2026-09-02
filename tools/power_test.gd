@@ -44,18 +44,30 @@ func _run() -> void:
 	_check(kit.ultimates.size() == 1, "and is racked")
 	_check(kit.charge_scale() > 1.0, "the cheap rack charges slower than the gadget asks")
 
-	var bomb: Object = maker.from_gadget(load(GADGET % "rail_bomb"))
-	_check(bomb.size == Vector2i(2, 2), "the rail bomb is a big gadget - two by two")
-	_check(not kit.set_ultimate(bomb), "which will not go in a rack one cell tall")
+	# The bow is the big one now - the bomb, the projection and the headcount were
+	# all shrunk on 2026-09-02, and a test that hardcodes which gadget is fat is a
+	# test that fails the next time the balance moves. This one asks the resource.
+	var bow: Object = maker.from_gadget(load(GADGET % "recon_bow"))
+	_check(bow.size == Vector2i(2, 2), "the recon bow is a big gadget - two by two")
+	_check(not kit.set_ultimate(bow), "which will not go in a rack one cell tall")
 	_check(kit.ultimates.size() == 1, "and nothing was displaced trying")
 
 	# --- the square one -------------------------------------------------------
 	var square: Object = maker.from_power(load(POWER % "power_cell"))
 	kit.set_power(square)
 	_check(kit.ultimates.is_empty(), "a new source is a new rack - the old one went with it")
-	_check(kit.set_ultimate(bomb), "the 2x2 goes in the 2x2")
+	_check(kit.set_ultimate(bow), "the 2x2 goes in the 2x2")
 	_check(not kit.set_ultimate(maker.from_gadget(load(GADGET % "dash"))),
 		"and fills it - nothing else fits alongside")
+	kit.clear_ultimates()
+	# And the cap, which is what stops a rack of small gadgets from carrying more
+	# than there are keys to set off.
+	_check(kit.set_ultimate(maker.from_gadget(load(GADGET % "headcount"))),
+		"a one-cell gadget goes in")
+	_check(kit.set_ultimate(maker.from_gadget(load(GADGET % "dash"))),
+		"and a second one alongside it")
+	_check(not kit.set_ultimate(maker.from_gadget(load(GADGET % "headcount"))),
+		"but never a third - there are two keys and no more")
 
 	kit.clear_ultimates()
 	var dash: Object = maker.from_gadget(load(GADGET % "dash"))
@@ -71,7 +83,7 @@ func _run() -> void:
 	var bank: Object = maker.from_power(load(POWER % "rail_bank"))
 	_check(bank.power.charge_scale < 1.0, "the dear rack charges faster")
 	kit.set_power(bank)
-	_check(not kit.set_ultimate(maker.from_gadget(load(GADGET % "projection"))),
+	_check(not kit.set_ultimate(maker.from_gadget(load(GADGET % "recon_bow"))),
 		"and being long and thin, it takes no wide gadget at all")
 	_check(kit.set_ultimate(maker.from_gadget(load(GADGET % "dash"))),
 		"only the small ones - which is what you are paying the speed for")

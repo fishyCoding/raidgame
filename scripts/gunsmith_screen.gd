@@ -186,8 +186,10 @@ func _draw_bench(box: Rect2) -> void:
 	draw_string(font, bench.position + Vector2(12.0, 20.0), item.label(),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ACCENT)
 	# The three numbers a build changes that a bar cannot show.
-	var notes := "%d rnd  -  %.1fs reload  -  %.1fx zoom  -  %dx%d cells" % [
-		built.mag_size, built.reload_time, built.ads_zoom,
+	# Printed as magnification rather than as the camera number behind it: 4.0x
+	# is what the player bought, 0.23 is how the camera says it.
+	var notes := "%d rnd  -  %.1fs reload  -  %.1fx sight  -  %dx%d cells" % [
+		built.mag_size, built.reload_time, 1.0 / maxf(built.ads_zoom, 0.01),
 		built.grid_size.x, built.grid_size.y]
 	if built.suppressed:
 		notes += "  -  suppressed"

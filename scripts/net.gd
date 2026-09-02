@@ -844,19 +844,35 @@ func forget_player(body: Node2D) -> void:
 
 ## Fires a round from wherever the trigger was pulled. Guards call this too, on
 ## the host, with a shooter of 0 - nobody to credit.
+## `built` is the gun as it actually is, attachments and all, for the round
+## fired on this machine. The path is what travels, because a WeaponData does
+## not fit down a wire and both ends already have the catalogue - see the note
+## in _round().
 func fire(origin: Vector2, angle: float, weapon_path: String, mask: int,
-		damage_scale: float, shooter: int) -> void:
-	_make_bullet(origin, angle, weapon_path, mask, damage_scale, shooter)
+		damage_scale: float, shooter: int, built: WeaponData = null) -> void:
+	var shelf := load(weapon_path) as WeaponData
+	# The round fired here is the gun as it actually is. Its damage is already
+	# the modified number, so the scale it gets is only the weapon's own knob -
+	# folding the parts in again here is how a suppressed rifle ended up doing
+	# ninety percent of ninety percent.
+	_round(origin, angle, built if built != null else shelf, mask, damage_scale, shooter)
 	if not is_networked():
 		return
+	# What travels is the catalogue gun, which every machine already has. The
+	# parts cannot ride along on every shot, so what they did to the damage is
+	# folded into the scale instead - that is the one number the far end could
+	# not work out for itself, and the one that decides whether somebody dies.
+	var wire_scale := damage_scale
+	if built != null and shelf != null and shelf.damage > 0.0:
+		wire_scale *= built.damage / shelf.damage
 	if is_host:
 		# To everyone but the shooter, which drew its own the moment it fired.
 		for peer in multiplayer.get_peers():
 			if peer != shooter:
 				_make_bullet.rpc_id(peer, origin, angle, weapon_path, mask,
-					damage_scale, shooter)
+					wire_scale, shooter)
 	else:
-		_ask_to_fire.rpc_id(1, origin, angle, weapon_path, mask, damage_scale)
+		_ask_to_fire.rpc_id(1, origin, angle, weapon_path, mask, wire_scale)
 
 
 @rpc("any_peer", "reliable")
@@ -871,8 +887,25 @@ func _ask_to_fire(origin: Vector2, angle: float, weapon_path: String, mask: int,
 @rpc("authority", "unreliable")
 func _make_bullet(origin: Vector2, angle: float, weapon_path: String, mask: int,
 		damage_scale: float, shooter: int) -> void:
-	var data := load(weapon_path) as WeaponData
+	_round(origin, angle, load(weapon_path) as WeaponData, mask, damage_scale, shooter)
+
+
+## One round, from a weapon this machine is holding rather than from a path.
+##
+## Split out because a gun with parts bolted to it is a *copy* of the catalogue
+## resource and has no path to load - and this used to be the one place that
+## did not know that. `load("")` returns null, the early-out below fired, and a
+## modified gun spawned no bullet at all: no tracer, no sound, no hit. It read as
+## hit registration being broken and it was the gunsmith.
+##
+## What travels between machines is still the catalogue path. Rebuilding the
+## exact modified gun on the far end would mean sending its parts with every
+## round; the shooter's own machine draws the true one, and the difference that
+## matters - what the round does - rides along in damage_scale.
+func _round(origin: Vector2, angle: float, data: WeaponData, mask: int,
+		damage_scale: float, shooter: int) -> void:
 	if data == null:
+		push_error("a round was fired from a weapon that could not be resolved")
 		return
 	Bullet.spawn(get_tree(), origin, angle, data, mask, damage_scale, shooter)
 	# Every machine that gets the round gets the report, which is the only way a

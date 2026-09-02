@@ -67,7 +67,14 @@ func _run() -> void:
 
 	var scoped: Object = maker.from_weapon(ar)
 	scoped.fit(load("res://resources/attachments/marksman_4x.tres"))
-	_check(scoped.weapon.ads_zoom > ar.ads_zoom, "a 4x magnifies")
+	# Lower is wider: Camera2D.zoom shows more world as it falls, which is how
+	# magnification works in a game seen from the side. A 4x that raised this
+	# number would be selling you a narrower view than iron sights.
+	_say("4x: camera zoom %.2f (bare %.2f) - %.1fx the ground" % [
+		scoped.weapon.ads_zoom, ar.ads_zoom, ar.ads_zoom / scoped.weapon.ads_zoom])
+	_check(scoped.weapon.ads_zoom < ar.ads_zoom, "a 4x pulls the camera back")
+	_check(absf(ar.ads_zoom / scoped.weapon.ads_zoom - 4.0) < 0.1,
+		"by four times, which is what a four power scope means")
 	_check(scoped.weapon.scope_glint, "and throws a glint back, which is its price")
 	_check(scoped.weapon.ads_speed_scale < ar.ads_speed_scale, "and is slower onto a target")
 

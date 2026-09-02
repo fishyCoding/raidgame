@@ -578,6 +578,9 @@ func _buy(entry: Dictionary) -> void:
 		if _inventory.power_item == null:
 			_message = "nothing to run it - buy a power source first"
 			return
+		if _inventory.ultimates.size() >= Inventory.MAX_RACKED:
+			_message = "a rack runs two gadgets - Q and Z, and there is no third key"
+			return
 		if not _inventory.power.has_room(item.size):
 			_message = "%s needs %dx%d - the %s has no room" % [item.title(),
 				item.size.x, item.size.y, _inventory.power_item.power.display_name]

@@ -271,6 +271,8 @@ static func _rack_order(a: Item, b: Item) -> bool:
 ## ignore the answer are no worse off than they were: nothing is lost, the
 ## gadget simply does not go on.
 func set_ultimate(item: Item, index := 0) -> bool:
+	if item != null and ultimates.size() >= MAX_RACKED:
+		return false
 	if item == null:
 		var racked := ultimates
 		if index >= 0 and index < racked.size():
@@ -303,6 +305,15 @@ func charge_scale() -> float:
 		return 1.0
 	return maxf(power_item.power.charge_scale, 0.05)
 
+
+## How many gadgets a rack will run at once, however much room is left in it.
+##
+## Two, because there are two keys - Q and Z - and a gadget you are carrying,
+## paid for and charging with no way to set it off is worse than not being sold
+## it. Space is the interesting limit and this one is a backstop: the racks were
+## once sized so a third could never fit, and then the gadgets got smaller, and a
+## rule that only holds while nobody retunes anything is not a rule.
+const MAX_RACKED := 2
 
 ## The rack handed to anything that needs one without shopping for it: the debug
 ## key, the test-drive kit, and every headless harness that equips a gadget.
@@ -435,7 +446,7 @@ func store(item: Item) -> bool:
 		if get_worn(where) == null:
 			set_worn(where, item)
 			return true
-	if item.is_ultimate() and power.add(item):
+	if item.is_ultimate() and ultimates.size() < MAX_RACKED and power.add(item):
 		changed.emit()
 		return true
 	# A power source goes on your back if nothing is there, and is loot otherwise.

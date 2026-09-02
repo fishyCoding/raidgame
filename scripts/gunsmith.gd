@@ -107,7 +107,7 @@ static func build(base: WeaponData, parts: Array) -> WeaponData:
 		mag_extra += it.mag_delta
 		gun.reload_time *= it.reload_scale
 
-		gun.ads_zoom += it.ads_zoom_delta
+		gun.ads_zoom /= maxf(it.magnify, 0.05)
 		gun.ads_speed_scale *= it.ads_speed_scale
 		gun.aim_speed_scale *= it.aim_speed_scale
 		gun.scope_glint = gun.scope_glint or it.adds_glint
@@ -128,7 +128,10 @@ static func build(base: WeaponData, parts: Array) -> WeaponData:
 	# it is a gun that cannot be fired.
 	gun.mag_size = maxi(roundi(mag) + mag_extra, 1)
 	gun.reload_time = maxf(gun.reload_time, 0.2)
-	gun.ads_zoom = clampf(gun.ads_zoom, 0.4, 4.0)
+	# The floor is well under WeaponData's own inspector range: a four power
+	# scope on a gun that already pulls back lands around 0.23, and clamping at
+	# 0.4 would have quietly sold magnification it then refused to deliver.
+	gun.ads_zoom = clampf(gun.ads_zoom, 0.15, 4.0)
 	gun.loudness_trim = clampf(gun.loudness_trim, -24.0, 12.0)
 	gun.grid_size.x = maxi(gun.grid_size.x, 1)
 	return gun
@@ -173,8 +176,8 @@ static func effect_lines(part: AttachmentData) -> Array:
 	if not is_equal_approx(part.reload_scale, 1.0):
 		out.append(["reload %+.0f%%" % ((part.reload_scale - 1.0) * 100.0),
 			part.reload_scale < 1.0])
-	if not is_zero_approx(part.ads_zoom_delta):
-		out.append(["zoom %+.1fx" % part.ads_zoom_delta, part.ads_zoom_delta > 0.0])
+	if not is_equal_approx(part.magnify, 1.0):
+		out.append(["sees %.1fx further" % part.magnify, part.magnify > 1.0])
 	if not is_equal_approx(part.ads_speed_scale, 1.0):
 		out.append(["aim speed %+.0f%%" % ((part.ads_speed_scale - 1.0) * 100.0),
 			part.ads_speed_scale > 1.0])

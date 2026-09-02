@@ -18,4 +18,4 @@ damage = 34.0
 charge_time = 45.0
 active_time = 14.0
 tint = Color(0.55, 0.85, 1.0, 1)
-grid_size = Vector2i(2, 2)
+grid_size = Vector2i(2, 1)

@@ -430,7 +430,16 @@ func _pellet_offset(index: int, pattern: float) -> float:
 ## watching - the same call is the whole of single player and the whole of a
 ## four-player raid.
 func _spawn_bullet(origin: Vector2, angle: float) -> void:
-	Net.fire(origin, angle, data.resource_path, hit_mask, damage_scale, _shooter_id())
+	# The path sent is the gun off the shelf, never the built copy: a modified
+	# gun is a duplicate with no resource_path, and sending an empty one is how
+	# every shot from an attached weapon quietly failed to exist.
+	var item := _item()
+	var shelf: WeaponData = item.base_weapon if item and item.base_weapon else data
+	# Both the shelf path and the gun in hand: Net draws this one from the object
+	# and sends the other end the path, and works out for itself what the parts
+	# did to the damage - see Net.fire.
+	Net.fire(origin, angle, shelf.resource_path, hit_mask, damage_scale,
+		_shooter_id(), data)
 
 
 ## The peer to credit for this shot. A gun held by a guard answers 0: guards are

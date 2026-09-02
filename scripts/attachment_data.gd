@@ -69,8 +69,17 @@ enum Slot { MAGAZINE, MUZZLE, OPTIC, GRIP, STOCK }
 @export_range(0.5, 2.0) var reload_scale := 1.0
 
 @export_group("Sights")
-## Added to the gun's own magnification while aimed.
-@export_range(-1.0, 3.0) var ads_zoom_delta := 0.0
+## How much more ground this glass shows you while aimed. 4.0 is a four power
+## scope: four times the world across the screen.
+##
+## A *divisor* on the camera, not an addition to it, and that is the whole point.
+## Camera2D.zoom works the other way round from the word "zoom" - lower shows
+## more - which is why every gun in the game has an ads_zoom below one and the
+## sniper has the lowest of the lot. Adding to that number, which is what this
+## field used to do, made a 4x scope show you *less* than iron sights while the
+## workshop cheerfully printed "2.4x". In a game seen from the side,
+## magnification is how far you can see, so it has to pull the camera back.
+@export_range(0.5, 6.0) var magnify := 1.0
 ## Multiplies how fast the gun comes up and settles. Above one is faster - it is
 ## a speed, not a duration.
 @export_range(0.4, 2.0) var ads_speed_scale := 1.0
