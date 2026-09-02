@@ -176,23 +176,10 @@ static func draw_gun(canvas: CanvasItem, at: Vector2, zoom: float,
 
 	# Back to front, the way it would be assembled.
 	if p["stock"] > 0.0 and not has_stock:
-		var stock_len: float = p["stock"]
-		# A thin comb rising to the receiver and a slim tube under it, rather
-		# than one solid wedge. Two long shapes read as a stock; one fat one
-		# reads as a doorstop.
-		_shape(canvas, at, zoom, PackedVector2Array([
-			Vector2(0.0, -body.y * 0.40), Vector2(0.0, -body.y * 0.05),
-			Vector2(-stock_len * 0.94, body.y * 0.02),
-			Vector2(-stock_len, -body.y * 0.06),
-			Vector2(-stock_len, -body.y * 0.44),
-			Vector2(-stock_len * 0.55, -body.y * 0.46)]))
-		_shape(canvas, at, zoom, PackedVector2Array([
-			Vector2(0.0, body.y * 0.06), Vector2(0.0, body.y * 0.40),
-			Vector2(-stock_len * 0.52, body.y * 0.30),
-			Vector2(-stock_len * 0.62, body.y * 0.02)]), METAL.darkened(0.1), EDGE)
-		# The butt plate, upright and thin.
-		_shape(canvas, at, zoom, _box(-stock_len - 2.0, -body.y * 0.44,
-			2.4, body.y * 0.5), METAL.darkened(0.22), EDGE)
+		_shape(canvas, at, zoom, _stock_shape(p["stock"], body.y))
+		# The pad itself, darker, standing proud of the end.
+		_shape(canvas, at, zoom, _butt_pad(p["stock"], body.y),
+			METAL.darkened(0.26), EDGE)
 
 	# The barrel: one taper rather than two boxes, so the line down it is
 	# continuous. A gun this size is read along its length, and a step halfway
@@ -224,6 +211,39 @@ static func draw_gun(canvas: CanvasItem, at: Vector2, zoom: float,
 			_shape(canvas, at, zoom,
 				_box(slot_x, -barrel.y * 0.4, 1.8, barrel.y + 2.2),
 				METAL.darkened(0.38), Color(EDGE, 0.0))
+
+	# Trigger guard and grip, before the receiver so the receiver covers them.
+	#
+	# A grip is bolted under the body, not beside it: drawn afterwards its top
+	# edge ran across the receiver's underside and the two read as two shapes
+	# touching. Drawn first, the grip goes up into the gun the way the magazine
+	# goes up into its well, and the join is not a line at all.
+	#
+	# The grip is a hand, not a second magazine: about seven units across where
+	# the web of your thumb sits, tapering to five, and it stops above the bottom
+	# of the magazine rather than hanging past it. Drawn as deep as the magazine
+	# and nearly as wide, which is what it was, the underside of every gun came
+	# out as two identical slabs and the eye could not tell which one it was
+	# meant to be holding.
+	var grip_x: float = p["grip_at"]
+	var guard_y: float = body.y * 0.42
+	var grip_wide := 7.0
+	var grip_deep := 13.0
+	if p["well"] > 0.0:
+		# A unit clear of the magazine's own bottom edge, so the two never line
+		# up and never cross.
+		grip_deep = minf(grip_deep, p["well"] + 13.0 - 1.5)
+	canvas.draw_polyline(PackedVector2Array([
+		at + Vector2(grip_x + 10.0, guard_y) * zoom,
+		at + Vector2(grip_x + 11.0, guard_y + 5.5) * zoom,
+		at + Vector2(grip_x + 5.0, guard_y + 6.5) * zoom,
+		at + Vector2(grip_x + 1.5, guard_y + 3.0) * zoom]),
+		EDGE, maxf(1.0, zoom * 0.4), true)
+	_shape(canvas, at, zoom, PackedVector2Array([
+		Vector2(grip_x, guard_y - 0.5),
+		Vector2(grip_x + grip_wide, guard_y - 0.5),
+		Vector2(grip_x + grip_wide - 1.6, guard_y + grip_deep),
+		Vector2(grip_x - 2.2, guard_y + grip_deep)]))
 
 	# The receiver, tapered toward the muzzle end and with a cut-back heel, so
 	# the silhouette has a direction to it.
@@ -276,34 +296,6 @@ static func draw_gun(canvas: CanvasItem, at: Vector2, zoom: float,
 			Vector2(well_at - well_wide * 0.5 - 2.0, body.y * 0.42 + well_deep)]),
 			METAL.lightened(0.05), EDGE)
 
-	# Trigger guard and grip.
-	#
-	# The grip is a hand, not a second magazine: about seven units across where
-	# the web of your thumb sits, tapering to five, and it stops above the bottom
-	# of the magazine rather than hanging past it. Drawn as deep as the magazine
-	# and nearly as wide, which is what it was, the underside of every gun came
-	# out as two identical slabs and the eye could not tell which one it was
-	# meant to be holding.
-	var grip_x: float = p["grip_at"]
-	var guard_y: float = body.y * 0.42
-	var grip_wide := 7.0
-	var grip_deep := 13.0
-	if p["well"] > 0.0:
-		# A unit clear of the magazine's own bottom edge, so the two never line
-		# up and never cross.
-		grip_deep = minf(grip_deep, p["well"] + 13.0 - 1.5)
-	canvas.draw_polyline(PackedVector2Array([
-		at + Vector2(grip_x + 10.0, guard_y) * zoom,
-		at + Vector2(grip_x + 11.0, guard_y + 5.5) * zoom,
-		at + Vector2(grip_x + 5.0, guard_y + 6.5) * zoom,
-		at + Vector2(grip_x + 1.5, guard_y + 3.0) * zoom]),
-		EDGE, maxf(1.0, zoom * 0.4), true)
-	_shape(canvas, at, zoom, PackedVector2Array([
-		Vector2(grip_x, guard_y - 0.5),
-		Vector2(grip_x + grip_wide, guard_y - 0.5),
-		Vector2(grip_x + grip_wide - 1.6, guard_y + grip_deep),
-		Vector2(grip_x - 2.2, guard_y + grip_deep)]))
-
 	# The rail along the top, and the iron sight standing on it.
 	for i in 5:
 		_shape(canvas, at, zoom,
@@ -318,6 +310,41 @@ static func draw_gun(canvas: CanvasItem, at: Vector2, zoom: float,
 		var it := part as AttachmentData
 		if it and it.slot != AttachmentData.Slot.MAGAZINE:
 			draw_part(canvas, at, zoom, gun, it)
+
+
+## The outline of a buttstock, from the back of the receiver to the pad.
+##
+## The shape that matters is the *waist*: a stock is deep where it meets the
+## receiver, narrows through the middle where your hand and cheek go, and swells
+## again at the butt so there is something to put against a shoulder. Drawn as a
+## wedge tapering to a point at the back - which is what these were - it reads as
+## a spike, and a gun nobody would want to fire.
+##
+## The comb also drops slightly toward the rear rather than rising, because a
+## comb that climbs pushes your eye above the sights.
+static func _stock_shape(reach: float, deep: float) -> PackedVector2Array:
+	return PackedVector2Array([
+		Vector2(0.0, -deep * 0.44),
+		Vector2(-reach * 0.30, -deep * 0.50),
+		Vector2(-reach * 0.88, -deep * 0.46),
+		Vector2(-reach * 0.97, -deep * 0.30),
+		Vector2(-reach * 0.97, deep * 0.62),
+		Vector2(-reach * 0.80, deep * 0.66),
+		Vector2(-reach * 0.42, deep * 0.30),
+		Vector2(-reach * 0.16, deep * 0.24),
+		Vector2(0.0, deep * 0.30),
+	])
+
+
+## The butt pad: a slab across the end of the stock, angled the way one is so it
+## sits into a shoulder rather than against it.
+static func _butt_pad(reach: float, deep: float) -> PackedVector2Array:
+	return PackedVector2Array([
+		Vector2(-reach * 0.97, -deep * 0.32),
+		Vector2(-reach * 0.86, -deep * 0.36),
+		Vector2(-reach * 0.83, deep * 0.66),
+		Vector2(-reach * 0.95, deep * 0.66),
+	])
 
 
 ## What makes a shotgun look like a shotgun.
@@ -461,18 +488,12 @@ static func draw_part(canvas: CanvasItem, at: Vector2, zoom: float,
 					Vector2(where.x + span.x * 0.5 - 0.6, where.y + span.y),
 					Vector2(where.x - span.x * 0.5 + 0.6, where.y + span.y)]), fill, line)
 		AttachmentData.Slot.STOCK:
-			# Butted against the back of the receiver, with a comb along the top
-			# and a plate on the end - the same shape the built-in stock has, so
-			# swapping one for another changes the size and not the species.
-			_shape(canvas, at, zoom, PackedVector2Array([
-				Vector2(where.x, where.y - span.y * 0.5),
-				Vector2(where.x, where.y + span.y * 0.42),
-				Vector2(where.x - span.x * 0.7, where.y + span.y * 0.62),
-				Vector2(where.x - span.x, where.y + span.y * 0.58),
-				Vector2(where.x - span.x, where.y - span.y * 0.42),
-				Vector2(where.x - span.x * 0.58, where.y - span.y * 0.5)]), fill, line)
-			_shape(canvas, at, zoom, _box(where.x - span.x - 1.5,
-				where.y - span.y * 0.42, 3.0, span.y), fill.darkened(0.2), line)
+			# The same silhouette the built-in stock has, so swapping one for
+			# another changes the size and not the species: waisted through the
+			# middle, deep at the pad.
+			_shape(canvas, at, zoom, _stock_shape(span.x, span.y), fill, line)
+			_shape(canvas, at, zoom, _butt_pad(span.x, span.y),
+				fill.darkened(0.26), line)
 
 
 ## How far a drum leans toward the muzzle, in radians.
