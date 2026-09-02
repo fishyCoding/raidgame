@@ -233,20 +233,6 @@ static func draw_gun(canvas: CanvasItem, at: Vector2, zoom: float,
 	_shape(canvas, at, zoom, _box(body.x * 0.54, -body.y * 0.24,
 		body.x * 0.20, body.y * 0.26), METAL.darkened(0.32), Color(EDGE, 0.3))
 
-	# The magwell: the housing the magazine goes up into. Without it a box
-	# magazine looks stuck to the underside of the gun rather than fed through
-	# it, and it is the single detail that makes the underside read as designed.
-	var well_deep: float = p["well"]
-	var well_at: float = p["mag_at"]
-	if well_deep > 0.0 and well_at > 0.0:
-		var well_wide := 11.0
-		_shape(canvas, at, zoom, PackedVector2Array([
-			Vector2(well_at - well_wide * 0.5 - 1.0, body.y * 0.30),
-			Vector2(well_at + well_wide * 0.5 + 1.0, body.y * 0.30),
-			Vector2(well_at + well_wide * 0.5, body.y * 0.42 + well_deep),
-			Vector2(well_at - well_wide * 0.5 - 2.0, body.y * 0.42 + well_deep)]),
-			METAL.lightened(0.05), EDGE)
-
 	# The one feature that tells this weapon apart from the others at a glance.
 	_draw_mark(canvas, at, zoom, p)
 
@@ -262,6 +248,27 @@ static func draw_gun(canvas: CanvasItem, at: Vector2, zoom: float,
 			Vector2(well.x - 4.0, well.y - 1.0), Vector2(well.x + 4.0, well.y - 1.0),
 			Vector2(well.x + 3.2, well.y + 13.0),
 			Vector2(well.x - 5.6, well.y + 13.0)]))
+
+	# The magwell last, over the magazine rather than under it.
+	#
+	# It is the housing the magazine goes *up into*, so it has to be in front of
+	# it: drawn first, the magazine's own outline ran across the well and the two
+	# read as a box hung under the gun beside another box. Drawn after, the
+	# magazine disappears into the well the way it does on the real thing, and
+	# the join stops being a line at all.
+	#
+	# Without the well at all a magazine looks stuck to the underside, and it is
+	# the single detail that makes the underside read as designed.
+	var well_deep: float = p["well"]
+	var well_at: float = p["mag_at"]
+	if well_deep > 0.0 and well_at > 0.0:
+		var well_wide := 11.0
+		_shape(canvas, at, zoom, PackedVector2Array([
+			Vector2(well_at - well_wide * 0.5 - 1.0, body.y * 0.30),
+			Vector2(well_at + well_wide * 0.5 + 1.0, body.y * 0.30),
+			Vector2(well_at + well_wide * 0.5, body.y * 0.42 + well_deep),
+			Vector2(well_at - well_wide * 0.5 - 2.0, body.y * 0.42 + well_deep)]),
+			METAL.lightened(0.05), EDGE)
 
 	# Trigger guard and grip, both thinner than they were.
 	var grip_x: float = p["grip_at"]
