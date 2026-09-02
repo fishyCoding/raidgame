@@ -35,10 +35,10 @@ const PROFILES := {
 		"guard": 0.0, "grip_at": 8.0, "mag_at": 10.0, "stock": 0.0, "vents": 0,
 		"mark": "", "well": 0.0},
 	"SMG": {"receiver": Vector2(48.0, 11.5), "barrel": Vector2(20.0, 5.0),
-		"guard": 16.0, "grip_at": 16.0, "mag_at": 28.0, "stock": 18.0, "vents": 2,
+		"guard": 16.0, "grip_at": 16.0, "mag_at": 32.0, "stock": 18.0, "vents": 2,
 		"mark": "shroud", "well": 4.0},
 	"AR": {"receiver": Vector2(58.0, 11.5), "barrel": Vector2(40.0, 4.2),
-		"guard": 28.0, "grip_at": 15.0, "mag_at": 30.0, "stock": 24.0, "vents": 4,
+		"guard": 28.0, "grip_at": 15.0, "mag_at": 35.0, "stock": 24.0, "vents": 4,
 		"mark": "carry", "well": 5.0},
 	"SHOTGUN": {"receiver": Vector2(52.0, 13.0), "barrel": Vector2(46.0, 6.5),
 		"guard": 32.0, "grip_at": 14.0, "mag_at": 0.0, "stock": 26.0, "vents": 0,
@@ -47,13 +47,13 @@ const PROFILES := {
 		"guard": 32.0, "grip_at": 14.0, "mag_at": 0.0, "stock": 26.0, "vents": 0,
 		"mark": "tube", "well": 0.0},
 	"LMG": {"receiver": Vector2(70.0, 14.5), "barrel": Vector2(48.0, 5.0),
-		"guard": 22.0, "grip_at": 18.0, "mag_at": 38.0, "stock": 26.0, "vents": 5,
+		"guard": 22.0, "grip_at": 18.0, "mag_at": 43.0, "stock": 26.0, "vents": 5,
 		"mark": "bipod", "well": 6.0},
 	"SNIPER": {"receiver": Vector2(64.0, 11.0), "barrel": Vector2(64.0, 4.0),
-		"guard": 20.0, "grip_at": 18.0, "mag_at": 34.0, "stock": 32.0, "vents": 2,
+		"guard": 20.0, "grip_at": 18.0, "mag_at": 39.0, "stock": 32.0, "vents": 2,
 		"mark": "bolt", "well": 4.5},
 	"GRD": {"receiver": Vector2(54.0, 11.0), "barrel": Vector2(32.0, 4.2),
-		"guard": 24.0, "grip_at": 15.0, "mag_at": 28.0, "stock": 20.0, "vents": 3,
+		"guard": 24.0, "grip_at": 15.0, "mag_at": 32.0, "stock": 20.0, "vents": 3,
 		"mark": "", "well": 4.0},
 }
 ## Anything not in the table is drawn as a rifle rather than as nothing.
@@ -476,71 +476,53 @@ static func _draw_drum(canvas: CanvasItem, at: Vector2, zoom: float,
 		where: Vector2, span: Vector2, fill: Color, line: Color) -> void:
 	var tower := span.x * 0.40
 	var shoulder := where.y + span.y * 0.16
-	# The feed tower: the part in the magwell, the same width as any other
-	# magazine, because that is the part the gun has to accept. Upright - it is
-	# in the well, and the lean happens below it.
-	_shape(canvas, at, zoom, PackedVector2Array([
-		Vector2(where.x - tower * 0.5, where.y - 1.5),
-		Vector2(where.x + tower * 0.5, where.y - 1.5),
-		Vector2(where.x + tower * 0.5, shoulder + 2.0),
-		Vector2(where.x - tower * 0.5, shoulder + 2.0)]), fill, line)
-
-	# Everything below hangs off the well and leans forward from it, so the pivot
-	# is where the two meet rather than the middle of the body - a drum rotated
-	# about its own centre pulls its top out of the magazine it is supposed to be
-	# feeding.
+	# Everything below the well hangs off it and leans forward, so the pivot is
+	# where the two meet rather than the body's own centre - rotating about the
+	# middle pulls the top of the magazine out of the well it is feeding.
 	var pivot := Vector2(where.x, shoulder)
 	var half := span.x * 0.36
-	var top := shoulder + half
-	var bottom := where.y + span.y - half
-
-	# The body: half a circle at each end with straight sides between them, which
-	# is what a cylinder looks like from ninety degrees off its axis. Nudged
-	# forward of the well so it clears the pistol grip behind it.
 	var nose := half * 0.3
-	var shell := _capsule(Vector2(where.x + nose, top), Vector2(where.x + nose, bottom), half)
+	# The body runs most of the drop below the tower: a drum seen on edge is its
+	# diameter tall against its thickness wide, which is about half again taller
+	# than it is broad. Drawn square it reads as a box with rounded corners.
+	var top := shoulder + half * 0.30
+	var bottom := where.y + span.y - half * 0.30
+
+	# The body first, then the tower over the top of it. The other way round
+	# leaves the casing's outline drawn across the straight part of the magazine,
+	# and a seam where two pieces of one object overlap is exactly the thing that
+	# stops it reading as one object.
+	var shell := _casing(Vector2(where.x + nose, top), Vector2(where.x + nose, bottom), half)
 	_shape(canvas, at, zoom, _lean(shell, pivot), fill, line)
 
-	# A recessed face inside it, which is the whole of the shading. The first
-	# version of this put a lit strip down one side and a shaded strip down the
-	# other, and rotated they read as two bars laid across the drum rather than
-	# as a curved surface - one inset shape says "cylinder" and cannot be
-	# mistaken for anything else.
-	var inset := _capsule(Vector2(where.x + nose, top + half * 0.55),
-		Vector2(where.x + nose, bottom - half * 0.55), half * 0.62)
+	# A recessed face inside it, which is the whole of the shading. A lit strip
+	# down one side and a dark strip down the other read, once rotated, as two
+	# bars laid across the drum rather than as a curved surface.
+	var inset := _casing(Vector2(where.x + nose, top + half * 0.45),
+		Vector2(where.x + nose, bottom - half * 0.45), half * 0.66)
 	_shape(canvas, at, zoom, _lean(inset, pivot), fill.darkened(0.16),
-		Color(line, 0.25))
+		Color(line, 0.22))
 
 	# The winder cap at the middle of it, and a pair of ribs across the face.
 	var middle := Vector2(where.x + nose, (top + bottom) * 0.5)
 	var hub := _lean(PackedVector2Array([middle]), pivot)[0]
-	canvas.draw_circle(at + hub * zoom, half * 0.30 * zoom, fill.lightened(0.14))
-	canvas.draw_arc(at + hub * zoom, half * 0.30 * zoom, 0.0, TAU, 16, line,
-		maxf(1.0, zoom * 0.26), true)
+	canvas.draw_circle(at + hub * zoom, half * 0.28 * zoom, fill.lightened(0.14))
+	canvas.draw_arc(at + hub * zoom, half * 0.28 * zoom, 0.0, TAU, 16, line,
+		maxf(1.0, zoom * 0.24), true)
 	for i in 2:
-		var band := top + (bottom - top) * (0.26 + 0.48 * float(i))
+		var band := top + (bottom - top) * (0.24 + 0.52 * float(i))
 		var rib := _lean(PackedVector2Array([
-			Vector2(where.x + nose - half * 0.5, band),
-			Vector2(where.x + nose + half * 0.5, band)]), pivot)
+			Vector2(where.x + nose - half * 0.46, band),
+			Vector2(where.x + nose + half * 0.46, band)]), pivot)
 		canvas.draw_line(at + rib[0] * zoom, at + rib[1] * zoom,
-			Color(line, 0.28), maxf(1.0, zoom * 0.22))
+			Color(line, 0.26), maxf(1.0, zoom * 0.2))
 
-
-## A capsule: a straight-sided body with a half circle at each end, from one
-## centre to the other. The drum's outline, and the inset inside it.
-static func _capsule(from: Vector2, to: Vector2, wide: float) -> PackedVector2Array:
-	var out := PackedVector2Array()
-	# Round the bottom first, left to right, then back up and round the top the
-	# same way. Both arcs have to run the *same way round the outline* - sweeping
-	# each of them left-to-right in its own local space is what turned this into
-	# a bowtie, because the second one then doubles back through the first.
-	for i in range(0, 11):
-		var turn := PI * float(i) / 10.0
-		out.append(to + Vector2(cos(turn) * wide, sin(turn) * wide))
-	for i in range(0, 11):
-		var turn := PI + PI * float(i) / 10.0
-		out.append(from + Vector2(cos(turn) * wide, sin(turn) * wide))
-	return out
+	# And the feed tower last, upright, covering where the body passes behind it.
+	_shape(canvas, at, zoom, PackedVector2Array([
+		Vector2(where.x - tower * 0.5, where.y - 1.5),
+		Vector2(where.x + tower * 0.5, where.y - 1.5),
+		Vector2(where.x + tower * 0.5, shoulder + 3.0),
+		Vector2(where.x - tower * 0.5, shoulder + 3.0)]), fill, line)
 
 
 ## Leans a set of points forward about a pivot. Negative because screen y is
@@ -549,6 +531,36 @@ static func _lean(points: PackedVector2Array, pivot: Vector2) -> PackedVector2Ar
 	var out := PackedVector2Array()
 	for point in points:
 		out.append(pivot + (point - pivot).rotated(-DRUM_TILT))
+	return out
+
+
+## A drum casing seen edge on: a rectangle with the corners taken off, from the
+## middle of its top edge to the middle of its bottom edge.
+##
+## Not a capsule. Full half-circle ends made it read as a pill, and a drum from
+## this angle is a cylinder with a rim - much closer to a rectangle than to a
+## lozenge. The first attempt at the corners mirrored one of the four arcs by
+## negating it, which is not the same as reflecting it, and the result was a
+## boot.
+##
+## Walked clockwise in screen space, one corner at a time, so the outline never
+## doubles back on itself.
+static func _casing(from: Vector2, to: Vector2, wide: float) -> PackedVector2Array:
+	var round_by := minf(wide * 0.45, (to.y - from.y) * 0.45)
+	var out := PackedVector2Array()
+	var corners := [
+		[Vector2(from.x + wide - round_by, from.y + round_by), -PI * 0.5, 0.0],
+		[Vector2(to.x + wide - round_by, to.y - round_by), 0.0, PI * 0.5],
+		[Vector2(to.x - wide + round_by, to.y - round_by), PI * 0.5, PI],
+		[Vector2(from.x - wide + round_by, from.y + round_by), PI, PI * 1.5],
+	]
+	for corner in corners:
+		var middle: Vector2 = corner[0]
+		var from_turn: float = corner[1]
+		var to_turn: float = corner[2]
+		for i in range(0, 5):
+			var turn: float = lerpf(from_turn, to_turn, float(i) / 4.0)
+			out.append(middle + Vector2(cos(turn), sin(turn)) * round_by)
 	return out
 
 

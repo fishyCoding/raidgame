@@ -15,5 +15,5 @@ reload_scale = 1.55
 cells_delta = 1
 fits_calibres = Array[StringName]([&"9mm", &"5.56", &"7.62"])
 fits_sidearm = false
-art_size = Vector2(17, 22)
+art_size = Vector2(17, 28)
 tint = Color(0.5, 0.56, 0.66, 1)
