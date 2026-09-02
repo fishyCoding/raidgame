@@ -1161,12 +1161,32 @@ func _draw_power_rack(at: Vector2) -> float:
 		return y + 52.0
 
 	var grid := _inventory.power
-	var box := Rect2(Vector2(at.x, y),
+	var box := Rect2(Vector2(at.x + 8.0, y + 6.0),
 		Vector2(grid.width, grid.height) * (PACK_CELL + GAP))
 	var selected: bool = _open.get("id", "") == "rack"
 	_regions.append({
 		"kind": "pack", "rect": box, "id": "rack", "list": "ultimate", "label": "POWER RACK",
 	})
+
+	# The casing round the cells. The rack and the thing that runs it were drawn
+	# as two objects - a grid here and a little picture of the same grid over in
+	# the slot - which is one object too many for a thing whose whole point is
+	# that the gadgets live *inside* it. So the source is the frame now, and what
+	# is racked sits in it.
+	var shell := Rect2(box.position - Vector2(7.0, 7.0), box.size + Vector2(14.0, 14.0))
+	draw_rect(shell, Color(source.power.tint, 0.10))
+	draw_rect(shell, Color(source.power.tint, 0.9 if selected else 0.55), false,
+		2.0 if selected else 1.0)
+	# The lug it hangs off, and the rails down its long sides.
+	draw_rect(Rect2(Vector2(shell.position.x - 4.0, shell.get_center().y - 4.0),
+		Vector2(4.0, 8.0)), Color(source.power.tint, 0.7))
+	draw_line(Vector2(shell.position.x + 3.0, shell.position.y - 2.0),
+		Vector2(shell.end.x - 3.0, shell.position.y - 2.0),
+		Color(source.power.tint, 0.35), 1.0)
+	draw_line(Vector2(shell.position.x + 3.0, shell.end.y + 2.0),
+		Vector2(shell.end.x - 3.0, shell.end.y + 2.0),
+		Color(source.power.tint, 0.35), 1.0)
+
 	for cy in grid.height:
 		for cx in grid.width:
 			draw_rect(Rect2(box.position + Vector2(cx, cy) * (PACK_CELL + GAP),
@@ -1180,16 +1200,24 @@ func _draw_power_rack(at: Vector2) -> float:
 		# raid, and the shop is where you learn where to look.
 		draw_rect(Rect2(Vector2(tile.position.x + 3.0, tile.end.y - 5.0),
 			Vector2(tile.size.x - 6.0, 2.0)), Color(LINE, 0.8))
-	if selected:
-		draw_rect(box, ACCENT, false, 2.0)
 
-	# What is left, in cells, next to the grid. The number that decides whether
-	# the gadget you are looking at on the shelf can come with you.
+	# The charge rating, as pips up the outside of the casing - the second thing
+	# a source is bought for and otherwise a number in a sentence.
+	var pips := 3 if source.power.charge_scale < 0.9 else (
+		2 if source.power.charge_scale <= 1.0 else 1)
+	for i in pips:
+		draw_rect(Rect2(Vector2(shell.end.x + 4.0, shell.end.y - 6.0 - float(i) * 6.0),
+			Vector2(3.0, 4.0)), Color(source.power.tint, 0.85))
+
+	var font2 := ThemeDB.fallback_font
 	var free := grid.cell_count() - grid.used_cells()
-	draw_string(font, Vector2(box.end.x + 12.0, box.position.y + 16.0),
+	draw_string(font2, Vector2(shell.end.x + 14.0, shell.position.y + 16.0),
 		"%d/%d cells" % [grid.used_cells(), grid.cell_count()],
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, DIM if free > 0 else BAD)
-	return y + box.size.y
+	draw_string(font2, Vector2(shell.end.x + 14.0, shell.position.y + 31.0),
+		"charges at %d%%" % roundi(100.0 / maxf(source.power.charge_scale, 0.01)),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(source.power.tint, 0.8))
+	return shell.end.y + 4.0
 
 
 ## The pack, drawn at the size it actually is. An empty back is an empty

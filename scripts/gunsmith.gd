@@ -36,6 +36,7 @@ const SHELF := {
 		"res://resources/attachments/red_dot.tres",
 		"res://resources/attachments/holo_2x.tres",
 		"res://resources/attachments/marksman_4x.tres",
+		"res://resources/attachments/sniper_scope.tres",
 	],
 	AttachmentData.Slot.GRIP: [
 		"res://resources/attachments/laser_sight.tres",

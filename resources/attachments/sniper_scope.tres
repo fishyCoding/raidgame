@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="AttachmentData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/attachment_data.gd" id="1_att"]
+
+[resource]
+script = ExtResource("1_att")
+display_name = "Sniper Scope"
+short_name = "SCOPE"
+slot = 2
+price = 1800
+blurb = "Built round a bolt gun. Nothing else has the eye relief for it."
+accuracy_delta = 18.0
+handling_delta = -12.0
+stability_delta = 4.0
+magnify = 6.0
+ads_speed_scale = 0.62
+adds_glint = true
+fits_sidearm = false
+fits_weapons = Array[StringName]([&"SNIPER"])
+art_size = Vector2(34, 13)
+tint = Color(0.62, 0.8, 0.92, 1)

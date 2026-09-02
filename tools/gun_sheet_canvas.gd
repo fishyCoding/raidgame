@@ -59,8 +59,11 @@ func _draw() -> void:
 ## What will actually go on this weapon. A sidearm takes no stock and no
 ## foregrip, so asking for them would draw a gun the shop refuses to build.
 func _parts_for(gun: WeaponData) -> Array:
-	var wanted := ["marksman_4x", "suppressor", "drum_mag", "vertical_grip",
-		"heavy_stock", "red_dot", "extended_mag", "laser_sight"]
+	# Most particular first: the sniper scope fits one weapon, so it has to be
+	# offered before the 4x that fits everything, or the gun it was made for
+	# never gets drawn wearing it.
+	var wanted := ["sniper_scope", "marksman_4x", "suppressor", "drum_mag",
+		"vertical_grip", "heavy_stock", "red_dot", "extended_mag", "laser_sight"]
 	var out: Array = []
 	var filled := {}
 	for name in wanted:

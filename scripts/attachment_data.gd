@@ -38,6 +38,14 @@ enum Slot { MAGAZINE, MUZZLE, OPTIC, GRIP, STOCK }
 ## magazine does not go in a shotgun. Everything else bolts to a rail or a
 ## thread, and the guns in this game are all assumed to have both.
 @export var fits_calibres: Array[StringName] = []
+## Which guns this fits, by short name, empty meaning all of them.
+##
+## The blunt instrument, for the part that belongs to one weapon rather than to a
+## class of them - a scope built around a bolt gun's eye relief is not a thing
+## you bolt to an SMG at any price. Everything else should be describing itself
+## with the two rules below instead; a shelf full of parts that each name their
+## own gun is a shelf of upgrades rather than of decisions.
+@export var fits_weapons: Array[StringName] = []
 ## Whether it can go on a sidearm. A pistol takes a suppressor and a red dot; it
 ## does not take a stock or a foregrip, and offering them is offering a choice
 ## that is not one.
@@ -125,6 +133,8 @@ func fits(gun: WeaponData) -> bool:
 	if gun == null:
 		return false
 	if gun.sidearm and not fits_sidearm:
+		return false
+	if not fits_weapons.is_empty() and not fits_weapons.has(StringName(gun.short_name)):
 		return false
 	if fits_calibres.is_empty():
 		return true

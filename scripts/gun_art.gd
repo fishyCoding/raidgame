@@ -456,10 +456,19 @@ static func draw_part(canvas: CanvasItem, at: Vector2, zoom: float,
 ## edge - a deep, narrow, flat-sided casing with rounded ends, which is what a
 ## drum on a real rifle mostly looks like from the shooter's side.
 ##
-## EDGE is the one drawn. Set DRUM_FACE_ON to swap it, which is a one-word change
-## rather than a rewrite - both are kept because which one is right is a question
-## about the game's own point of view rather than about magazines.
-const DRUM_FACE_ON := false
+## Measured, rather than argued about. A Magpul D-60 is 7.4 inches long by 4.1
+## inches wide: the 4.1 is how far it stands out from the side of the gun and the
+## 7.4 is how far it hangs below the magwell. The wide dimension is the one
+## facing the shooter, so from the side you see the round face - a disc a bit
+## over five inches across with a feed tower on top of it - and the narrow one is
+## what you would see from the front. Thompson and PPSh drums are the same shape
+## and the same way round.
+##
+## So FACE is what is drawn, at those proportions: about three units to the inch
+## on these profiles, which puts the disc at 17 units across on a rifle 98 long.
+## EDGE is kept because it is the honest drawing of the other case and flipping
+## is one word - but the numbers say face.
+const DRUM_FACE_ON := true
 
 
 static func _draw_drum(canvas: CanvasItem, at: Vector2, zoom: float,
@@ -474,18 +483,26 @@ static func _draw_drum(canvas: CanvasItem, at: Vector2, zoom: float,
 		Vector2(where.x - tower * 0.5, shoulder + 1.5)]), fill, line)
 
 	if DRUM_FACE_ON:
-		# The round face: a disc with a hub and spokes.
-		var hub := Vector2(where.x, shoulder + span.y * 0.62)
-		var disc := span.y * 0.62
+		# The round face. art_size.x is the disc across and art_size.y the whole
+		# drop from the magwell, both to the D-60's proportions - so the tower is
+		# what is left over once the disc is taken off the bottom.
+		var disc := span.x * 0.5
+		var hub := Vector2(where.x + 0.5, where.y + span.y - disc)
 		canvas.draw_circle(at + hub * zoom, disc * zoom, fill)
-		canvas.draw_arc(at + hub * zoom, disc * zoom, 0.0, TAU, 30, line,
+		canvas.draw_arc(at + hub * zoom, disc * zoom, 0.0, TAU, 32, line,
 			maxf(1.0, zoom * 0.35), true)
-		canvas.draw_circle(at + hub * zoom, disc * 0.28 * zoom, fill.darkened(0.3))
-		for i in 4:
-			var turn := TAU * float(i) / 4.0 + 0.4
-			canvas.draw_line(at + (hub + Vector2(cos(turn), sin(turn)) * disc * 0.34) * zoom,
-				at + (hub + Vector2(cos(turn), sin(turn)) * disc * 0.86) * zoom,
-				Color(line, 0.45), maxf(1.0, zoom * 0.28))
+		# The rotor at the middle and the window that shows how much is left in
+		# it: the two details that say drum rather than ball.
+		canvas.draw_circle(at + hub * zoom, disc * 0.26 * zoom, fill.darkened(0.32))
+		canvas.draw_arc(at + hub * zoom, disc * 0.26 * zoom, 0.0, TAU, 18, line,
+			maxf(1.0, zoom * 0.28), true)
+		for i in 3:
+			var turn := TAU * float(i) / 3.0 + 0.5
+			canvas.draw_line(at + (hub + Vector2(cos(turn), sin(turn)) * disc * 0.32) * zoom,
+				at + (hub + Vector2(cos(turn), sin(turn)) * disc * 0.88) * zoom,
+				Color(line, 0.40), maxf(1.0, zoom * 0.3))
+		canvas.draw_arc(at + hub * zoom, disc * 0.62 * zoom, PI * 0.15, PI * 0.85,
+			14, Color(line, 0.30), maxf(1.0, zoom * 0.5), true)
 		return
 
 	# The edge: a deep casing with flat sides and rounded ends, a little wider
