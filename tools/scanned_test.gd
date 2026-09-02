@@ -113,6 +113,7 @@ func _run() -> void:
 			load("res://resources/gadgets/headcount.tres"))
 		ult.charge = 1.0
 		# The second slot, so whatever the menu staged in the first is left alone.
+		mine.inventory.fit_default_power()
 		mine.inventory.set_ultimate(ult, 1)
 		mine._use_ultimate(1)
 		# Widened after the cast. Two players insert at opposite ends of the map

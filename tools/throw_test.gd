@@ -42,6 +42,7 @@ func _debug_key() -> void:
 	print("  ultimate before: %s" % (kit.ultimates[0].label() if kit.ultimates[0] else "none"))
 	# The same path the key takes, minus the keyboard.
 	if kit.ultimates[0] == null:
+		kit.fit_default_power()
 		kit.set_ultimate(Item.from_gadget(
 			load("res://resources/gadgets/overload.tres") as GadgetData))
 	kit.ultimates[0].charge = 1.0

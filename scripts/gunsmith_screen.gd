@@ -166,18 +166,19 @@ func _draw_bench(box: Rect2) -> void:
 			Color(LINE, 0.25), 1.0)
 
 	var gun := item.base_weapon
-	var span := _span_of(gun, item.parts)
+	# Length, depth and how far it reaches behind the receiver, all from the one
+	# place that knows how a gun is drawn. See GunArt.span.
+	var span := GunArt.span(gun, item.parts)
 	var zoom := minf((bench.size.x - 70.0) / maxf(span.x, 1.0),
 		(bench.size.y - 44.0) / maxf(span.y, 1.0))
 	zoom = clampf(zoom, 0.8, 5.5)
 	# Centred on what is actually drawn, including whatever sticks out past the
 	# barrel, so bolting a can on does not shove the gun off its own bench. The
-	# origin is the back of the receiver, and the stock reaches behind it - so
-	# the stock's length comes *back* off the half-span, not off the front.
-	var behind: float = -_reach_back(gun, item.parts)
+	# origin is the back of the receiver and the stock reaches behind it, so the
+	# stock's length comes back off the half-span rather than off the front.
 	var origin := bench.get_center()
-	origin.x -= (span.x * 0.5 - behind) * zoom
-	origin.y -= _drop(gun, item.parts) * 0.35 * zoom
+	origin.x -= (span.x * 0.5 - span.z) * zoom
+	origin.y -= span.y * 0.12 * zoom
 	GunArt.draw_gun(self, origin, zoom, gun, item.parts)
 
 	var font := ThemeDB.fallback_font
@@ -389,46 +390,6 @@ func _draw_card(box: Rect2, part: AttachmentData, fitted: bool) -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, box.size.x * 0.44, 11,
 			GOOD if lines[i][1] else BAD)
 		y += 13.0
-
-
-# --- how big the drawing is ---------------------------------------------------
-#
-# The bench has to know how much room the gun needs before it draws it, and a
-# suppressor sticking out past the muzzle is part of that. All three of these ask
-# the same question about a different axis.
-
-
-func _span_of(gun: WeaponData, parts: Array) -> Vector2:
-	var p: Dictionary = GunArt.profile(gun)
-	var body: Vector2 = p["receiver"]
-	var barrel: Vector2 = p["barrel"]
-	var long := body.x + barrel.x - _reach_back(gun, parts)
-	for part in parts:
-		if (part as AttachmentData).slot == AttachmentData.Slot.MUZZLE:
-			long += (part as AttachmentData).art_size.x
-	return Vector2(long, body.y + 22.0 + _drop(gun, parts))
-
-
-## How far behind the origin anything reaches - the stock, and a longer one if
-## somebody bought it.
-func _reach_back(gun: WeaponData, parts: Array) -> float:
-	var back: float = GunArt.profile(gun)["stock"]
-	for part in parts:
-		var it := part as AttachmentData
-		if it.slot == AttachmentData.Slot.STOCK:
-			back = maxf(back, it.art_size.x)
-	return -back
-
-
-## How far below the bore line the deepest thing hangs, so a drum does not end up
-## drawn through the bottom of the bench.
-func _drop(gun: WeaponData, parts: Array) -> float:
-	var deep := 20.0
-	for part in parts:
-		var it := part as AttachmentData
-		if it.slot == AttachmentData.Slot.MAGAZINE:
-			deep = maxf(deep, it.art_size.y * 1.8)
-	return deep
 
 
 # --- input --------------------------------------------------------------------

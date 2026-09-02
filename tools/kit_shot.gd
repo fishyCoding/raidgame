@@ -25,12 +25,19 @@ func _run() -> void:
 		quit(1)
 		return
 
-	# A loadout, so the screen is not a column of empty boxes.
-	shop.credits = 12000
+	# A loadout, so the screen is not a column of empty boxes. The power source
+	# comes before the gadget on purpose: an ultimate has nowhere to go until
+	# there is a rack to put it in, and buying them the other way round is a
+	# refusal rather than a shot.
+	shop.credits = 16000
 	for pick in [["backpack", 1], ["primary", 1], ["secondary", 0],
-			["helmet", 1], ["vest", 0], ["ultimate", 0], ["throw0", 0]]:
+			["helmet", 1], ["vest", 0], ["power", 1], ["throw0", 0]]:
 		_select(shop, pick[0])
 		shop._buy(shop.CATALOGUE[_list_for(shop, pick[0])][pick[1]])
+	# Two gadgets into the rack, which is what fills the middle column.
+	for which in [6, 3]:
+		_select(shop, "rack")
+		shop._buy(shop.CATALOGUE["ultimate"][which])
 	for i in 2:
 		_select(shop, "pocket%d" % i)
 		shop._buy(shop.CATALOGUE["pocket"][1])
@@ -71,6 +78,11 @@ func _select(shop: Node, id: String) -> void:
 	if id.begins_with("pocket"):
 		kind = "pocket"
 		list = "pocket"
+	# The rack is a container in the middle column rather than a slot on the
+	# left, so it names its own list the way the pockets do.
+	if id == "rack":
+		kind = "pack"
+		list = "ultimate"
 	shop._open = {"id": id, "list": list, "label": id.to_upper(), "kind": kind}
 
 

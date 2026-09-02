@@ -22,6 +22,7 @@ func _capture(main: Node) -> void:
 	var kit: Inventory = player.inventory
 	kit.store(Item.from_gadget(load("res://resources/gadgets/frag.tres")))
 	kit.store(Item.from_gadget(load("res://resources/gadgets/smoke.tres")))
+	kit.fit_default_power()
 	kit.set_ultimate(Item.from_gadget(load("res://resources/gadgets/recon_bow.tres")))
 	kit.ultimates[0].charge = 0.6
 

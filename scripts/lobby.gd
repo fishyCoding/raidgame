@@ -290,6 +290,9 @@ func _test_kit() -> Inventory:
 	# The bag first: rounds need somewhere to go, and five pockets do not hold a
 	# session's worth of shooting at things.
 	kit.set_backpack(Item.from_backpack(load("res://resources/backpacks/patrol_pack.tres")))
+	# The rack before the thing that goes in it: an ultimate has nowhere to be
+	# without a power source, which is the whole point of the slot.
+	kit.set_power(Item.from_power(load("res://resources/power/power_cell.tres")))
 	kit.set_ultimate(Item.from_gadget(load("res://resources/gadgets/overload.tres")))
 	kit.set_throwable(0, Item.from_gadget(load("res://resources/gadgets/frag.tres")))
 	kit.set_throwable(1, Item.from_gadget(load("res://resources/gadgets/smoke.tres")))

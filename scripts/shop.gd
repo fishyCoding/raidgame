@@ -45,6 +45,17 @@ const REVIVES_PER_STACK := 5
 ## Fully opaque. At 0.97 the HUD underneath ghosted through the panel, which
 ## read as a rendering fault rather than as depth.
 const BG := Color(0.05, 0.06, 0.08)
+## A shade lighter than the screen, so the top band reads as a header rather than
+## as the first thing in the list.
+const HEADER_BG := Color(0.07, 0.08, 0.11)
+## How deep that band is. The shelf masks its overhanging cards up to this line
+## and no further, and the header is painted after the shelf - between them, a
+## card scrolled off the top cannot land on the credits.
+const HEADER_H := 96.0
+## The mask strips at the ends of the shelf, opaque. PANEL is very slightly
+## see-through, which is fine as a panel and wrong as a mask: a card scrolled
+## under it stayed faintly readable, which looks like a rendering fault.
+const MASK := Color(0.09, 0.1, 0.13)
 const PANEL := Color(0.09, 0.1, 0.13, 0.95)
 const SLOT_BG := Color(0.12, 0.14, 0.18)
 const CELL_BG := Color(0.15, 0.17, 0.21)
@@ -68,6 +79,11 @@ const PACK_CELL := 26.0
 const GAP := 2.0
 
 const MARGIN := 44.0
+## The middle column: how wide its sections rule, how tall a gun box is, and the
+## air between one section and the next.
+const COLUMN_W := 300.0
+const GUN_BOX_H := 74.0
+const SECTION_GAP := 18.0
 const SLOT_W := 272.0
 const SLOT_H := 46.0
 const SLOT_GAP := 6.0
@@ -101,8 +117,10 @@ const SLOTS := [
 	{"id": "helmet", "label": "HELMET", "list": "helmet"},
 	{"id": "vest", "label": "VEST", "list": "vest"},
 	{"id": "backpack", "label": "BACKPACK", "list": "backpack"},
-	{"id": "ultimate", "label": "ULTIMATE 1", "list": "ultimate"},
-	{"id": "ultimate2", "label": "ULTIMATE 2", "list": "ultimate"},
+	# One power slot where two ultimate slots used to be. What you can run is a
+	# question about the rack you bought and what will fit in it now, and that
+	# question is asked over in the middle column where the rack is drawn.
+	{"id": "power", "label": "POWER", "list": "power"},
 	{"id": "throw0", "label": "THROW 1", "list": "throw"},
 	{"id": "throw1", "label": "THROW 2", "list": "throw"},
 ]
@@ -136,6 +154,11 @@ const CATALOGUE := {
 		{"kind": "backpack", "path": "res://resources/backpacks/patrol_pack.tres", "price": 700},
 		{"kind": "backpack", "path": "res://resources/backpacks/assault_pack.tres", "price": 1400},
 		{"kind": "backpack", "path": "res://resources/backpacks/heavy_rucksack.tres", "price": 2400},
+	],
+	"power": [
+		{"kind": "power", "path": "res://resources/power/cell_rack.tres", "price": 600},
+		{"kind": "power", "path": "res://resources/power/power_cell.tres", "price": 1300},
+		{"kind": "power", "path": "res://resources/power/rail_bank.tres", "price": 1900},
 	],
 	"ultimate": [
 		{"kind": "gadget", "path": "res://resources/gadgets/overload.tres", "price": 1200},
@@ -288,8 +311,7 @@ func _slot_item(id: String) -> Item:
 		"helmet": return _inventory.helmet
 		"vest": return _inventory.vest
 		"backpack": return _inventory.backpack_item
-		"ultimate": return _inventory.get_ultimate(0)
-		"ultimate2": return _inventory.get_ultimate(1)
+		"power": return _inventory.power_item
 		"throw0": return _inventory.get_throwable(0)
 		"throw1": return _inventory.get_throwable(1)
 	return null
@@ -310,10 +332,8 @@ func _set_slot_item(id: String, item: Item) -> bool:
 			_inventory.set_worn(Inventory.Wear.VEST, item)
 		"backpack":
 			return _inventory.set_backpack(item)
-		"ultimate":
-			_inventory.set_ultimate(item, 0)
-		"ultimate2":
-			_inventory.set_ultimate(item, 1)
+		"power":
+			return _inventory.set_power(item)
 		"throw0":
 			_inventory.set_throwable(0, item)
 		"throw1":
@@ -465,9 +485,25 @@ func _sell_back() -> void:
 		_inventory.changed.emit()
 		return
 
+	# Emptying the rack is the same idea as emptying a pocket: the gadgets in it
+	# were bought one at a time and are owed back one at a time.
+	if id == "rack":
+		for item in _inventory.power.items.duplicate():
+			_inventory.power.remove(item)
+			_refund(item)
+		_inventory.changed.emit()
+		return
+
 	var held := _slot_item(id)
 	if held == null:
 		return
+	# Taking the source off takes the rack with it, so the gadgets racked in it
+	# are refunded first - the same way a bag is emptied before it comes off.
+	if id == "power":
+		for racked in _inventory.power.items.duplicate():
+			_inventory.power.remove(racked)
+			_refund(racked)
+
 	# Emptying the bag first, so taking it off never has to strand its contents.
 	if id == "backpack":
 		for item in _inventory.backpack.items.duplicate():
@@ -535,6 +571,19 @@ func _buy(entry: Dictionary) -> void:
 	if id == "pack":
 		_buy_into(_inventory.backpack, item, price)
 		return
+	# A gadget goes into the rack rather than into a numbered slot, so it is
+	# bought the way anything else that has to fit somewhere is bought - and it
+	# is refused, in as many words, when the rack you own has no room for it.
+	if id == "rack":
+		if _inventory.power_item == null:
+			_message = "nothing to run it - buy a power source first"
+			return
+		if not _inventory.power.has_room(item.size):
+			_message = "%s needs %dx%d - the %s has no room" % [item.title(),
+				item.size.x, item.size.y, _inventory.power_item.power.display_name]
+			return
+		_buy_into(_inventory.power, item, price)
+		return
 
 	# A bigger bag is free to take; a smaller one has to be refused while there is
 	# something in the old one that would not survive the move.
@@ -544,6 +593,24 @@ func _buy(entry: Dictionary) -> void:
 			_message = "%s is too small - %d item(s) would not fit" % [
 				item.title(), stranded.size()]
 			return
+
+	# And the same rule for the rack: swapping to a source that cannot hold what
+	# is already running is refused rather than quietly dropping a gadget you
+	# paid for. Nothing is moved between racks - what fits, fits where it sits.
+	if id == "power" and _inventory.power_item != null:
+		var racked := _inventory.ultimates
+		if not racked.is_empty():
+			var trial := ItemGrid.new(item.contents.width, item.contents.height)
+			var homeless := 0
+			for held in racked:
+				var was := held.cell
+				if not trial.add(held):
+					homeless += 1
+				held.cell = was
+			if homeless > 0:
+				_message = "%s is too small - take %d gadget(s) out first" % [
+					item.title(), homeless]
+				return
 
 	if replacing:
 		_refund(replacing)
@@ -621,6 +688,8 @@ func _make(entry: Dictionary) -> Item:
 			return Item.from_armor(load(entry.path) as ArmorData)
 		"gadget":
 			return Item.from_gadget(load(entry.path) as GadgetData)
+		"power":
+			return Item.from_power(load(entry.path) as PowerData)
 		"backpack":
 			return Item.from_backpack(load(entry.path) as BackpackData)
 		"ammo":
@@ -710,21 +779,17 @@ func _draw() -> void:
 	_shelf = Rect2()
 	draw_rect(Rect2(Vector2.ZERO, size), BG)
 
-	draw_string(font, Vector2(MARGIN, 54.0), "KIT UP",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 30, ACCENT)
-	draw_string(font, Vector2(MARGIN, 76.0),
-		"click a slot to fill it - what you take in, you can lose",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, DIM)
-	draw_string(font, Vector2(0.0, 54.0), "%d credits" % credits,
-		HORIZONTAL_ALIGNMENT_RIGHT, size.x - MARGIN, 24, GOOD if credits > 0 else BAD)
-	if not status.is_empty():
-		draw_string(font, Vector2(0.0, 76.0), status,
-			HORIZONTAL_ALIGNMENT_RIGHT, size.x - MARGIN, 14, ACCENT)
-
-	var top := 100.0
+	var top := 112.0
 	_draw_slots(Vector2(MARGIN, top))
 	_draw_carried(Vector2(MARGIN + SLOT_W + 30.0, top))
 	_draw_picker(Vector2(size.x - MARGIN - PICK_W, top))
+
+	# The header last, over the shelf. A card is drawn whole the moment any part
+	# of it is in view, so one scrolled half off the top overhangs the panel and
+	# has to be masked - and the mask used to run to y=0 and paint out the credits
+	# with it. Drawing the band afterwards means the overhang is covered by
+	# something that belongs there.
+	_draw_header(font)
 
 	# Wide enough for what is written on it. The label is not always DEPLOY -
 	# queuing for a match says so at length - and a fixed 220 px printed the last
@@ -742,13 +807,44 @@ func _draw() -> void:
 			HORIZONTAL_ALIGNMENT_CENTER, size.x, 13, DIM)
 
 
+## The band across the top: what this screen is, and what you have left to spend.
+##
+## Everything on it is positioned from a measured string rather than dropped into
+## a right-aligned box the width of the screen. That is not fussiness - the
+## right-aligned version of this drew nothing at all on some frames, and a
+## readout that is sometimes missing is worse than one that is merely plain. Two
+## numbers measured and placed cannot do that.
+func _draw_header(font: Font) -> void:
+	draw_rect(Rect2(Vector2.ZERO, Vector2(size.x, 96.0)), HEADER_BG)
+	draw_line(Vector2(0.0, 96.0), Vector2(size.x, 96.0), Color(ACCENT, 0.35), 1.0)
+
+	draw_string(font, Vector2(MARGIN, 52.0), "KIT UP",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 30, ACCENT)
+	draw_string(font, Vector2(MARGIN, 76.0),
+		"click a slot to fill it - what you take in, you can lose",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, DIM)
+
+	# The money, right-hand end, measured and placed.
+	var money := "%d" % credits
+	var money_w := font.get_string_size(money, HORIZONTAL_ALIGNMENT_LEFT, -1, 30).x
+	var unit_w := font.get_string_size(" credits", HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x
+	var right := size.x - MARGIN
+	draw_string(font, Vector2(right - unit_w, 52.0), " credits",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, DIM)
+	draw_string(font, Vector2(right - unit_w - money_w, 52.0), money,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 30, GOOD if credits > 0 else BAD)
+	if not status.is_empty():
+		var wide := font.get_string_size(status, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+		draw_string(font, Vector2(right - wide, 76.0), status,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ACCENT)
+
+
 ## The body: one clickable box per slot, filled or not. A box shows the footprint
 ## the thing in it takes up, so the shape of your kit is visible while you spend
 ## rather than only once you are looking at the grid.
 func _draw_slots(at: Vector2) -> void:
 	var font := ThemeDB.fallback_font
-	draw_string(font, at, "LOADOUT", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ACCENT)
-	var y := at.y + 14.0
+	var y := _section(at, "LOADOUT", "what you own", SLOT_W)
 
 	for slot in SLOTS:
 		var box := Rect2(Vector2(at.x, y), Vector2(SLOT_W, SLOT_H))
@@ -757,19 +853,24 @@ func _draw_slots(at: Vector2) -> void:
 
 		draw_rect(box, PANEL if selected else SLOT_BG)
 		draw_rect(box, ACCENT if selected else LINE, false, 2.0 if selected else 1.0)
+		# A chip in the item's own colour down the left edge. Filled and empty
+		# slots then differ by more than the word inside them, which is what lets
+		# you count what is missing without reading the column.
+		if item:
+			draw_rect(Rect2(box.position, Vector2(3.0, box.size.y)), item.tint())
 		draw_string(font, box.position + Vector2(10.0, 17.0), slot.label,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, ACCENT if selected else DIM)
 
 		if item:
-			_draw_footprint(item, Vector2(box.end.x - 14.0, box.position.y + 9.0))
+			_draw_footprint(item, Vector2(box.end.x - 12.0, box.position.y + 7.0))
 			draw_string(font, box.position + Vector2(10.0, 36.0), item.label(),
 				HORIZONTAL_ALIGNMENT_LEFT, SLOT_W - 90.0, 14, TEXT)
 			# A gun can be taken apart and put back together, and this is the way
 			# in. Registered before the slot's own region so the pill wins the
 			# click it is sitting inside - see _press, which takes the first hit.
 			if item.is_weapon():
-				var pill := Rect2(Vector2(box.end.x - 82.0, box.position.y + 24.0),
-					Vector2(72.0, 17.0))
+				var pill := Rect2(Vector2(box.end.x - 78.0, box.position.y + 25.0),
+					Vector2(68.0, 16.0))
 				# Every region carries an `id`, including this one. It is what
 				# the harnesses look regions up by, and a dictionary missing the
 				# key does not return false from `region.id == "buy"` - it raises
@@ -858,16 +959,86 @@ func _draw_footprint(item: Item, right_edge: Vector2) -> void:
 	draw_rect(Rect2(corner, span - Vector2(GAP, GAP)), colour, false, 1.0)
 
 
-## Pockets and the pack: the space you are carrying it all in. Each pocket is
-## its own box because each pocket is its own container - drawing them as one
-## strip of five would suggest a medkit could lie across two of them.
+## The body itself: what you are holding, what it is in, and what is running.
+##
+## Four boxes down the middle, in the order you would touch them. Guns at the
+## top because they are why you are here; pockets and the pack because they are
+## the space everything else has to fit in; the rack between them because an
+## ultimate is now a thing that takes up room like anything else.
+##
+## Every one of them is drawn at the size it really is. That is the whole point
+## of this column - the left-hand slots tell you what you own, and this tells you
+## whether it fits.
 func _draw_carried(at: Vector2) -> void:
-	var font := ThemeDB.fallback_font
-	draw_string(font, at, "POCKETS", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ACCENT)
-	draw_string(font, at + Vector2(66.0, 0.0), "one cell each - small things only",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, DIM)
+	var y := at.y
+	y = _draw_gun_rack(Vector2(at.x, y)) + SECTION_GAP
+	y = _draw_pockets(Vector2(at.x, y)) + SECTION_GAP
+	y = _draw_power_rack(Vector2(at.x, y)) + SECTION_GAP
+	_draw_pack(Vector2(at.x, y))
 
-	var y := at.y + 14.0
+
+## A heading with a rule under it. Every section on this screen gets one, so the
+## eye can find where a box begins without reading the words.
+func _section(at: Vector2, title: String, note := "", wide := COLUMN_W) -> float:
+	var font := ThemeDB.fallback_font
+	draw_string(font, at, title, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ACCENT)
+	var used := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
+	if not note.is_empty():
+		draw_string(font, at + Vector2(used + 10.0, 0.0), note,
+			HORIZONTAL_ALIGNMENT_LEFT, wide - used - 10.0, 10, DIM)
+	draw_line(Vector2(at.x, at.y + 6.0), Vector2(at.x + wide, at.y + 6.0),
+		Color(LINE, 0.6), 1.0)
+	return at.y + 18.0
+
+
+## The guns, as objects rather than as two lines of text.
+##
+## The slots on the left already say which guns you bought. This says what they
+## are - drawn side-on with whatever is bolted to them, so a rifle you have hung
+## a scope and a can off looks like that gun and not like the word "AR". It is
+## also the second way into the workshop, and the obvious one: you click the
+## picture of the gun to work on the gun.
+func _draw_gun_rack(at: Vector2) -> float:
+	var font := ThemeDB.fallback_font
+	var y := _section(at, "WEAPONS", "click one to take it apart")
+	var wide := (COLUMN_W - 8.0) * 0.5
+
+	for i in 2:
+		var item: Item = _inventory.primary if i == 0 else _inventory.secondary
+		var box := Rect2(Vector2(at.x + float(i) * (wide + 8.0), y), Vector2(wide, GUN_BOX_H))
+		draw_rect(box, CELL_BG)
+		if item == null:
+			draw_rect(box, LINE, false, 1.0)
+			draw_string(font, box.position + Vector2(0.0, GUN_BOX_H * 0.5 + 4.0),
+				"no primary" if i == 0 else "no sidearm",
+				HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 11, Color(DIM, 0.7))
+			continue
+
+		_regions.append({"kind": "smith", "rect": box, "item": item, "id": "smith"})
+		draw_rect(box, Color(item.tint(), 0.55), false, 1.0)
+		# Scaled to the box the same way the workshop scales to its bench, so a
+		# sniper and a pistol are both drawn whole and neither is drawn tiny.
+		var span := GunArt.span(item.base_weapon, item.parts)
+		var zoom := minf((box.size.x - 22.0) / maxf(span.x, 1.0),
+			(box.size.y - 26.0) / maxf(span.y, 1.0))
+		var bore := Vector2(box.get_center().x - (span.x * 0.5 - span.z) * zoom,
+			box.position.y + box.size.y * 0.52)
+		GunArt.draw_gun(self, bore, zoom, item.base_weapon, item.parts)
+
+		draw_string(font, box.position + Vector2(8.0, 15.0), item.label(),
+			HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 16.0, 11, TEXT)
+		if not item.parts.is_empty():
+			draw_string(font, Vector2(0.0, box.end.y - 7.0),
+				"%d fitted" % item.parts.size(), HORIZONTAL_ALIGNMENT_RIGHT,
+				box.end.x - 8.0, 10, ACCENT)
+	return y + GUN_BOX_H
+
+
+## Pockets: each its own box because each is its own container. Drawing them as
+## one strip of five would suggest a medkit could lie across two of them.
+func _draw_pockets(at: Vector2) -> float:
+	var font := ThemeDB.fallback_font
+	var y := _section(at, "POCKETS", "one cell each - small things only")
 	for i in _inventory.pockets.size():
 		var pocket: ItemGrid = _inventory.pockets[i]
 		var box := Rect2(Vector2(at.x + i * (POCKET_BOX + 6.0), y),
@@ -886,28 +1057,87 @@ func _draw_carried(at: Vector2) -> void:
 		else:
 			draw_string(font, box.position + Vector2(0.0, 25.0), str(i + 1),
 				HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 13, Color(DIM, 0.5))
-	y += POCKET_BOX + 26.0
+	return y + POCKET_BOX
 
-	# The pack, drawn at the size it actually is. An empty back is an empty
-	# rectangle with the reason written in it, not a missing panel.
-	var bag := _inventory.backpack_item
-	var title := "BACKPACK" if bag == null else "BACKPACK  %s" % bag.backpack.display_name
-	draw_string(font, Vector2(at.x, y), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ACCENT)
-	draw_string(font, Vector2(at.x, y + 14.0),
-		"%d/%d cells" % [_inventory.backpack.used_cells(), _inventory.backpack.cell_count()],
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, DIM)
-	y += 24.0
 
-	if bag == null:
-		var empty := Rect2(Vector2(at.x, y), Vector2(240.0, 60.0))
+## The rack, and what is running in it.
+##
+## This is where an ultimate lives now. It is drawn as a grid rather than as two
+## labelled slots because that is what it is: a shape, with gadgets of different
+## shapes laid into it, and the whole decision is whether the two you want will
+## both go in the thing you could afford.
+func _draw_power_rack(at: Vector2) -> float:
+	var font := ThemeDB.fallback_font
+	var source: Item = _inventory.power_item
+	var note := "no source - ultimates have nowhere to go"
+	if source:
+		note = "%s  -  %s" % [source.power.display_name, source.power.summary()]
+	var y := _section(at, "POWER", note)
+
+	if source == null:
+		var empty := Rect2(Vector2(at.x, y), Vector2(240.0, 52.0))
 		draw_rect(empty, SLOT_BG)
 		draw_rect(empty, LINE, false, 1.0)
-		draw_string(font, empty.position + Vector2(0.0, 26.0), "no bag",
+		draw_string(font, empty.position + Vector2(0.0, 23.0), "nothing to run an ultimate",
 			HORIZONTAL_ALIGNMENT_CENTER, empty.size.x, 13, DIM)
-		draw_string(font, empty.position + Vector2(0.0, 44.0),
+		draw_string(font, empty.position + Vector2(0.0, 40.0),
+			"buy one in the POWER slot", HORIZONTAL_ALIGNMENT_CENTER,
+			empty.size.x, 10, Color(DIM, 0.7))
+		return y + 52.0
+
+	var grid := _inventory.power
+	var box := Rect2(Vector2(at.x, y),
+		Vector2(grid.width, grid.height) * (PACK_CELL + GAP))
+	var selected: bool = _open.get("id", "") == "rack"
+	_regions.append({
+		"kind": "pack", "rect": box, "id": "rack", "list": "ultimate", "label": "POWER RACK",
+	})
+	for cy in grid.height:
+		for cx in grid.width:
+			draw_rect(Rect2(box.position + Vector2(cx, cy) * (PACK_CELL + GAP),
+				Vector2(PACK_CELL, PACK_CELL)), CELL_BG)
+	for item in grid.items:
+		var tile := Rect2(box.position + Vector2(item.cell) * (PACK_CELL + GAP),
+			Vector2(item.size) * (PACK_CELL + GAP) - Vector2(GAP, GAP))
+		_draw_stack(item, tile)
+		# The charge bar along the bottom of the gadget. It is zero in the shop,
+		# and it is here anyway: this is the tile you will be looking at in the
+		# raid, and the shop is where you learn where to look.
+		draw_rect(Rect2(Vector2(tile.position.x + 3.0, tile.end.y - 5.0),
+			Vector2(tile.size.x - 6.0, 2.0)), Color(LINE, 0.8))
+	if selected:
+		draw_rect(box, ACCENT, false, 2.0)
+
+	# What is left, in cells, next to the grid. The number that decides whether
+	# the gadget you are looking at on the shelf can come with you.
+	var free := grid.cell_count() - grid.used_cells()
+	draw_string(font, Vector2(box.end.x + 12.0, box.position.y + 16.0),
+		"%d/%d cells" % [grid.used_cells(), grid.cell_count()],
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, DIM if free > 0 else BAD)
+	return y + box.size.y
+
+
+## The pack, drawn at the size it actually is. An empty back is an empty
+## rectangle with the reason written in it, not a missing panel.
+func _draw_pack(at: Vector2) -> float:
+	var font := ThemeDB.fallback_font
+	var bag := _inventory.backpack_item
+	var note := "no bag - only what is in your pockets"
+	if bag:
+		note = "%s  -  %d/%d cells" % [bag.backpack.display_name,
+			_inventory.backpack.used_cells(), _inventory.backpack.cell_count()]
+	var y := _section(at, "BACKPACK", note)
+
+	if bag == null:
+		var empty := Rect2(Vector2(at.x, y), Vector2(240.0, 52.0))
+		draw_rect(empty, SLOT_BG)
+		draw_rect(empty, LINE, false, 1.0)
+		draw_string(font, empty.position + Vector2(0.0, 23.0), "no bag",
+			HORIZONTAL_ALIGNMENT_CENTER, empty.size.x, 13, DIM)
+		draw_string(font, empty.position + Vector2(0.0, 40.0),
 			"buy one in the BACKPACK slot", HORIZONTAL_ALIGNMENT_CENTER,
 			empty.size.x, 10, Color(DIM, 0.7))
-		return
+		return y + 52.0
 
 	var grid := _inventory.backpack
 	var box := Rect2(Vector2(at.x, y),
@@ -925,6 +1155,7 @@ func _draw_carried(at: Vector2) -> void:
 			Vector2(item.size) * (PACK_CELL + GAP) - Vector2(GAP, GAP)))
 	if selected:
 		draw_rect(box, ACCENT, false, 2.0)
+	return y + box.size.y
 
 
 ## One item drawn into a box: tinted from what it is, named, counted. The two
@@ -1023,12 +1254,14 @@ func _draw_picker(at: Vector2) -> void:
 	# itself - the strips have to run to the edges of the screen, not to the edges
 	# of the panel, or the overhang lands on the background where nothing covers it.
 	var strip := Vector2(panel.size.x, 0.0)
-	draw_rect(Rect2(Vector2(panel.position.x, 0.0),
-		Vector2(strip.x, panel.position.y)), BG)
+	# Down from the header rather than from the top of the screen: everything
+	# above that line is painted by the header itself, afterwards.
+	draw_rect(Rect2(Vector2(panel.position.x, HEADER_H),
+		Vector2(strip.x, panel.position.y - HEADER_H)), BG)
 	draw_rect(Rect2(panel.position,
-		Vector2(strip.x, view.position.y - panel.position.y)), PANEL)
+		Vector2(strip.x, view.position.y - panel.position.y)), MASK)
 	draw_rect(Rect2(Vector2(panel.position.x, view.end.y),
-		Vector2(strip.x, panel.end.y - view.end.y)), PANEL)
+		Vector2(strip.x, panel.end.y - view.end.y)), MASK)
 	draw_rect(Rect2(Vector2(panel.position.x, panel.end.y),
 		Vector2(strip.x, size.y - panel.end.y)), BG)
 	draw_rect(panel, LINE, false, 1.0)

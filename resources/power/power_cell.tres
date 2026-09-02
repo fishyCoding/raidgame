@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="PowerData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/power_data.gd" id="1_power"]
+
+[resource]
+script = ExtResource("1_power")
+display_name = "Power Cell"
+short_name = "CELL"
+grid_size = Vector2i(2, 2)
+carried_size = Vector2i(2, 2)
+charge_scale = 1.0
+price = 1300
+blurb = "A square. The only rack a two-by-two gadget will go in."
+tint = Color(0.55, 0.78, 0.95, 1)

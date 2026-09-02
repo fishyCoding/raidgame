@@ -50,6 +50,7 @@ func _run() -> void:
 	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
 	var ult: Object = maker.from_gadget(load(DASH))
 	ult.charge = 1.0
+	player.inventory.fit_default_power()
 	player.inventory.set_ultimate(ult)
 
 	# --- casting hands you the dashes ----------------------------------------
@@ -238,6 +239,7 @@ func _run() -> void:
 	var kit: Object = player.inventory
 	var second: Object = maker.from_gadget(load("res://resources/gadgets/overload.tres"))
 	second.charge = 1.0
+	kit.fit_default_power()
 	kit.set_ultimate(second, 1)
 	player.dashes_left = 0
 	player.dash_ready = false

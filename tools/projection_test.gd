@@ -65,6 +65,8 @@ func _run() -> void:
 	var gadget: Resource = load(GADGET)
 	var item: Object = maker.from_gadget(gadget)
 	item.charge = 1.0
+	player.inventory.fit_default_power()
+	player.inventory.clear_ultimates()
 	player.inventory.set_ultimate(item)
 
 	# Something to copy that is worth copying. Plates up is the one piece of kit a
@@ -339,6 +341,8 @@ func _check_bow(player: Node2D) -> void:
 	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
 	var bow: Object = maker.from_gadget(load("res://resources/gadgets/recon_bow.tres"))
 	bow.charge = 1.0
+	player.inventory.fit_default_power()
+	player.inventory.clear_ultimates()
 	player.inventory.set_ultimate(bow)
 	player.aim_angle = 0.0
 	player.aim_direction = Vector2.RIGHT
@@ -515,6 +519,8 @@ func _check_touch_projection(main: Node, player: Node2D) -> void:
 	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
 	var ult: Object = maker.from_gadget(load("res://resources/gadgets/projection.tres"))
 	ult.charge = 1.0
+	player.inventory.fit_default_power()
+	player.inventory.clear_ultimates()
 	player.inventory.set_ultimate(ult)
 
 	player._begin_projection_aim()
@@ -796,6 +802,8 @@ func _check_orders(main: Node, player: Node2D) -> void:
 	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
 	var item: Object = maker.from_gadget(load(GADGET))
 	item.charge = 1.0
+	player.inventory.fit_default_power()
+	player.inventory.clear_ultimates()
 	player.inventory.set_ultimate(item)
 
 	# Q opens the view rather than casting. Nothing is spent by looking.

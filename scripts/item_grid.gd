@@ -64,6 +64,29 @@ func add(item: Item) -> bool:
 	return false
 
 
+## Whether a footprint of this size would land anywhere, without needing an item
+## to try it with. What a shop asks before it sells you something that has to go
+## in here, and what a rack asks before it says it is full.
+func has_room(size: Vector2i) -> bool:
+	for y in height:
+		for x in width:
+			if _clear(Rect2i(Vector2i(x, y), size)):
+				return true
+	return false
+
+
+## Nothing in the way, and inside the grid.
+func _clear(want: Rect2i) -> bool:
+	if want.position.x < 0 or want.position.y < 0:
+		return false
+	if want.end.x > width or want.end.y > height:
+		return false
+	for other in items:
+		if want.intersects(Rect2i(other.cell, other.size)):
+			return false
+	return true
+
+
 func remove(item: Item) -> void:
 	items.erase(item)
 

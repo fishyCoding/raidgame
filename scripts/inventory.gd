@@ -36,12 +36,41 @@ var secondary: Item
 ## Worn armour. Not in a grid: it is on you, not in a bag.
 var helmet: Item
 var vest: Item
-## The charged gadgets, and the two things you can throw. Two ultimate slots,
-## kept as a list for the same reason the throwables are: they are the same kind
-## of thing in the same kind of holder, and code that wants "the one that is a
-## bow" should be able to look rather than remember which hand it went in.
-var ultimates: Array[Item] = [null, null]
+## The two things you can throw.
 var throwables: Array[Item] = [null, null]
+
+## The power source being worn, and the ultimates racked in it.
+##
+## Same shape as the backpack below, and for the same reason: the rack lives on
+## the source rather than on the person, so taking a power source off a body
+## takes what was running in it too.
+##
+## No source means a rack of nothing, which refuses every gadget without needing
+## to be checked for separately - so "you need a power source to run an
+## ultimate" is not a rule written down anywhere, it is just what happens.
+var power_item: Item
+var power: ItemGrid:
+	get:
+		return power_item.contents if power_item != null else _no_power
+
+## The charged gadgets, in the order they sit in the rack.
+##
+## Derived rather than stored. Ultimates used to be two numbered slots and are
+## now positions in a grid, but half the game asks this question - the HUD draws
+## them, the player charges them, looting walks them - and every one of those
+## callers wants the same list it always did. So the list is still here; it is
+## just computed from where things actually are.
+##
+## Read order, top-left first, so Q and Z stay pointing at the same gadgets while
+## you rearrange the rack around them. Sorted by cell rather than by insertion,
+## because the order two gadgets were bought in is not something a player can see
+## and the order they are laid out in is.
+var ultimates: Array[Item]:
+	get:
+		var racked: Array[Item] = []
+		racked.append_array(power.items)
+		racked.sort_custom(_rack_order)
+		return racked
 ## Five one-cell containers, each independent of the others.
 var pockets: Array[ItemGrid] = []
 ## The bag being worn. Its contents live on the bag itself (Item.contents), so
@@ -54,8 +83,10 @@ var backpack: ItemGrid:
 	get:
 		return backpack_item.contents if backpack_item != null else _no_bag
 
-## The grid stood in for an empty back. One per inventory, never written to.
+## The grid stood in for an empty back, and the one stood in for no power source
+## at all. One each per inventory, never written to.
 var _no_bag := ItemGrid.new(0, 0)
+var _no_power := ItemGrid.new(0, 0)
 
 
 func _init() -> void:
@@ -158,7 +189,9 @@ func backpack_overflow(item: Item) -> Array[Item]:
 func holds(item: Item) -> bool:
 	if item == null:
 		return false
-	if item in [primary, secondary, helmet, vest, backpack_item] or ultimates.has(item):
+	if item in [primary, secondary, helmet, vest, backpack_item, power_item]:
+		return true
+	if power.items.has(item):
 		return true
 	if throwables.has(item):
 		return true
@@ -219,17 +252,94 @@ func set_throwable(index: int, item: Item) -> void:
 	changed.emit()
 
 
-func set_ultimate(item: Item, index := 0) -> void:
-	ultimates[clampi(index, 0, ultimates.size() - 1)] = item
+## Reading order for the rack: top row first, left to right within a row.
+static func _rack_order(a: Item, b: Item) -> bool:
+	if a.cell.y != b.cell.y:
+		return a.cell.y < b.cell.y
+	return a.cell.x < b.cell.x
+
+
+## Puts a gadget in the rack, or takes the one at that position out.
+##
+## The index is which of the racked gadgets is meant, not a slot: passing null
+## removes that one, and passing a gadget lays it in the first place it fits.
+## Kept in this shape because every caller predates the rack and none of them
+## cares where in it a thing ends up - they mean "give me this ultimate".
+##
+## Returns false when there is nowhere for it, which is what happens with no
+## power source bought or with a rack too small for the gadget. Callers that
+## ignore the answer are no worse off than they were: nothing is lost, the
+## gadget simply does not go on.
+func set_ultimate(item: Item, index := 0) -> bool:
+	if item == null:
+		var racked := ultimates
+		if index >= 0 and index < racked.size():
+			power.remove(racked[index])
+			changed.emit()
+		return true
+	if not power.add(item):
+		return false
+	changed.emit()
+	return true
+
+
+## The ultimate in a rack position, or null. Bounds-checked, because the callers
+## are screens and input handlers that count from whatever the player pressed.
+##
+## Only the first two are reachable from the keyboard - Q and Z - and the racks
+## on the shelf are sized so a third never fits. If one ever does, this is where
+## it would have to grow a third key rather than silently going nowhere.
+func get_ultimate(index: int) -> Item:
+	var racked := ultimates
+	if index < 0 or index >= racked.size():
+		return null
+	return racked[index]
+
+
+## How much longer every gadget in the rack takes to charge. One means the rate
+## the gadget itself asks for; a cheap rack is slower and a dear one faster.
+func charge_scale() -> float:
+	if power_item == null or power_item.power == null:
+		return 1.0
+	return maxf(power_item.power.charge_scale, 0.05)
+
+
+## The rack handed to anything that needs one without shopping for it: the debug
+## key, the test-drive kit, and every headless harness that equips a gadget.
+##
+## Named rather than left to each caller to pick, so "what a test runs its
+## ultimates on" is one decision in one place. It is the middle source, not the
+## best one - a harness should be running on ordinary kit.
+const DEFAULT_POWER := "res://resources/power/power_cell.tres"
+
+
+## Puts that stock rack on, if nothing is worn. Does nothing when a source has
+## already been bought, so calling it never quietly replaces one.
+func fit_default_power() -> void:
+	if power_item == null:
+		power_item = Item.from_power(load(DEFAULT_POWER) as PowerData)
+		changed.emit()
+
+
+## Takes everything out of the rack.
+##
+## For harnesses that run one gadget after another on the same body. The rack is
+## small on purpose - two of the big gadgets do not both fit anywhere - and a
+## test moving on to the next one is not testing whether the last one still fits.
+func clear_ultimates() -> void:
+	if power_item == null:
+		return
+	power.items.clear()
 	changed.emit()
 
 
-## The ultimate in a slot, or null. Bounds-checked, because the callers are
-## screens and input handlers that count from whatever the player pressed.
-func get_ultimate(index: int) -> Item:
-	if index < 0 or index >= ultimates.size():
-		return null
-	return ultimates[index]
+## Wears a power source, or takes one off.
+func set_power(item: Item) -> bool:
+	if item != null and not item.is_power():
+		return false
+	power_item = item
+	changed.emit()
+	return true
 
 
 ## The first slot holding a gadget of this kind, or -1.
@@ -245,12 +355,15 @@ func slot_of_kind(kind: int) -> int:
 	return -1
 
 
-## The first empty ultimate slot, or -1 when both are full.
-func free_ultimate_slot() -> int:
-	for i in ultimates.size():
-		if ultimates[i] == null:
-			return i
-	return -1
+## Whether another gadget of this size would fit in the rack: -1 when it would
+## not, and the position it would be racked at when it would.
+##
+## Still an index rather than a cell because every caller is asking "is there
+## room for one more", and where exactly it lands is the rack's business.
+func free_ultimate_slot(size := Vector2i(2, 1)) -> int:
+	if not power.has_room(size):
+		return -1
+	return ultimates.size()
 
 
 ## Whether a piece of armour belongs in that worn slot.
@@ -288,9 +401,12 @@ func all_weapons() -> Array[Item]:
 ## Everything on the body, worn or stowed - what looting walks through.
 func all_items() -> Array[Item]:
 	var list: Array[Item] = []
-	for item in ([primary, secondary, helmet, vest, backpack_item] + ultimates):
+	for item in [primary, secondary, helmet, vest, backpack_item, power_item]:
 		if item:
 			list.append(item)
+	# The rack's contents come with it - a power source on a body is looted with
+	# whatever was running in it, the same as a bag.
+	list.append_array(power.items)
 	for item in throwables:
 		if item:
 			list.append(item)
@@ -319,8 +435,13 @@ func store(item: Item) -> bool:
 		if get_worn(where) == null:
 			set_worn(where, item)
 			return true
-	if item.is_ultimate() and free_ultimate_slot() >= 0:
-		set_ultimate(item, free_ultimate_slot())
+	if item.is_ultimate() and power.add(item):
+		changed.emit()
+		return true
+	# A power source goes on your back if nothing is there, and is loot otherwise.
+	if item.is_power() and power_item == null:
+		power_item = item
+		changed.emit()
 		return true
 	# A bag goes on your back if your back is empty, and into the bag you are
 	# already wearing otherwise - a spare pack is loot like anything else.
@@ -396,8 +517,11 @@ func remove_item(item: Item) -> void:
 		helmet = null
 	elif vest == item:
 		vest = null
-	elif ultimates.has(item):
-		ultimates[ultimates.find(item)] = null
+	elif power.items.has(item):
+		power.remove(item)
+	elif power_item == item:
+		# The source leaves with everything still racked in it.
+		power_item = null
 	elif backpack_item == item:
 		# The bag leaves with everything still inside it.
 		backpack_item = null
@@ -521,8 +645,8 @@ func is_empty() -> bool:
 func to_wire() -> Dictionary:
 	var out := {}
 	for named in [["primary", primary], ["secondary", secondary],
-			["helmet", helmet], ["vest", vest], ["ultimate", ultimates[0]],
-			["ultimate_2", ultimates[1]], ["backpack", backpack_item]]:
+			["helmet", helmet], ["vest", vest], ["power", power_item],
+			["backpack", backpack_item]]:
 		var item := named[1] as Item
 		if item:
 			out[named[0]] = item.to_wire()
@@ -545,8 +669,9 @@ static func from_wire(wire: Dictionary) -> Inventory:
 	kit.secondary = _wired(wire, "secondary")
 	kit.helmet = _wired(wire, "helmet")
 	kit.vest = _wired(wire, "vest")
-	kit.ultimates[0] = _wired(wire, "ultimate")
-	kit.ultimates[1] = _wired(wire, "ultimate_2")
+	# The rack comes back whole, gadgets and all - they are its contents, and
+	# Item rebuilds those the same way it rebuilds a bag's.
+	kit.power_item = _wired(wire, "power")
 	# Assigned rather than put on with set_backpack(). The bag arrives with its
 	# contents already laid out in known cells, and set_backpack repacks whatever
 	# it is handed - which would quietly rearrange a body's pack into a different

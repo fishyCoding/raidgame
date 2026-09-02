@@ -56,6 +56,7 @@ func _run() -> void:
 	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
 	var ult: Object = maker.from_gadget(load("res://resources/gadgets/screen.tres"))
 	ult.charge = 1.0
+	player.inventory.fit_default_power()
 	player.inventory.set_ultimate(ult, 0)
 	player.global_position = Vector2(-1051.0, 360.0)
 	for i in 20:

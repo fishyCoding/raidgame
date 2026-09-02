@@ -2150,6 +2150,12 @@ func _update_weapon() -> void:
 	# testing a gadget should not first require shopping for it.
 	if Input.is_action_just_pressed(&"debug_charge") and inventory:
 		if inventory.get_ultimate(0) == null:
+			# Needs somewhere to go now, so the debug key hands over the rack as
+			# well when there is not one. Testing a gadget should not first
+			# require shopping for the thing that runs it either.
+			if inventory.power_item == null:
+				inventory.set_power(Item.from_power(
+					load("res://resources/power/power_cell.tres") as PowerData))
 			inventory.set_ultimate(Item.from_gadget(
 				load("res://resources/gadgets/overload.tres") as GadgetData))
 			_say_loot("debug: Overload equipped and charged")
@@ -2230,13 +2236,15 @@ func _charge_ultimate(delta: float) -> void:
 		projection_left = 0.0
 	if inventory == null:
 		return
-	# Both slots fill at once, each at its own gadget's rate. Charging only the
-	# one you last used would make the second slot a place to keep something you
-	# are not allowed to have yet.
+	# Everything in the rack fills at once, each at its own gadget's rate, scaled
+	# by what is running them. Charging only the one you last used would make the
+	# second position a place to keep something you are not allowed to have yet.
+	var rate := inventory.charge_scale()
 	for ult in inventory.ultimates:
 		if ult == null or ult.charge >= 1.0:
 			continue
-		ult.charge = minf(ult.charge + delta / maxf(ult.gadget.charge_time, 1.0), 1.0)
+		ult.charge = minf(
+			ult.charge + delta / maxf(ult.gadget.charge_time * rate, 1.0), 1.0)
 
 
 ## Whether this player's ghost is still out there walking about.
@@ -2255,9 +2263,13 @@ func _projection_standing() -> bool:
 func add_ultimate_charge(fraction: float) -> void:
 	if inventory == null:
 		return
+	# Scaled by the rack as well, so a cheap power source is slower at everything
+	# rather than only at ticking over. A player who has bought the fast one
+	# should feel it while fighting, which is where charge is actually earned.
+	var earned := fraction / inventory.charge_scale()
 	for ult in inventory.ultimates:
 		if ult:
-			ult.charge = minf(ult.charge + fraction, 1.0)
+			ult.charge = minf(ult.charge + earned, 1.0)
 
 
 func _use_ultimate(slot := 0) -> void:

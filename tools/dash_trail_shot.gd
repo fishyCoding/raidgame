@@ -41,6 +41,7 @@ func _run() -> void:
 	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
 	var ult: Object = maker.from_gadget(load(DASH))
 	ult.charge = 1.0
+	player.inventory.fit_default_power()
 	player.inventory.set_ultimate(ult)
 	player._use_ultimate()
 	while not player.is_on_floor():

@@ -44,6 +44,7 @@ func _run() -> void:
 	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
 	var ult: Object = maker.from_gadget(load(HEADCOUNT))
 	ult.charge = 1.0
+	player.inventory.fit_default_power()
 	player.inventory.set_ultimate(ult)
 
 	# Three of them, spread round the compass, so the dial has something to say

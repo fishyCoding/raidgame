@@ -26,6 +26,7 @@ func _capture(main: Node) -> void:
 
 	var player: CharacterBody2D = main.get_node("Player")
 	var kit: Inventory = player.inventory
+	kit.fit_default_power()
 	kit.set_ultimate(Item.from_gadget(load("res://resources/gadgets/overload.tres")))
 	kit.ultimates[0].charge = 1.0
 	player.global_position = Vector2(-500, 200)

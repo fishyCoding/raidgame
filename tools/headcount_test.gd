@@ -56,6 +56,7 @@ func _run() -> void:
 	var maker: Object = (load("res://scripts/item.gd") as GDScript).new()
 	var ult: Object = maker.from_gadget(load(HEADCOUNT))
 	ult.charge = 1.0
+	player.inventory.fit_default_power()
 	player.inventory.set_ultimate(ult)
 	# Let him land first. Every offset below is measured from where he is
 	# standing, and a character still falling out of his spawn moves several

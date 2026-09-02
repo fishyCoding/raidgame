@@ -127,6 +127,7 @@ func _bomb_half() -> void:
 	net._players[net.peer_id()] = player
 
 	var gadget: Resource = load(BOMB)
+	player.inventory.fit_default_power()
 	player.inventory.set_ultimate(Item.from_gadget(gadget))
 	var ult = player.inventory.get_ultimate(0)
 	ult.charge = 1.0

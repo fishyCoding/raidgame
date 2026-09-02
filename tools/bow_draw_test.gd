@@ -35,6 +35,7 @@ func _run() -> void:
 		return
 
 	var kit: Inventory = _player.inventory
+	kit.fit_default_power()
 	kit.set_ultimate(Item.from_gadget(load("res://resources/gadgets/recon_bow.tres")))
 	_player.global_position = Vector2(-500, 200)
 	_input.touch_aim_direction = Vector2.RIGHT

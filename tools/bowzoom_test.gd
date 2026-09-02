@@ -26,6 +26,7 @@ func _run(main: Node) -> void:
 		guard.process_mode = Node.PROCESS_MODE_DISABLED
 
 	var kit: Inventory = player.inventory
+	kit.fit_default_power()
 	kit.set_ultimate(Item.from_gadget(load("res://resources/gadgets/recon_bow.tres")))
 	kit.ultimates[0].charge = 1.0
 	player.global_position = Vector2(-1600, 200)

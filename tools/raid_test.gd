@@ -79,6 +79,7 @@ func _insertion() -> void:
 func _overload() -> void:
 	print("\n-- overload moves you, not the gun --")
 	var kit: Inventory = _player.inventory
+	kit.fit_default_power()
 	kit.set_ultimate(Item.from_gadget(load("res://resources/gadgets/overload.tres")))
 	kit.ultimates[0].charge = 1.0
 

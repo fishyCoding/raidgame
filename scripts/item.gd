@@ -12,8 +12,11 @@ extends RefCounted
 ## rounds is one cell whatever the calibre, because what limits ammunition is
 ## the stack size, not the footprint.
 
+## POWER is last because these travel over the wire as their own integers, and
+## renumbering the ones already in flight would make an old build read a medkit
+## as a vest.
 enum Kind { WEAPON, AMMO, ARMOR, MEDKIT, THROWABLE, ULTIMATE, BACKPACK, REVIVE,
-	SURGICAL, REPAIR }
+	SURGICAL, REPAIR, POWER }
 
 ## Rounds per stack, by calibre. Fat rifle rounds stack smaller than pistol
 ## ammunition, which is what makes carrying a sniper rifle expensive in space
@@ -61,6 +64,8 @@ var repair_slot := ArmorData.Slot.BODY
 var gadget: GadgetData
 ## Set for backpacks, null otherwise.
 var backpack: BackpackData
+## Set for power sources, null otherwise.
+var power: PowerData
 ## What is inside this bag. The contents live on the bag rather than on whoever
 ## is wearing it, which is the whole reason a bag can be taken off a body with
 ## everything still in it - the space and the kit are one object, and moving it
@@ -238,6 +243,19 @@ static func from_gadget(data: GadgetData, uses := -1) -> Item:
 	return item
 
 
+## A power source. Like a bag in every structural way: the rack it gives you is
+## its `contents`, so an ultimate racked in it travels with it, and taking one
+## off a body takes the gadgets along with the thing that was running them.
+static func from_power(data: PowerData) -> Item:
+	var item := Item.new()
+	item.kind = Kind.POWER
+	item.power = data
+	item.size = data.carried_size
+	item.count = 1
+	item.contents = ItemGrid.new(data.grid_size.x, data.grid_size.y)
+	return item
+
+
 ## A bag. Its size here is what it costs to carry, not what it holds - the grid
 ## it gives you lives on the BackpackData.
 static func from_backpack(data: BackpackData) -> Item:
@@ -271,6 +289,8 @@ func to_wire() -> Dictionary:
 		data = gadget
 	if data == null:
 		data = backpack
+	if data == null:
+		data = power
 	if is_weapon() and base_weapon:
 		# The gun that was bought, not the copy the workshop made of it. A built
 		# weapon has no resource_path to send, and the far end rebuilds the same
@@ -294,7 +314,7 @@ func to_wire() -> Dictionary:
 		out["repair_slot"] = int(repair_slot)
 	elif is_ammo():
 		out["ammo"] = String(ammo_type)
-	elif is_backpack() and contents:
+	elif (is_backpack() or is_power()) and contents:
 		# A bag travels with what is in it, cells and all. That is not an
 		# optimisation - a bag is one object that carries both the space and the
 		# kit, which is what makes taking a whole rig off a body work.
@@ -344,6 +364,14 @@ static func from_wire(wire: Dictionary) -> Item:
 			if thing:
 				item = Item.from_gadget(thing, count_in)
 				item.charge = wire.get("charge", 0.0)
+		Kind.POWER:
+			var source := load(path) as PowerData
+			if source:
+				item = Item.from_power(source)
+				for held in wire.get("inside", []):
+					var inner := Item.from_wire(held)
+					if inner:
+						item.contents.place(inner, inner.cell)
 		Kind.AMMO:
 			item = Item.from_ammo(StringName(wire.get("ammo", "9mm")), count_in)
 		Kind.MEDKIT:
@@ -404,6 +432,10 @@ func is_backpack() -> bool:
 	return kind == Kind.BACKPACK
 
 
+func is_power() -> bool:
+	return kind == Kind.POWER
+
+
 func capacity() -> int:
 	if is_weapon():
 		return weapon.mag_size
@@ -436,6 +468,8 @@ func title() -> String:
 		return "STIM"
 	if is_backpack():
 		return backpack.short_name
+	if is_power():
+		return power.short_name
 	if gadget:
 		return gadget.short_name
 	return str(ammo_type)
@@ -457,6 +491,8 @@ func label() -> String:
 		return "STIM x%d" % count
 	if is_backpack():
 		return "%s %dx%d" % [backpack.short_name, backpack.grid_size.x, backpack.grid_size.y]
+	if is_power():
+		return "%s %dx%d" % [power.short_name, power.grid_size.x, power.grid_size.y]
 	if is_throwable():
 		return "%s x%d" % [gadget.short_name, count]
 	if is_ultimate():
@@ -490,6 +526,8 @@ func tint() -> Color:
 		return Color(0.62, 0.68, 0.76)
 	if is_backpack():
 		return backpack.tint
+	if is_power():
+		return power.tint
 	if gadget:
 		return gadget.tint
 	match ammo_type:
