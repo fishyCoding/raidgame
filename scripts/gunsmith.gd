@@ -49,6 +49,25 @@ const SHELF := {
 	],
 }
 
+## How much of an optic's nominal power the camera actually gives you.
+##
+## A four power scope does not pull the camera back four times, and it should not.
+## Taken literally it did: the aimed view went to 4.3 times the standing one, the
+## character came out about five pixels tall, and the difference between a 2x and
+## a 4x stopped reading as *double* because both were already past the point where
+## you could tell what you were looking at. Magnification in a game seen from the
+## side is a widening, and a widening has a useful range that a rifle scope's
+## marketing number blows straight past.
+##
+## So the power is a name and this is the exchange rate. Each point of it widens
+## the view by a bit over a third, which keeps the steps between the three optics
+## clearly apart while leaving a person legible at the far end of the shot.
+const SCOPE_GAIN := 0.35
+## And a floor, because the sniper starts wide before any glass goes on it: with
+## a 4x it would otherwise land somewhere you cannot pick a body out of the
+## background, which is not a scope, it is a map screen.
+const SCOPE_FLOOR := 0.26
+
 ## The order the five slots are drawn and stored in.
 const SLOTS := [
 	AttachmentData.Slot.OPTIC,
@@ -107,7 +126,7 @@ static func build(base: WeaponData, parts: Array) -> WeaponData:
 		mag_extra += it.mag_delta
 		gun.reload_time *= it.reload_scale
 
-		gun.ads_zoom /= maxf(it.magnify, 0.05)
+		gun.ads_zoom /= view_gain(it.magnify)
 		gun.ads_speed_scale *= it.ads_speed_scale
 		gun.aim_speed_scale *= it.aim_speed_scale
 		gun.scope_glint = gun.scope_glint or it.adds_glint
@@ -128,13 +147,15 @@ static func build(base: WeaponData, parts: Array) -> WeaponData:
 	# it is a gun that cannot be fired.
 	gun.mag_size = maxi(roundi(mag) + mag_extra, 1)
 	gun.reload_time = maxf(gun.reload_time, 0.2)
-	# The floor is well under WeaponData's own inspector range: a four power
-	# scope on a gun that already pulls back lands around 0.23, and clamping at
-	# 0.4 would have quietly sold magnification it then refused to deliver.
-	gun.ads_zoom = clampf(gun.ads_zoom, 0.15, 4.0)
+	gun.ads_zoom = clampf(gun.ads_zoom, SCOPE_FLOOR, 4.0)
 	gun.loudness_trim = clampf(gun.loudness_trim, -24.0, 12.0)
 	gun.grid_size.x = maxi(gun.grid_size.x, 1)
 	return gun
+
+
+## How much wider a scope of this power makes the aimed view. One is unchanged.
+static func view_gain(magnify: float) -> float:
+	return maxf(1.0 + (magnify - 1.0) * SCOPE_GAIN, 0.05)
 
 
 ## What the parts on a gun cost, all in. Used to price a gun on a body and to
@@ -177,7 +198,10 @@ static func effect_lines(part: AttachmentData) -> Array:
 		out.append(["reload %+.0f%%" % ((part.reload_scale - 1.0) * 100.0),
 			part.reload_scale < 1.0])
 	if not is_equal_approx(part.magnify, 1.0):
-		out.append(["sees %.1fx further" % part.magnify, part.magnify > 1.0])
+		# What the camera will actually do, not what is written on the tube. A
+		# card that promises four and delivers two is worse than one that says
+		# two, however good the four looks on the shelf.
+		out.append(["%.2fx the view" % view_gain(part.magnify), part.magnify > 1.0])
 	if not is_equal_approx(part.ads_speed_scale, 1.0):
 		out.append(["aim speed %+.0f%%" % ((part.ads_speed_scale - 1.0) * 100.0),
 			part.ads_speed_scale > 1.0])

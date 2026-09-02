@@ -186,10 +186,12 @@ func _draw_bench(box: Rect2) -> void:
 	draw_string(font, bench.position + Vector2(12.0, 20.0), item.label(),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ACCENT)
 	# The three numbers a build changes that a bar cannot show.
-	# Printed as magnification rather than as the camera number behind it: 4.0x
-	# is what the player bought, 0.23 is how the camera says it.
-	var notes := "%d rnd  -  %.1fs reload  -  %.1fx sight  -  %dx%d cells" % [
-		built.mag_size, built.reload_time, 1.0 / maxf(built.ads_zoom, 0.01),
+	# The sight line is what the *camera* will do against this gun's own iron
+	# sights, which is the only version of the number a player can check by
+	# looking. What is written on the tube is the part's name, over on the shelf.
+	var glass := item.base_weapon.ads_zoom / maxf(built.ads_zoom, 0.01)
+	var notes := "%d rnd  -  %.1fs reload  -  %.2fx view  -  %dx%d cells" % [
+		built.mag_size, built.reload_time, glass,
 		built.grid_size.x, built.grid_size.y]
 	if built.suppressed:
 		notes += "  -  suppressed"

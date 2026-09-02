@@ -70,11 +70,20 @@ func _run() -> void:
 	# Lower is wider: Camera2D.zoom shows more world as it falls, which is how
 	# magnification works in a game seen from the side. A 4x that raised this
 	# number would be selling you a narrower view than iron sights.
-	_say("4x: camera zoom %.2f (bare %.2f) - %.1fx the ground" % [
-		scoped.weapon.ads_zoom, ar.ads_zoom, ar.ads_zoom / scoped.weapon.ads_zoom])
+	var widened: float = ar.ads_zoom / scoped.weapon.ads_zoom
+	_say("4x: camera zoom %.3f (bare %.3f) - %.2fx the view" % [
+		scoped.weapon.ads_zoom, ar.ads_zoom, widened])
 	_check(scoped.weapon.ads_zoom < ar.ads_zoom, "a 4x pulls the camera back")
-	_check(absf(ar.ads_zoom / scoped.weapon.ads_zoom - 4.0) < 0.1,
-		"by four times, which is what a four power scope means")
+	# Not four times. The power on the tube is a name and Gunsmith.SCOPE_GAIN is
+	# the exchange rate - taken literally, a 4x put the character five pixels
+	# tall and made the step from 2x indistinguishable. What is asserted is that
+	# the card and the camera agree, whatever the rate is set to.
+	_check(absf(widened - smith.view_gain(4.0)) < 0.02,
+		"by exactly what the card promises, at whatever rate is set")
+	var two: Object = maker.from_weapon(ar)
+	two.fit(load("res://resources/attachments/holo_2x.tres"))
+	_check(two.weapon.ads_zoom > scoped.weapon.ads_zoom,
+		"and a 2x is a smaller step than a 4x, in the same direction")
 	_check(scoped.weapon.scope_glint, "and throws a glint back, which is its price")
 	_check(scoped.weapon.ads_speed_scale < ar.ads_speed_scale, "and is slower onto a target")
 
