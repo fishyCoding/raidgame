@@ -488,41 +488,44 @@ static func _draw_drum(canvas: CanvasItem, at: Vector2, zoom: float,
 	var top := shoulder + half * 0.30
 	var bottom := where.y + span.y - half * 0.30
 
-	# The body first, then the tower over the top of it. The other way round
-	# leaves the casing's outline drawn across the straight part of the magazine,
-	# and a seam where two pieces of one object overlap is exactly the thing that
-	# stops it reading as one object.
-	var shell := _casing(Vector2(where.x + nose, top), Vector2(where.x + nose, bottom), half)
-	_shape(canvas, at, zoom, _lean(shell, pivot), fill, line)
+	# One outline round the whole magazine.
+	#
+	# The tower and the drum are one object, and drawing them as two shapes - even
+	# in the right order, even with the tower on top - leaves the join visible as
+	# a change in the line rather than as a continuous edge. So they are merged
+	# into a single polygon first and that is what gets filled and stroked.
+	# Geometry2D does the union; the two pieces overlap by a few units at the
+	# shoulder so there is always something to merge.
+	var body := _lean(_casing(Vector2(where.x + nose, top),
+		Vector2(where.x + nose, bottom), half), pivot)
+	var neck := PackedVector2Array([
+		Vector2(where.x - tower * 0.5, where.y - 1.5),
+		Vector2(where.x + tower * 0.5, where.y - 1.5),
+		Vector2(where.x + tower * 0.5, shoulder + half * 0.9),
+		Vector2(where.x - tower * 0.5, shoulder + half * 0.9)])
+	for piece in Geometry2D.merge_polygons(neck, body):
+		_shape(canvas, at, zoom, piece, fill, line)
 
-	# A recessed face inside it, which is the whole of the shading. A lit strip
-	# down one side and a dark strip down the other read, once rotated, as two
-	# bars laid across the drum rather than as a curved surface.
-	var inset := _casing(Vector2(where.x + nose, top + half * 0.45),
-		Vector2(where.x + nose, bottom - half * 0.45), half * 0.66)
+	# The recessed face, drawn inside that outline and never touching it. This is
+	# the whole of the shading: a lit strip down one side and a dark strip down
+	# the other read, once rotated, as two bars laid across the drum rather than
+	# as a curved surface.
+	var inset := _casing(Vector2(where.x + nose, top + half * 0.42),
+		Vector2(where.x + nose, bottom - half * 0.42), half * 0.64)
 	_shape(canvas, at, zoom, _lean(inset, pivot), fill.darkened(0.16),
-		Color(line, 0.22))
+		Color(line, 0.0))
 
 	# The winder cap at the middle of it, and a pair of ribs across the face.
 	var middle := Vector2(where.x + nose, (top + bottom) * 0.5)
 	var hub := _lean(PackedVector2Array([middle]), pivot)[0]
-	canvas.draw_circle(at + hub * zoom, half * 0.28 * zoom, fill.lightened(0.14))
-	canvas.draw_arc(at + hub * zoom, half * 0.28 * zoom, 0.0, TAU, 16, line,
-		maxf(1.0, zoom * 0.24), true)
+	canvas.draw_circle(at + hub * zoom, half * 0.26 * zoom, fill.lightened(0.16))
 	for i in 2:
 		var band := top + (bottom - top) * (0.24 + 0.52 * float(i))
 		var rib := _lean(PackedVector2Array([
-			Vector2(where.x + nose - half * 0.46, band),
-			Vector2(where.x + nose + half * 0.46, band)]), pivot)
+			Vector2(where.x + nose - half * 0.42, band),
+			Vector2(where.x + nose + half * 0.42, band)]), pivot)
 		canvas.draw_line(at + rib[0] * zoom, at + rib[1] * zoom,
-			Color(line, 0.26), maxf(1.0, zoom * 0.2))
-
-	# And the feed tower last, upright, covering where the body passes behind it.
-	_shape(canvas, at, zoom, PackedVector2Array([
-		Vector2(where.x - tower * 0.5, where.y - 1.5),
-		Vector2(where.x + tower * 0.5, where.y - 1.5),
-		Vector2(where.x + tower * 0.5, shoulder + 3.0),
-		Vector2(where.x - tower * 0.5, shoulder + 3.0)]), fill, line)
+			Color(line, 0.22), maxf(1.0, zoom * 0.18))
 
 
 ## Leans a set of points forward about a pivot. Negative because screen y is
