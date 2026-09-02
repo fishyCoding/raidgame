@@ -276,19 +276,33 @@ static func draw_gun(canvas: CanvasItem, at: Vector2, zoom: float,
 			Vector2(well_at - well_wide * 0.5 - 2.0, body.y * 0.42 + well_deep)]),
 			METAL.lightened(0.05), EDGE)
 
-	# Trigger guard and grip, both thinner than they were.
+	# Trigger guard and grip.
+	#
+	# The grip is a hand, not a second magazine: about seven units across where
+	# the web of your thumb sits, tapering to five, and it stops above the bottom
+	# of the magazine rather than hanging past it. Drawn as deep as the magazine
+	# and nearly as wide, which is what it was, the underside of every gun came
+	# out as two identical slabs and the eye could not tell which one it was
+	# meant to be holding.
 	var grip_x: float = p["grip_at"]
 	var guard_y: float = body.y * 0.42
+	var grip_wide := 7.0
+	var grip_deep := 13.0
+	if p["well"] > 0.0:
+		# A unit clear of the magazine's own bottom edge, so the two never line
+		# up and never cross.
+		grip_deep = minf(grip_deep, p["well"] + 13.0 - 1.5)
 	canvas.draw_polyline(PackedVector2Array([
-		at + Vector2(grip_x + 11.0, guard_y) * zoom,
-		at + Vector2(grip_x + 12.5, guard_y + 6.5) * zoom,
-		at + Vector2(grip_x + 5.5, guard_y + 7.5) * zoom,
-		at + Vector2(grip_x + 1.5, guard_y + 3.5) * zoom]),
-		EDGE, maxf(1.0, zoom * 0.42), true)
+		at + Vector2(grip_x + 10.0, guard_y) * zoom,
+		at + Vector2(grip_x + 11.0, guard_y + 5.5) * zoom,
+		at + Vector2(grip_x + 5.0, guard_y + 6.5) * zoom,
+		at + Vector2(grip_x + 1.5, guard_y + 3.0) * zoom]),
+		EDGE, maxf(1.0, zoom * 0.4), true)
 	_shape(canvas, at, zoom, PackedVector2Array([
-		Vector2(grip_x, guard_y - 0.5), Vector2(grip_x + 9.5, guard_y - 0.5),
-		Vector2(grip_x + 6.0, guard_y + 17.0),
-		Vector2(grip_x - 2.5, guard_y + 17.0)]))
+		Vector2(grip_x, guard_y - 0.5),
+		Vector2(grip_x + grip_wide, guard_y - 0.5),
+		Vector2(grip_x + grip_wide - 1.6, guard_y + grip_deep),
+		Vector2(grip_x - 2.2, guard_y + grip_deep)]))
 
 	# The rail along the top, and the iron sight standing on it.
 	for i in 5:
