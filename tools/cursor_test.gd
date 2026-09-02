@@ -62,6 +62,19 @@ func _run() -> void:
 	await physics_frame
 	ok = _expect("shop open", true) and ok
 
+	# --- and the workshop, which is a screen the shop hides itself behind -----
+	#
+	# Its own group rather than the shop's, so it needs its own line here. A
+	# full-screen panel that does not free the pointer is one you cannot click a
+	# single thing on, and the way this screen is opened - the kit screen goes
+	# invisible - means the group it is *not* in would have stopped answering.
+	shop.visible = false
+	shop._open_gunsmith(shop._inventory.secondary)
+	await physics_frame
+	ok = _expect("gunsmith", true) and ok
+	shop._smith.visible = false
+	shop.visible = true
+
 	print("cursor | %s" % ("PASS" if ok else "FAIL"))
 	quit(0 if ok else 1)
 

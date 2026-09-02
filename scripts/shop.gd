@@ -1168,29 +1168,54 @@ func _draw_power_rack(at: Vector2) -> float:
 		"kind": "pack", "rect": box, "id": "rack", "list": "ultimate", "label": "POWER RACK",
 	})
 
-	# The casing round the cells. The rack and the thing that runs it were drawn
-	# as two objects - a grid here and a little picture of the same grid over in
-	# the slot - which is one object too many for a thing whose whole point is
-	# that the gadgets live *inside* it. So the source is the frame now, and what
-	# is racked sits in it.
-	var shell := Rect2(box.position - Vector2(7.0, 7.0), box.size + Vector2(14.0, 14.0))
-	draw_rect(shell, Color(source.power.tint, 0.10))
-	draw_rect(shell, Color(source.power.tint, 0.9 if selected else 0.55), false,
-		2.0 if selected else 1.0)
-	# The lug it hangs off, and the rails down its long sides.
-	draw_rect(Rect2(Vector2(shell.position.x - 4.0, shell.get_center().y - 4.0),
-		Vector2(4.0, 8.0)), Color(source.power.tint, 0.7))
-	draw_line(Vector2(shell.position.x + 3.0, shell.position.y - 2.0),
-		Vector2(shell.end.x - 3.0, shell.position.y - 2.0),
-		Color(source.power.tint, 0.35), 1.0)
-	draw_line(Vector2(shell.position.x + 3.0, shell.end.y + 2.0),
-		Vector2(shell.end.x - 3.0, shell.end.y + 2.0),
-		Color(source.power.tint, 0.35), 1.0)
+	# The casing round the cells, drawn as an object rather than as a border.
+	#
+	# The rack and the thing that runs it were two drawings of one item - a grid
+	# here and a small picture of the same grid over in the slot - which is one
+	# too many for a thing whose whole point is that the gadgets live *inside*
+	# it. So the source is the housing now and what is racked sits in it.
+	#
+	# It has to look built, though. A one-pixel rectangle round the cells is a
+	# table border; what says "hardware" is the weight of the shell, the bolts at
+	# its corners, a terminal block on one end and its name stencilled on it.
+	var tint: Color = source.power.tint
+	var shell := Rect2(box.position - Vector2(13.0, 15.0), box.size + Vector2(26.0, 28.0))
+	draw_rect(shell, Color(tint.r * 0.22, tint.g * 0.24, tint.b * 0.28))
+	draw_rect(shell, Color(tint, 0.9 if selected else 0.6), false,
+		2.0 if selected else 1.5)
+	# A lighter face along the top of the shell, so it has a lit side.
+	draw_rect(Rect2(shell.position + Vector2(2.0, 2.0), Vector2(shell.size.x - 4.0, 2.0)),
+		Color(tint, 0.30))
+
+	# Corner bolts.
+	for corner in [Vector2(4.0, 4.0), Vector2(shell.size.x - 8.0, 4.0),
+			Vector2(4.0, shell.size.y - 8.0),
+			Vector2(shell.size.x - 8.0, shell.size.y - 8.0)]:
+		draw_rect(Rect2(shell.position + corner, Vector2(4.0, 4.0)), Color(tint, 0.55))
+
+	# The terminal block it feeds the suit through, on the muzzle-side end.
+	var post := Rect2(Vector2(shell.end.x, shell.get_center().y - 9.0), Vector2(6.0, 18.0))
+	draw_rect(post, Color(tint.r * 0.3, tint.g * 0.32, tint.b * 0.36))
+	draw_rect(post, Color(tint, 0.6), false, 1.0)
+	for i in 2:
+		draw_rect(Rect2(Vector2(post.position.x + 1.5, post.position.y + 3.0 + float(i) * 7.0),
+			Vector2(3.0, 3.5)), Color(tint, 0.8))
+
+	# Its name, stencilled along the bottom of the shell.
+	var stencil := ThemeDB.fallback_font
+	# Clear of the corner bolt rather than printed over it.
+	draw_string(stencil, Vector2(shell.position.x + 14.0, shell.end.y - 4.0),
+		source.power.short_name, HORIZONTAL_ALIGNMENT_LEFT, shell.size.x - 30.0, 9,
+		Color(tint, 0.75))
 
 	for cy in grid.height:
 		for cx in grid.width:
-			draw_rect(Rect2(box.position + Vector2(cx, cy) * (PACK_CELL + GAP),
-				Vector2(PACK_CELL, PACK_CELL)), CELL_BG)
+			var cell := Rect2(box.position + Vector2(cx, cy) * (PACK_CELL + GAP),
+				Vector2(PACK_CELL, PACK_CELL))
+			# Recessed, so a cell reads as a socket in the casing rather than as
+			# a square drawn on it.
+			draw_rect(cell, Color(0.07, 0.08, 0.10))
+			draw_rect(Rect2(cell.position, Vector2(cell.size.x, 1.5)), Color(tint, 0.18))
 	for item in grid.items:
 		var tile := Rect2(box.position + Vector2(item.cell) * (PACK_CELL + GAP),
 			Vector2(item.size) * (PACK_CELL + GAP) - Vector2(GAP, GAP))
@@ -1205,16 +1230,17 @@ func _draw_power_rack(at: Vector2) -> float:
 	# a source is bought for and otherwise a number in a sentence.
 	var pips := 3 if source.power.charge_scale < 0.9 else (
 		2 if source.power.charge_scale <= 1.0 else 1)
-	for i in pips:
-		draw_rect(Rect2(Vector2(shell.end.x + 4.0, shell.end.y - 6.0 - float(i) * 6.0),
-			Vector2(3.0, 4.0)), Color(source.power.tint, 0.85))
+	for i in 3:
+		var lit := i < pips
+		draw_rect(Rect2(Vector2(shell.end.x - 12.0 - float(i) * 7.0, shell.position.y + 4.0),
+			Vector2(5.0, 4.0)), Color(tint, 0.85 if lit else 0.18))
 
 	var font2 := ThemeDB.fallback_font
 	var free := grid.cell_count() - grid.used_cells()
-	draw_string(font2, Vector2(shell.end.x + 14.0, shell.position.y + 16.0),
+	draw_string(font2, Vector2(shell.end.x + 20.0, shell.position.y + 16.0),
 		"%d/%d cells" % [grid.used_cells(), grid.cell_count()],
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, DIM if free > 0 else BAD)
-	draw_string(font2, Vector2(shell.end.x + 14.0, shell.position.y + 31.0),
+	draw_string(font2, Vector2(shell.end.x + 20.0, shell.position.y + 31.0),
 		"charges at %d%%" % roundi(100.0 / maxf(source.power.charge_scale, 0.01)),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(source.power.tint, 0.8))
 	return shell.end.y + 4.0

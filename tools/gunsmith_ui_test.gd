@@ -87,6 +87,37 @@ func _run() -> void:
 	_check(smith._message.contains("short"), "and says how short you are")
 	shop.credits = 16000
 
+	# --- and it works with a thumb -------------------------------------------
+	#
+	# The kit screen is on its way to a phone, and the workshop is a full screen
+	# of small targets. A tap is not a click: it arrives as a press and a release
+	# at the same point, and a screen that only listens for InputEventMouseButton
+	# is one that does nothing at all on a phone while looking perfectly fine on a
+	# desk.
+	smith.open(shop, rifle)
+	smith._slot = -1
+	var optic := Rect2()
+	for region in smith._regions:
+		if region.get("kind", "") == "slot" and int(region.slot) == AttachmentData.Slot.OPTIC:
+			optic = region.rect
+			break
+	_check(optic.size.x > 0.0, "the workshop draws a tappable optic slot")
+	_tap(smith, optic.get_center())
+	await process_frame
+	_check(smith._slot == AttachmentData.Slot.OPTIC, "a thumb opens the slot it lands on")
+
+	smith.queue_redraw()
+	await process_frame
+	var card := Rect2()
+	for region in smith._regions:
+		if region.get("kind", "") == "buy":
+			card = region.rect
+			break
+	purse = shop.credits
+	_tap(smith, card.get_center())
+	await process_frame
+	_check(shop.credits < purse, "and buying a part off the shelf works the same way")
+
 	# --- the way back ---------------------------------------------------------
 	smith._press(smith._back.get_center())
 	await process_frame
@@ -104,6 +135,18 @@ func _run() -> void:
 
 	print("PASS" if _ok else "FAIL")
 	quit(0 if _ok else 1)
+
+
+## A thumb going down and coming up in the same place, which is what a tap is.
+## Routed through the control's own handler rather than the viewport, so the test
+## does not depend on where the window happens to be.
+func _tap(screen: Control, at: Vector2) -> void:
+	for pressed in [true, false]:
+		var touch := InputEventScreenTouch.new()
+		touch.index = 0
+		touch.pressed = pressed
+		touch.position = at
+		screen._gui_input(touch)
 
 
 func _say(line: String) -> void:
