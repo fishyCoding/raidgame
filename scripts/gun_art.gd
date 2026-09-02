@@ -448,92 +448,108 @@ static func draw_part(canvas: CanvasItem, at: Vector2, zoom: float,
 				where.y - span.y * 0.42, 3.0, span.y), fill.darkened(0.2), line)
 
 
+## How far a drum leans toward the muzzle, in radians.
+##
+## They are not hung straight down. The body sits forward of the feed lips so the
+## rounds feed up and back into the well, and every drum on a rifle has that lean
+## - about twelve degrees is enough to read as deliberate rather than as a
+## drawing that slipped.
+const DRUM_TILT := 0.21
+
+
 ## A drum magazine, side on.
 ##
-## There are two honest ways to draw one and they look nothing alike, because it
-## depends which way the drum faces. With its axis pointing at the viewer you see
-## the round face - a disc with a hub. With its axis across the gun you see the
-## edge - a deep, narrow, flat-sided casing with rounded ends, which is what a
-## drum on a real rifle mostly looks like from the shooter's side.
+## The disc faces down the barrel - the way you are aiming - so from the
+## shooter's side you are looking at its *edge*: the drum's thickness across and
+## its diameter down. On a D-60's numbers, 4.1 inches thick and 7.4 from the feed
+## lips to the bottom, at about three units to the inch on these profiles, that
+## is a body roughly twelve across and twenty deep. A capsule: flat sides, round
+## top and bottom, and half again wider than a box magazine.
 ##
-## Measured, rather than argued about. A Magpul D-60 is 7.4 inches long by 4.1
-## inches wide: the 4.1 is how far it stands out from the side of the gun and the
-## 7.4 is how far it hangs below the magwell. The wide dimension is the one
-## facing the shooter, so from the side you see the round face - a disc a bit
-## over five inches across with a feed tower on top of it - and the narrow one is
-## what you would see from the front. Thompson and PPSh drums are the same shape
-## and the same way round.
-##
-## So FACE is what is drawn, at those proportions: about three units to the inch
-## on these profiles, which puts the disc at 17 units across on a rifle 98 long.
-## EDGE is kept because it is the honest drawing of the other case and flipping
-## is one word - but the numbers say face.
-const DRUM_FACE_ON := true
-
-
+## Two earlier attempts got this wrong in opposite directions. The first drew it
+## seven units across, which is a bottle rather than a drum. The second drew the
+## round face, which is a different magazine mounted a different way. The
+## thickness is the number that makes it read - too narrow and no amount of
+## detail rescues it - and the shading is what makes it a cylinder rather than a
+## rounded box.
 static func _draw_drum(canvas: CanvasItem, at: Vector2, zoom: float,
 		where: Vector2, span: Vector2, fill: Color, line: Color) -> void:
 	var tower := span.x * 0.40
-	var shoulder := where.y + span.y * 0.26
-	# The tower: the part that is actually in the magwell, on both readings.
+	var shoulder := where.y + span.y * 0.16
+	# The feed tower: the part in the magwell, the same width as any other
+	# magazine, because that is the part the gun has to accept. Upright - it is
+	# in the well, and the lean happens below it.
 	_shape(canvas, at, zoom, PackedVector2Array([
 		Vector2(where.x - tower * 0.5, where.y - 1.5),
 		Vector2(where.x + tower * 0.5, where.y - 1.5),
-		Vector2(where.x + tower * 0.5, shoulder + 1.5),
-		Vector2(where.x - tower * 0.5, shoulder + 1.5)]), fill, line)
+		Vector2(where.x + tower * 0.5, shoulder + 2.0),
+		Vector2(where.x - tower * 0.5, shoulder + 2.0)]), fill, line)
 
-	if DRUM_FACE_ON:
-		# The round face. art_size.x is the disc across and art_size.y the whole
-		# drop from the magwell, both to the D-60's proportions - so the tower is
-		# what is left over once the disc is taken off the bottom.
-		var disc := span.x * 0.5
-		var hub := Vector2(where.x + 0.5, where.y + span.y - disc)
-		canvas.draw_circle(at + hub * zoom, disc * zoom, fill)
-		canvas.draw_arc(at + hub * zoom, disc * zoom, 0.0, TAU, 32, line,
-			maxf(1.0, zoom * 0.35), true)
-		# The rotor at the middle and the window that shows how much is left in
-		# it: the two details that say drum rather than ball.
-		canvas.draw_circle(at + hub * zoom, disc * 0.26 * zoom, fill.darkened(0.32))
-		canvas.draw_arc(at + hub * zoom, disc * 0.26 * zoom, 0.0, TAU, 18, line,
-			maxf(1.0, zoom * 0.28), true)
-		for i in 3:
-			var turn := TAU * float(i) / 3.0 + 0.5
-			canvas.draw_line(at + (hub + Vector2(cos(turn), sin(turn)) * disc * 0.32) * zoom,
-				at + (hub + Vector2(cos(turn), sin(turn)) * disc * 0.88) * zoom,
-				Color(line, 0.40), maxf(1.0, zoom * 0.3))
-		canvas.draw_arc(at + hub * zoom, disc * 0.62 * zoom, PI * 0.15, PI * 0.85,
-			14, Color(line, 0.30), maxf(1.0, zoom * 0.5), true)
-		return
+	# Everything below hangs off the well and leans forward from it, so the pivot
+	# is where the two meet rather than the middle of the body - a drum rotated
+	# about its own centre pulls its top out of the magazine it is supposed to be
+	# feeding.
+	var pivot := Vector2(where.x, shoulder)
+	var half := span.x * 0.36
+	var top := shoulder + half
+	var bottom := where.y + span.y - half
 
-	# The edge: a deep casing with flat sides and rounded ends, a little wider
-	# than the tower and no wider than the trigger guard is long. This is the
-	# reading where the drum's faces point left and right of the gun, which is
-	# how one sits on a rifle - and from the shooter's side you see its thickness,
-	# not its face.
-	var wide := span.x * 0.44
-	var top := shoulder
-	var bottom := shoulder + span.y * 1.05
-	var round_at := wide * 0.9
-	var shell := PackedVector2Array([
-		Vector2(where.x - wide, top + round_at * 0.5),
-		Vector2(where.x - wide * 0.55, top),
-		Vector2(where.x + wide * 0.55, top),
-		Vector2(where.x + wide, top + round_at * 0.5)])
-	for i in range(1, 9):
-		var turn := PI * float(i) / 9.0
-		shell.append(Vector2(where.x + cos(turn) * wide,
-			bottom - round_at * 0.4 + sin(turn) * round_at))
-	_shape(canvas, at, zoom, shell, fill, line)
-	# A seam down the middle and a witness window, which is what says "drum"
-	# rather than "very fat magazine".
-	_shape(canvas, at, zoom,
-		_box(where.x - wide * 0.30, top + 2.0, wide * 0.60, bottom - top - 5.0),
-		fill.darkened(0.22), Color(line, 0.35))
-	for i in 3:
-		var band := top + (bottom - top) * (0.30 + 0.22 * float(i))
-		canvas.draw_line(at + Vector2(where.x - wide * 0.82, band) * zoom,
-			at + Vector2(where.x + wide * 0.82, band) * zoom,
-			Color(line, 0.4), maxf(1.0, zoom * 0.25))
+	# The body: half a circle at each end with straight sides between them, which
+	# is what a cylinder looks like from ninety degrees off its axis. Nudged
+	# forward of the well so it clears the pistol grip behind it.
+	var nose := half * 0.3
+	var shell := _capsule(Vector2(where.x + nose, top), Vector2(where.x + nose, bottom), half)
+	_shape(canvas, at, zoom, _lean(shell, pivot), fill, line)
+
+	# A recessed face inside it, which is the whole of the shading. The first
+	# version of this put a lit strip down one side and a shaded strip down the
+	# other, and rotated they read as two bars laid across the drum rather than
+	# as a curved surface - one inset shape says "cylinder" and cannot be
+	# mistaken for anything else.
+	var inset := _capsule(Vector2(where.x + nose, top + half * 0.55),
+		Vector2(where.x + nose, bottom - half * 0.55), half * 0.62)
+	_shape(canvas, at, zoom, _lean(inset, pivot), fill.darkened(0.16),
+		Color(line, 0.25))
+
+	# The winder cap at the middle of it, and a pair of ribs across the face.
+	var middle := Vector2(where.x + nose, (top + bottom) * 0.5)
+	var hub := _lean(PackedVector2Array([middle]), pivot)[0]
+	canvas.draw_circle(at + hub * zoom, half * 0.30 * zoom, fill.lightened(0.14))
+	canvas.draw_arc(at + hub * zoom, half * 0.30 * zoom, 0.0, TAU, 16, line,
+		maxf(1.0, zoom * 0.26), true)
+	for i in 2:
+		var band := top + (bottom - top) * (0.26 + 0.48 * float(i))
+		var rib := _lean(PackedVector2Array([
+			Vector2(where.x + nose - half * 0.5, band),
+			Vector2(where.x + nose + half * 0.5, band)]), pivot)
+		canvas.draw_line(at + rib[0] * zoom, at + rib[1] * zoom,
+			Color(line, 0.28), maxf(1.0, zoom * 0.22))
+
+
+## A capsule: a straight-sided body with a half circle at each end, from one
+## centre to the other. The drum's outline, and the inset inside it.
+static func _capsule(from: Vector2, to: Vector2, wide: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	# Round the bottom first, left to right, then back up and round the top the
+	# same way. Both arcs have to run the *same way round the outline* - sweeping
+	# each of them left-to-right in its own local space is what turned this into
+	# a bowtie, because the second one then doubles back through the first.
+	for i in range(0, 11):
+		var turn := PI * float(i) / 10.0
+		out.append(to + Vector2(cos(turn) * wide, sin(turn) * wide))
+	for i in range(0, 11):
+		var turn := PI + PI * float(i) / 10.0
+		out.append(from + Vector2(cos(turn) * wide, sin(turn) * wide))
+	return out
+
+
+## Leans a set of points forward about a pivot. Negative because screen y is
+## down: a positive rotation would swing the bottom of the drum toward the stock.
+static func _lean(points: PackedVector2Array, pivot: Vector2) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for point in points:
+		out.append(pivot + (point - pivot).rotated(-DRUM_TILT))
+	return out
 
 
 ## Whether anything in that slot is bolted on.
