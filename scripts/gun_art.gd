@@ -314,25 +314,29 @@ static func draw_gun(canvas: CanvasItem, at: Vector2, zoom: float,
 
 ## The outline of a buttstock, from the back of the receiver to the pad.
 ##
-## The shape that matters is the *waist*: a stock is deep where it meets the
-## receiver, narrows through the middle where your hand and cheek go, and swells
-## again at the butt so there is something to put against a shoulder. Drawn as a
-## wedge tapering to a point at the back - which is what these were - it reads as
-## a spike, and a gun nobody would want to fire.
+## Straight lines only, and a narrow waist. Two things make a stock read: the
+## comb is a thin straight bar running back from the receiver, and the butt is a
+## tall flat face at the end of it - between them the stock is *thinner* than
+## either, because that gap is where a hand and a cheekbone go.
 ##
-## The comb also drops slightly toward the rear rather than rising, because a
-## comb that climbs pushes your eye above the sights.
+## The first version tapered to a point at the back, which is a spike. The second
+## had a waist but built it from eight points on a curve, which is a fishtail -
+## and this game is drawn in flat panels with hard edges, so a curve here reads as
+## a mistake rather than as a shape. Every vertex below is a corner.
 static func _stock_shape(reach: float, deep: float) -> PackedVector2Array:
 	return PackedVector2Array([
-		Vector2(0.0, -deep * 0.44),
-		Vector2(-reach * 0.30, -deep * 0.50),
-		Vector2(-reach * 0.88, -deep * 0.46),
-		Vector2(-reach * 0.97, -deep * 0.30),
-		Vector2(-reach * 0.97, deep * 0.62),
-		Vector2(-reach * 0.80, deep * 0.66),
-		Vector2(-reach * 0.42, deep * 0.30),
-		Vector2(-reach * 0.16, deep * 0.24),
-		Vector2(0.0, deep * 0.30),
+		# Along the comb: down off the receiver, then dead straight to the butt.
+		Vector2(0.0, -deep * 0.42),
+		Vector2(-reach * 0.20, -deep * 0.22),
+		Vector2(-reach * 0.94, -deep * 0.22),
+		Vector2(-reach * 0.99, -deep * 0.30),
+		# The butt face, upright and tall.
+		Vector2(-reach * 0.99, deep * 0.60),
+		Vector2(-reach * 0.90, deep * 0.60),
+		# And back along the underside, through the waist.
+		Vector2(-reach * 0.62, deep * 0.16),
+		Vector2(-reach * 0.18, deep * 0.16),
+		Vector2(0.0, deep * 0.32),
 	])
 
 
@@ -340,10 +344,10 @@ static func _stock_shape(reach: float, deep: float) -> PackedVector2Array:
 ## sits into a shoulder rather than against it.
 static func _butt_pad(reach: float, deep: float) -> PackedVector2Array:
 	return PackedVector2Array([
-		Vector2(-reach * 0.97, -deep * 0.32),
-		Vector2(-reach * 0.86, -deep * 0.36),
-		Vector2(-reach * 0.83, deep * 0.66),
-		Vector2(-reach * 0.95, deep * 0.66),
+		Vector2(-reach * 0.99, -deep * 0.30),
+		Vector2(-reach * 0.88, -deep * 0.24),
+		Vector2(-reach * 0.86, deep * 0.60),
+		Vector2(-reach * 0.99, deep * 0.60),
 	])
 
 
