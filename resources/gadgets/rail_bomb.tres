@@ -1,6 +1,6 @@
-[gd_resource type="Resource" script_class="GadgetData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="GadgetData" format=3 uid="uid://diejctlwyu06m"]
 
-[ext_resource type="Script" path="res://scripts/gadget_data.gd" id="1_gadget"]
+[ext_resource type="Script" uid="uid://o84vejlayppy" path="res://scripts/gadget_data.gd" id="1_gadget"]
 
 [resource]
 script = ExtResource("1_gadget")
@@ -10,12 +10,7 @@ kind = 8
 gadget_class = 1
 price = 1200
 radius = 220.0
-travel_speed = 600.0
-sight_range = 520.0
-hover_time = 10.0
-hit_points = 3
 damage = 34.0
-charge_time = 45.0
 active_time = 14.0
-tint = Color(0.55, 0.85, 1.0, 1)
+tint = Color(0.55, 0.85, 1, 1)
 grid_size = Vector2i(2, 1)

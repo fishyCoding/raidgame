@@ -31,30 +31,30 @@ extends RefCounted
 ## weapon - long and thin is a rifle, short and deep is a shotgun - and detail
 ## below that is noise at the scale it will be looked at.
 const PROFILES := {
-	"PISTOL": {"receiver": Vector2(40.0, 12.0), "barrel": Vector2(5.0, 7.0),
-		"guard": 0.0, "grip_at": 9.0, "mag_at": 11.0, "stock": 0.0, "vents": 0,
-		"mark": ""},
-	"SMG": {"receiver": Vector2(50.0, 14.0), "barrel": Vector2(18.0, 6.0),
-		"guard": 15.0, "grip_at": 17.0, "mag_at": 31.0, "stock": 18.0, "vents": 2,
-		"mark": "shroud"},
-	"AR": {"receiver": Vector2(60.0, 14.0), "barrel": Vector2(38.0, 5.0),
-		"guard": 26.0, "grip_at": 18.0, "mag_at": 36.0, "stock": 24.0, "vents": 4,
-		"mark": "carry"},
-	"SHOTGUN": {"receiver": Vector2(54.0, 16.0), "barrel": Vector2(44.0, 8.0),
-		"guard": 30.0, "grip_at": 16.0, "mag_at": 0.0, "stock": 26.0, "vents": 0,
-		"mark": "tube"},
-	"SLUG": {"receiver": Vector2(54.0, 16.0), "barrel": Vector2(48.0, 7.0),
-		"guard": 30.0, "grip_at": 16.0, "mag_at": 0.0, "stock": 26.0, "vents": 0,
-		"mark": "tube"},
-	"LMG": {"receiver": Vector2(72.0, 18.0), "barrel": Vector2(46.0, 6.0),
-		"guard": 20.0, "grip_at": 20.0, "mag_at": 42.0, "stock": 26.0, "vents": 5,
-		"mark": "bipod"},
-	"SNIPER": {"receiver": Vector2(66.0, 13.0), "barrel": Vector2(62.0, 4.5),
-		"guard": 20.0, "grip_at": 20.0, "mag_at": 40.0, "stock": 32.0, "vents": 2,
-		"mark": "bolt"},
-	"GRD": {"receiver": Vector2(56.0, 13.0), "barrel": Vector2(30.0, 5.0),
-		"guard": 22.0, "grip_at": 18.0, "mag_at": 33.0, "stock": 20.0, "vents": 3,
-		"mark": ""},
+	"PISTOL": {"receiver": Vector2(38.0, 10.5), "barrel": Vector2(6.0, 5.5),
+		"guard": 0.0, "grip_at": 8.0, "mag_at": 10.0, "stock": 0.0, "vents": 0,
+		"mark": "", "well": 0.0},
+	"SMG": {"receiver": Vector2(48.0, 11.5), "barrel": Vector2(20.0, 5.0),
+		"guard": 16.0, "grip_at": 16.0, "mag_at": 28.0, "stock": 18.0, "vents": 2,
+		"mark": "shroud", "well": 4.0},
+	"AR": {"receiver": Vector2(58.0, 11.5), "barrel": Vector2(40.0, 4.2),
+		"guard": 28.0, "grip_at": 15.0, "mag_at": 30.0, "stock": 24.0, "vents": 4,
+		"mark": "carry", "well": 5.0},
+	"SHOTGUN": {"receiver": Vector2(52.0, 13.0), "barrel": Vector2(46.0, 6.5),
+		"guard": 32.0, "grip_at": 14.0, "mag_at": 0.0, "stock": 26.0, "vents": 0,
+		"mark": "tube", "well": 0.0},
+	"SLUG": {"receiver": Vector2(52.0, 13.0), "barrel": Vector2(50.0, 6.0),
+		"guard": 32.0, "grip_at": 14.0, "mag_at": 0.0, "stock": 26.0, "vents": 0,
+		"mark": "tube", "well": 0.0},
+	"LMG": {"receiver": Vector2(70.0, 14.5), "barrel": Vector2(48.0, 5.0),
+		"guard": 22.0, "grip_at": 18.0, "mag_at": 38.0, "stock": 26.0, "vents": 5,
+		"mark": "bipod", "well": 6.0},
+	"SNIPER": {"receiver": Vector2(64.0, 11.0), "barrel": Vector2(64.0, 4.0),
+		"guard": 20.0, "grip_at": 18.0, "mag_at": 34.0, "stock": 32.0, "vents": 2,
+		"mark": "bolt", "well": 4.5},
+	"GRD": {"receiver": Vector2(54.0, 11.0), "barrel": Vector2(32.0, 4.2),
+		"guard": 24.0, "grip_at": 15.0, "mag_at": 28.0, "stock": 20.0, "vents": 3,
+		"mark": "", "well": 4.0},
 }
 ## Anything not in the table is drawn as a rifle rather than as nothing.
 const FALLBACK := "AR"
@@ -106,8 +106,13 @@ static func mounts(gun: WeaponData) -> Dictionary:
 	return {
 		AttachmentData.Slot.MUZZLE: Vector2(body.x + barrel.x, 0.0),
 		AttachmentData.Slot.OPTIC: Vector2(body.x * 0.44, rail_top),
+		# The lip of the magwell, not the bottom of the receiver: a magazine is
+		# fed up into the housing, so what it seats against is the bottom of the
+		# housing. Guns without a well - the pump shotguns - fall back to the
+		# receiver line and never use it, having no box magazine to hang.
 		AttachmentData.Slot.MAGAZINE: Vector2(
-			p["mag_at"] if p["mag_at"] > 0.0 else body.x * 0.5, body.y * 0.5),
+			p["mag_at"] if p["mag_at"] > 0.0 else body.x * 0.5,
+			body.y * 0.42 + p["well"]),
 		AttachmentData.Slot.GRIP: Vector2(body.x + barrel.x * 0.30, under),
 		AttachmentData.Slot.STOCK: Vector2(0.0, 0.0),
 	}
@@ -161,78 +166,92 @@ static func draw_gun(canvas: CanvasItem, at: Vector2, zoom: float,
 	# it, and a magazine replaces the magazine. Drawing both is how you end up
 	# with two stocks overlapping, which reads as a rendering fault rather than
 	# as a gun.
-	var has_stock := false
-	var has_mag := false
-	for part in parts:
-		var it := part as AttachmentData
-		if it == null:
-			continue
-		has_stock = has_stock or it.slot == AttachmentData.Slot.STOCK
-		has_mag = has_mag or it.slot == AttachmentData.Slot.MAGAZINE
+	var has_stock := _has(parts, AttachmentData.Slot.STOCK)
+	var has_mag := _has(parts, AttachmentData.Slot.MAGAZINE)
 
-	# Back to front, the way it would be assembled: stock, barrel, handguard,
-	# receiver, then the things that hang off it.
+	# Back to front, the way it would be assembled.
 	if p["stock"] > 0.0 and not has_stock:
 		var stock_len: float = p["stock"]
-		# A comb along the top and a butt plate at the back, rather than one
-		# wedge. Two extra polygons, and it stops reading as a doorstop.
+		# A thin comb rising to the receiver and a slim tube under it, rather
+		# than one solid wedge. Two long shapes read as a stock; one fat one
+		# reads as a doorstop.
 		_shape(canvas, at, zoom, PackedVector2Array([
-			Vector2(0.0, -body.y * 0.40), Vector2(0.0, body.y * 0.34),
-			Vector2(-stock_len * 0.72, body.y * 0.50),
-			Vector2(-stock_len, body.y * 0.46),
-			Vector2(-stock_len, -body.y * 0.30),
-			Vector2(-stock_len * 0.60, -body.y * 0.40)]))
-		_shape(canvas, at, zoom, _box(-stock_len - 1.5, -body.y * 0.30,
-			3.0, body.y * 0.76), METAL.darkened(0.18), EDGE)
+			Vector2(0.0, -body.y * 0.40), Vector2(0.0, -body.y * 0.05),
+			Vector2(-stock_len * 0.94, body.y * 0.02),
+			Vector2(-stock_len, -body.y * 0.06),
+			Vector2(-stock_len, -body.y * 0.44),
+			Vector2(-stock_len * 0.55, -body.y * 0.46)]))
+		_shape(canvas, at, zoom, PackedVector2Array([
+			Vector2(0.0, body.y * 0.06), Vector2(0.0, body.y * 0.40),
+			Vector2(-stock_len * 0.52, body.y * 0.30),
+			Vector2(-stock_len * 0.62, body.y * 0.02)]), METAL.darkened(0.1), EDGE)
+		# The butt plate, upright and thin.
+		_shape(canvas, at, zoom, _box(-stock_len - 2.0, -body.y * 0.44,
+			2.4, body.y * 0.5), METAL.darkened(0.22), EDGE)
 
-	# The barrel, with a step down to a thinner muzzle end - a straight tube all
-	# the way reads as a pipe.
-	_shape(canvas, at, zoom, _box(body.x, -barrel.y * 0.5, barrel.x * 0.58, barrel.y))
-	_shape(canvas, at, zoom, _box(body.x + barrel.x * 0.55, -barrel.y * 0.42,
-		barrel.x * 0.45, barrel.y * 0.84))
-	# The front sight post. Square, and no taller than the barrel is thick: the
-	# slanted version of this read as a little flag on the end of the gun, which
-	# is the sort of thing the eye trips over and cannot name.
-	var post := maxf(barrel.y * 0.55, 2.2)
+	# The barrel: one taper rather than two boxes, so the line down it is
+	# continuous. A gun this size is read along its length, and a step halfway
+	# breaks the read.
+	_shape(canvas, at, zoom, PackedVector2Array([
+		Vector2(body.x, -barrel.y * 0.5), Vector2(body.x + barrel.x, -barrel.y * 0.34),
+		Vector2(body.x + barrel.x, barrel.y * 0.34), Vector2(body.x, barrel.y * 0.5)]))
+	# A gas block, which is what stops a long barrel reading as wire.
+	_shape(canvas, at, zoom, _box(body.x + barrel.x * 0.58, -barrel.y * 0.5 - 1.6,
+		4.5, barrel.y + 3.2), METAL.lightened(0.06), EDGE)
+	# The front sight post: square, and no taller than the barrel is thick.
+	var post := maxf(barrel.y * 0.7, 2.0)
 	_shape(canvas, at, zoom,
-		_box(body.x + barrel.x - 5.0, -barrel.y * 0.36 - post, 2.4, post))
-	# A gas block under it, which is also what stops a long barrel reading as a
-	# length of wire with a gun on the end.
-	_shape(canvas, at, zoom, _box(body.x + barrel.x * 0.62, -barrel.y * 0.5 - 1.2,
-		5.0, barrel.y + 2.4))
+		_box(body.x + barrel.x - 5.0, -barrel.y * 0.34 - post, 2.2, post))
 
-	# The handguard, with vents cut in it. The vents are most of what separates
-	# an LMG from a shotgun at this size.
+	# The handguard: slimmer than the receiver and slotted, so the two read as
+	# different parts of one object rather than as one long box.
 	if p["guard"] > 0.0:
 		var guard: float = p["guard"]
-		var guard_x: float = body.x - 3.0
-		_shape(canvas, at, zoom, _box(guard_x, -barrel.y * 0.5 - 3.5,
-			guard, barrel.y * 0.5 + 3.5 + GUARD_DEPTH))
+		var guard_x: float = body.x - 2.0
+		_shape(canvas, at, zoom, PackedVector2Array([
+			Vector2(guard_x, -barrel.y * 0.5 - 2.6),
+			Vector2(guard_x + guard, -barrel.y * 0.5 - 2.0),
+			Vector2(guard_x + guard, barrel.y * 0.5 + GUARD_DEPTH - 1.0),
+			Vector2(guard_x, barrel.y * 0.5 + GUARD_DEPTH)]))
 		var vents: int = p["vents"]
 		for i in vents:
-			var slot_x := guard_x + guard * (0.16 + 0.66 * (float(i) / maxf(float(vents), 1.0)))
+			var slot_x := guard_x + guard * (0.18 + 0.62 * (float(i) / maxf(float(vents), 1.0)))
 			_shape(canvas, at, zoom,
-				_box(slot_x, -barrel.y * 0.5 - 1.0, 2.0, barrel.y + 3.0),
-				METAL.darkened(0.35), Color(EDGE, 0.0))
+				_box(slot_x, -barrel.y * 0.4, 1.8, barrel.y + 2.2),
+				METAL.darkened(0.38), Color(EDGE, 0.0))
 
-	# The receiver, with an ejection port cut into it so it has a near side, and
-	# a lit edge along the top so it has a shape rather than an outline.
-	_shape(canvas, at, zoom, _box(0.0, -body.y * 0.5, body.x, body.y))
-	_shape(canvas, at, zoom, _box(1.0, -body.y * 0.5 + 1.0, body.x - 2.0, 1.6),
-		METAL.lightened(0.16), Color(EDGE, 0.0))
-	_shape(canvas, at, zoom, _box(body.x * 0.52, -body.y * 0.30,
-		body.x * 0.22, body.y * 0.30), METAL.darkened(0.3), Color(EDGE, 0.35))
+	# The receiver, tapered toward the muzzle end and with a cut-back heel, so
+	# the silhouette has a direction to it.
+	_shape(canvas, at, zoom, PackedVector2Array([
+		Vector2(2.0, -body.y * 0.5), Vector2(body.x, -body.y * 0.42),
+		Vector2(body.x, body.y * 0.42), Vector2(2.0, body.y * 0.5),
+		Vector2(0.0, body.y * 0.28), Vector2(0.0, -body.y * 0.28)]))
+	# A lit edge along the top and an ejection port, which between them give it a
+	# near side.
+	_shape(canvas, at, zoom, _box(3.0, -body.y * 0.5 + 0.8, body.x - 5.0, 1.3),
+		METAL.lightened(0.18), Color(EDGE, 0.0))
+	_shape(canvas, at, zoom, _box(body.x * 0.54, -body.y * 0.24,
+		body.x * 0.20, body.y * 0.26), METAL.darkened(0.32), Color(EDGE, 0.3))
+
+	# The magwell: the housing the magazine goes up into. Without it a box
+	# magazine looks stuck to the underside of the gun rather than fed through
+	# it, and it is the single detail that makes the underside read as designed.
+	var well_deep: float = p["well"]
+	var well_at: float = p["mag_at"]
+	if well_deep > 0.0 and well_at > 0.0:
+		var well_wide := 11.0
+		_shape(canvas, at, zoom, PackedVector2Array([
+			Vector2(well_at - well_wide * 0.5 - 1.0, body.y * 0.30),
+			Vector2(well_at + well_wide * 0.5 + 1.0, body.y * 0.30),
+			Vector2(well_at + well_wide * 0.5, body.y * 0.42 + well_deep),
+			Vector2(well_at - well_wide * 0.5 - 2.0, body.y * 0.42 + well_deep)]),
+			METAL.lightened(0.05), EDGE)
 
 	# The one feature that tells this weapon apart from the others at a glance.
-	# Every gun here is a receiver, a barrel and a stock, and at the size these
-	# are drawn that made a shotgun and a rifle the same picture at different
-	# lengths - which is no use on a screen whose whole job is telling you what
-	# you are holding.
 	_draw_mark(canvas, at, zoom, p)
 
 	# The magazine before the grip, so the hand is drawn in front of the box the
-	# way it sits on the real thing - and so a drum, which is wider than the gap
-	# between the two, does not swallow the grip whole.
+	# way it sits on the real thing.
 	for part in parts:
 		var it := part as AttachmentData
 		if it and it.slot == AttachmentData.Slot.MAGAZINE:
@@ -240,35 +259,32 @@ static func draw_gun(canvas: CanvasItem, at: Vector2, zoom: float,
 	if not has_mag and p["mag_at"] > 0.0:
 		var well: Vector2 = mounts(gun)[AttachmentData.Slot.MAGAZINE]
 		_shape(canvas, at, zoom, PackedVector2Array([
-			Vector2(well.x - 4.5, well.y), Vector2(well.x + 4.5, well.y),
-			Vector2(well.x + 3.5, well.y + 15.0),
-			Vector2(well.x - 6.5, well.y + 15.0)]))
+			Vector2(well.x - 4.0, well.y - 1.0), Vector2(well.x + 4.0, well.y - 1.0),
+			Vector2(well.x + 3.2, well.y + 13.0),
+			Vector2(well.x - 5.6, well.y + 13.0)]))
 
-	# Trigger guard and grip. The loop is a thin polygon rather than a filled
-	# one, which is the cheapest way to make a gun look like a gun.
+	# Trigger guard and grip, both thinner than they were.
 	var grip_x: float = p["grip_at"]
-	var guard_y: float = body.y * 0.5
+	var guard_y: float = body.y * 0.42
 	canvas.draw_polyline(PackedVector2Array([
-		at + Vector2(grip_x + 12.0, guard_y) * zoom,
-		at + Vector2(grip_x + 14.0, guard_y + 7.0) * zoom,
-		at + Vector2(grip_x + 6.0, guard_y + 8.5) * zoom,
-		at + Vector2(grip_x + 2.0, guard_y + 4.0) * zoom]),
-		EDGE, maxf(1.0, zoom * 0.5), true)
+		at + Vector2(grip_x + 11.0, guard_y) * zoom,
+		at + Vector2(grip_x + 12.5, guard_y + 6.5) * zoom,
+		at + Vector2(grip_x + 5.5, guard_y + 7.5) * zoom,
+		at + Vector2(grip_x + 1.5, guard_y + 3.5) * zoom]),
+		EDGE, maxf(1.0, zoom * 0.42), true)
 	_shape(canvas, at, zoom, PackedVector2Array([
-		Vector2(grip_x, guard_y - 1.0), Vector2(grip_x + 11.0, guard_y - 1.0),
-		Vector2(grip_x + 7.0, guard_y + 19.0),
-		Vector2(grip_x - 4.0, guard_y + 19.0)]))
+		Vector2(grip_x, guard_y - 0.5), Vector2(grip_x + 9.5, guard_y - 0.5),
+		Vector2(grip_x + 6.0, guard_y + 17.0),
+		Vector2(grip_x - 2.5, guard_y + 17.0)]))
 
-	# The rail along the top, drawn as notches, and the iron sight standing on it
-	# so a gun with no optic still has something to aim with. Both hung off
-	# RAIL_H, which is also what an optic mounts against - see mounts().
+	# The rail along the top, and the iron sight standing on it.
 	for i in 5:
 		_shape(canvas, at, zoom,
-			_box(body.x * (0.24 + 0.10 * float(i)), -body.y * 0.5 - RAIL_H, 3.0, RAIL_H),
-			METAL.lightened(0.12), Color(EDGE, 0.0))
+			_box(body.x * (0.26 + 0.09 * float(i)), -body.y * 0.5 - RAIL_H, 2.6, RAIL_H),
+			METAL.lightened(0.14), Color(EDGE, 0.0))
 	var rail: Vector2 = mounts(gun)[AttachmentData.Slot.OPTIC]
 	if not _has(parts, AttachmentData.Slot.OPTIC):
-		_shape(canvas, at, zoom, _box(rail.x - 2.0, rail.y - 3.5, 4.0, 3.5))
+		_shape(canvas, at, zoom, _box(rail.x - 1.6, rail.y - 3.2, 3.2, 3.2))
 
 	# Everything else on top of the gun it is bolted to.
 	for part in parts:
@@ -434,51 +450,73 @@ static func draw_part(canvas: CanvasItem, at: Vector2, zoom: float,
 
 ## A drum magazine, side on.
 ##
-## Not a circle, and not parked under the pistol grip. A drum seen from the side
-## of a gun is a feed tower standing in the magwell with a deep, flat-topped body
-## slung under and forward of it - the top is flat because that is where it bolts
-## to the tower, and the bottom is round because that is where the spring lives.
-## Drawn as a plain circle it read as a ball stuck to the receiver, and centred on
-## the magwell it sat straight through the grip.
+## There are two honest ways to draw one and they look nothing alike, because it
+## depends which way the drum faces. With its axis pointing at the viewer you see
+## the round face - a disc with a hub. With its axis across the gun you see the
+## edge - a deep, narrow, flat-sided casing with rounded ends, which is what a
+## drum on a real rifle mostly looks like from the shooter's side.
+##
+## EDGE is the one drawn. Set DRUM_FACE_ON to swap it, which is a one-word change
+## rather than a rewrite - both are kept because which one is right is a question
+## about the game's own point of view rather than about magazines.
+const DRUM_FACE_ON := false
+
+
 static func _draw_drum(canvas: CanvasItem, at: Vector2, zoom: float,
 		where: Vector2, span: Vector2, fill: Color, line: Color) -> void:
-	var tower := span.x * 0.44
-	var shoulder := where.y + span.y * 0.30
-	# The tower: the part that is actually in the magwell, drawn first so the
-	# body overlaps its lower end.
+	var tower := span.x * 0.40
+	var shoulder := where.y + span.y * 0.26
+	# The tower: the part that is actually in the magwell, on both readings.
 	_shape(canvas, at, zoom, PackedVector2Array([
-		Vector2(where.x - tower * 0.5, where.y - 1.0),
-		Vector2(where.x + tower * 0.5, where.y - 1.0),
-		Vector2(where.x + tower * 0.5, shoulder + 2.0),
-		Vector2(where.x - tower * 0.5, shoulder + 2.0)]), fill, line)
+		Vector2(where.x - tower * 0.5, where.y - 1.5),
+		Vector2(where.x + tower * 0.5, where.y - 1.5),
+		Vector2(where.x + tower * 0.5, shoulder + 1.5),
+		Vector2(where.x - tower * 0.5, shoulder + 1.5)]), fill, line)
 
-	# The body, hung forward of the magwell so it clears the grip behind it. Flat
-	# across the top and rounded below - a D on its back rather than a wheel.
-	# Forward of the magwell by a third of its own width. A drum hangs off the
-	# front of the well on a real gun and it has to here too, or it is drawn
-	# straight through the pistol grip behind it - which read as a satchel
-	# strapped to the trigger hand.
-	var hub := Vector2(where.x + span.x * 0.34, shoulder + span.y * 0.42)
-	var wide := span.x * 0.62
-	var deep := span.y * 0.46
-	var shell := PackedVector2Array([Vector2(hub.x - wide, shoulder),
-		Vector2(hub.x + wide, shoulder)])
-	for i in range(1, 15):
-		var turn := PI * float(i) / 14.0
-		shell.append(hub + Vector2(cos(turn) * wide, sin(turn) * deep))
+	if DRUM_FACE_ON:
+		# The round face: a disc with a hub and spokes.
+		var hub := Vector2(where.x, shoulder + span.y * 0.62)
+		var disc := span.y * 0.62
+		canvas.draw_circle(at + hub * zoom, disc * zoom, fill)
+		canvas.draw_arc(at + hub * zoom, disc * zoom, 0.0, TAU, 30, line,
+			maxf(1.0, zoom * 0.35), true)
+		canvas.draw_circle(at + hub * zoom, disc * 0.28 * zoom, fill.darkened(0.3))
+		for i in 4:
+			var turn := TAU * float(i) / 4.0 + 0.4
+			canvas.draw_line(at + (hub + Vector2(cos(turn), sin(turn)) * disc * 0.34) * zoom,
+				at + (hub + Vector2(cos(turn), sin(turn)) * disc * 0.86) * zoom,
+				Color(line, 0.45), maxf(1.0, zoom * 0.28))
+		return
+
+	# The edge: a deep casing with flat sides and rounded ends, a little wider
+	# than the tower and no wider than the trigger guard is long. This is the
+	# reading where the drum's faces point left and right of the gun, which is
+	# how one sits on a rifle - and from the shooter's side you see its thickness,
+	# not its face.
+	var wide := span.x * 0.44
+	var top := shoulder
+	var bottom := shoulder + span.y * 1.05
+	var round_at := wide * 0.9
+	var shell := PackedVector2Array([
+		Vector2(where.x - wide, top + round_at * 0.5),
+		Vector2(where.x - wide * 0.55, top),
+		Vector2(where.x + wide * 0.55, top),
+		Vector2(where.x + wide, top + round_at * 0.5)])
+	for i in range(1, 9):
+		var turn := PI * float(i) / 9.0
+		shell.append(Vector2(where.x + cos(turn) * wide,
+			bottom - round_at * 0.4 + sin(turn) * round_at))
 	_shape(canvas, at, zoom, shell, fill, line)
-
-	# The hub and its spokes: the reason anybody reads it as a drum rather than
-	# as a pouch.
-	canvas.draw_circle(at + hub * zoom, deep * 0.34 * zoom, fill.darkened(0.28))
-	canvas.draw_arc(at + hub * zoom, deep * 0.34 * zoom, 0.0, TAU, 16, line,
-		maxf(1.0, zoom * 0.3), true)
+	# A seam down the middle and a witness window, which is what says "drum"
+	# rather than "very fat magazine".
+	_shape(canvas, at, zoom,
+		_box(where.x - wide * 0.30, top + 2.0, wide * 0.60, bottom - top - 5.0),
+		fill.darkened(0.22), Color(line, 0.35))
 	for i in 3:
-		var turn := PI * (0.18 + 0.32 * float(i))
-		canvas.draw_line(
-			at + (hub + Vector2(cos(turn), sin(turn)) * deep * 0.4) * zoom,
-			at + (hub + Vector2(cos(turn) * wide, sin(turn) * deep) * 0.78) * zoom,
-			Color(line, 0.45), maxf(1.0, zoom * 0.25))
+		var band := top + (bottom - top) * (0.30 + 0.22 * float(i))
+		canvas.draw_line(at + Vector2(where.x - wide * 0.82, band) * zoom,
+			at + Vector2(where.x + wide * 0.82, band) * zoom,
+			Color(line, 0.4), maxf(1.0, zoom * 0.25))
 
 
 ## Whether anything in that slot is bolted on.

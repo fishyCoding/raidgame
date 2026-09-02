@@ -882,7 +882,17 @@ func _draw_slots(at: Vector2) -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, ACCENT if selected else DIM)
 
 		if item:
-			_draw_footprint(item, Vector2(box.end.x - 12.0, box.position.y + 7.0))
+			# A rack gets its own drawing rather than a grid of footprint cells:
+			# the footprint is what it costs to carry, and what matters about a
+			# rack is the shape of what it holds.
+			if item.is_power():
+				_draw_power_source(Rect2(Vector2(box.end.x - 62.0, box.position.y + 3.0),
+					Vector2(52.0, box.size.y - 6.0)), item.power, true)
+			else:
+				_draw_footprint(item, Vector2(box.end.x - 12.0, box.position.y + 7.0))
+			# Every filled slot says what is in it, whatever was drawn above -
+			# putting this inside one of the branches is how the POWER row ended
+			# up as an icon with no name under it.
 			draw_string(font, box.position + Vector2(10.0, 36.0), item.label(),
 				HORIZONTAL_ALIGNMENT_LEFT, SLOT_W - 90.0, 14, TEXT)
 			# A gun can be taken apart and put back together, and this is the way
@@ -1054,6 +1064,51 @@ func _draw_gun_rack(at: Vector2) -> float:
 	return y + GUN_BOX_H
 
 
+## The power source itself, drawn.
+##
+## A rack is bought for its *shape* - four cells as a square takes one big gadget
+## or two small ones, the same four in a line takes two small ones and nothing
+## wide - and a line of text saying "2x2" makes you do that in your head. So the
+## source is drawn as what it is: a casing with that many cells in it, laid out
+## the way the rack is laid out. Three sources, three visibly different objects.
+##
+## `lit` fills the cells in, which is how the slot on the left shows the thing
+## you own against the shelf showing things you do not.
+func _draw_power_source(box: Rect2, source: PowerData, lit: bool) -> void:
+	if source == null:
+		return
+	var wide := source.grid_size.x
+	var tall := source.grid_size.y
+	# The cell size that fits the box either way round, so a 4x1 and a 2x2 are
+	# drawn at the size their own shape allows rather than at a fixed one.
+	var cell := minf((box.size.x - 10.0) / float(wide), (box.size.y - 10.0) / float(tall))
+	cell = minf(cell, 13.0)
+	var span := Vector2(float(wide), float(tall)) * cell
+	var corner := box.get_center() - span * 0.5
+
+	# The casing: a shell around the cells with a lug on the left, which is what
+	# stops it reading as a spreadsheet.
+	var shell := Rect2(corner - Vector2(4.0, 4.0), span + Vector2(8.0, 8.0))
+	draw_rect(shell, Color(source.tint, 0.16 if lit else 0.10))
+	draw_rect(shell, Color(source.tint, 0.85 if lit else 0.45), false, 1.0)
+	draw_rect(Rect2(Vector2(shell.position.x - 3.0, shell.get_center().y - 3.0),
+		Vector2(3.0, 6.0)), Color(source.tint, 0.7 if lit else 0.4))
+
+	for y in tall:
+		for x in wide:
+			var at := corner + Vector2(float(x), float(y)) * cell
+			var pad := 1.5
+			draw_rect(Rect2(at + Vector2(pad, pad), Vector2(cell - pad * 2.0, cell - pad * 2.0)),
+				Color(source.tint, 0.30 if lit else 0.16))
+
+	# A charge pip per cell down the right-hand edge, brighter on the faster
+	# racks - the second thing a source is bought for, and otherwise invisible.
+	var pips := 3 if source.charge_scale < 0.9 else (2 if source.charge_scale <= 1.0 else 1)
+	for i in pips:
+		draw_rect(Rect2(Vector2(shell.end.x + 2.0, shell.position.y + 2.0 + float(i) * 5.0),
+			Vector2(2.5, 3.0)), Color(source.tint, 0.8 if lit else 0.45))
+
+
 ## Pockets: each its own box because each is its own container. Drawing them as
 ## one strip of five would suggest a medkit could lie across two of them.
 func _draw_pockets(at: Vector2) -> float:
@@ -1191,7 +1246,16 @@ func _draw_stack(item: Item, box: Rect2) -> void:
 	var counted := item.is_ammo() or item.is_medkit() or item.is_surgical()
 	var tight := box.size.y < 34.0
 	var text_size := 9 if tight else 10
-	draw_string(font, box.position + Vector2(0.0, 11.0 if tight else 15.0), item.title(),
+	# Trimmed to the tile rather than clipped by it. Gadgets are one cell wide
+	# now, and "HEADCT" centred in twenty-six pixels came out as "HEAD" with the
+	# tail sliced off mid-letter - which reads as a rendering fault rather than
+	# as an abbreviation.
+	var name := item.title()
+	var room := box.size.x - 4.0
+	while name.length() > 2 and font.get_string_size(
+			name, HORIZONTAL_ALIGNMENT_LEFT, -1, text_size).x > room:
+		name = name.substr(0, name.length() - 1)
+	draw_string(font, box.position + Vector2(0.0, 11.0 if tight else 15.0), name,
 		HORIZONTAL_ALIGNMENT_CENTER, box.size.x, text_size, TEXT)
 	if counted:
 		draw_string(font, box.position + Vector2(0.0, box.size.y - 4.0), "x%d" % item.count,
@@ -1260,6 +1324,8 @@ func _draw_picker(at: Vector2) -> void:
 			_regions.append({"kind": "buy", "rect": box, "entry": entry, "id": "buy"})
 			if entry.kind == "weapon":
 				_draw_weapon_card(box, entry)
+			elif entry.kind == "power":
+				_draw_power_card(box, entry)
 			elif feeding:
 				_draw_ammo_card(box, entry)
 			else:
@@ -1494,6 +1560,16 @@ func _draw_ammo_card(box: Rect2, entry: Dictionary) -> void:
 
 ## Everything that is not a gun: armour, bags, gadgets, stims. One line of what
 ## it is and one of what it does, at a size you can hit.
+## A plain card with the source drawn on the right of it, for the POWER shelf.
+func _draw_power_card(box: Rect2, entry: Dictionary) -> void:
+	_draw_plain_card(box, entry)
+	# Down the right, under the price rather than through it: the price is drawn
+	# right-aligned on the top line and a drawing that reaches up into it turns
+	# "1300" into a smudge.
+	_draw_power_source(Rect2(Vector2(box.end.x - 104.0, box.position.y + 24.0),
+		Vector2(92.0, box.size.y - 30.0)), load(entry.path) as PowerData, false)
+
+
 func _draw_plain_card(box: Rect2, entry: Dictionary) -> void:
 	var font := ThemeDB.fallback_font
 	var affordable: bool = entry.price <= credits
