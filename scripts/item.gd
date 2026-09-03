@@ -48,6 +48,13 @@ var weapon: WeaponData
 var base_weapon: WeaponData
 ## What is bolted on, in no particular order, at most one per slot.
 var parts: Array[AttachmentData] = []
+## Set for weapons, null otherwise: the cell currently feeding this gun's
+## chamber. Null means the gun cannot fire - see Weapon.try_fire() - which is
+## a state a bought gun starts in only if something later strips its cell and
+## does not replace it, because from_weapon() always fits one at the gun's own
+## base tier for free. See EnergyCellData for why that starting cell costs
+## nothing and an upgrade does.
+var energy: EnergyCellData
 ## Set for armour, null otherwise.
 var armor: ArmorData
 ## Durability left (ARMOR) - armour is spent, not permanent.
@@ -82,6 +89,19 @@ var size := Vector2i.ONE
 var cell := Vector2i.ZERO
 
 
+## The cell a gun is handed for free the moment it exists - always exactly its
+## own base tier, so a gun bought, looted or issued to a guard is never a
+## stick that happens to look like a weapon. Keyed by tier rather than by
+## weapon, because the tier is the whole of what a stock cell is: there is
+## nothing else to know about it. See EnergyCellData's header comment.
+const DEFAULT_ENERGY_BY_TIER := {
+	1: "res://resources/energy/tier1_cell.tres",
+	2: "res://resources/energy/tier2_cell.tres",
+	3: "res://resources/energy/tier3_cell.tres",
+	4: "res://resources/energy/tier4_cell.tres",
+}
+
+
 static func from_weapon(data: WeaponData, rounds := -1) -> Item:
 	var item := Item.new()
 	item.kind = Kind.WEAPON
@@ -90,6 +110,8 @@ static func from_weapon(data: WeaponData, rounds := -1) -> Item:
 	item.ammo_type = data.ammo_type
 	item.size = data.grid_size
 	item.count = data.mag_size if rounds < 0 else clampi(rounds, 0, data.mag_size)
+	item.energy = load(DEFAULT_ENERGY_BY_TIER.get(data.base_tier,
+		DEFAULT_ENERGY_BY_TIER[1])) as EnergyCellData
 	return item
 
 
@@ -118,6 +140,38 @@ func strip(which: int) -> AttachmentData:
 	return null
 
 
+## Fits a cell, replacing whatever was feeding this gun, and hands back what
+## came off so the gunsmith can price the swap. Refused - returning null and
+## touching nothing - if the cell will not run this gun at all; see
+## EnergyCellData.fits().
+func fit_energy(cell: EnergyCellData) -> EnergyCellData:
+	if not is_weapon() or cell == null or not cell.fits(base_weapon):
+		return null
+	var was := energy
+	energy = cell
+	rebuild()
+	return was
+
+
+## Pulls the cell and hands it back. The gun rebuilds without one, which means
+## it rebuilds back to its own base numbers - see Gunsmith.build() - and
+## cannot fire until something is fitted again.
+func strip_energy() -> EnergyCellData:
+	if not is_weapon():
+		return null
+	var was := energy
+	energy = null
+	rebuild()
+	return was
+
+
+## How many tiers over its own base the fitted cell is running this gun. See
+## Gunsmith.energy_delta() - kept here too because everything that reads a
+## weapon's overheat behaviour already has an Item, not a bare WeaponData.
+func energy_delta() -> int:
+	return Gunsmith.energy_delta(base_weapon, energy)
+
+
 func part_in(which: int) -> AttachmentData:
 	for part in parts:
 		if part.slot == which:
@@ -134,7 +188,7 @@ func part_in(which: int) -> AttachmentData:
 func rebuild() -> void:
 	if not is_weapon() or base_weapon == null:
 		return
-	weapon = Gunsmith.build(base_weapon, parts)
+	weapon = Gunsmith.build(base_weapon, parts, energy)
 	size = weapon.grid_size
 	count = clampi(count, 0, weapon.mag_size)
 
@@ -301,6 +355,11 @@ func to_wire() -> Dictionary:
 			for part in parts:
 				bolted.append(part.resource_path)
 			out["parts"] = bolted
+		# Sent unconditionally, empty string standing in for null, rather than
+		# left out when there is nothing fitted - from_wire() has to be able to
+		# tell "no cell" apart from "this field predates the feature", and an
+		# absent key cannot do that once a gun exists that really has none.
+		out["energy"] = energy.resource_path if energy else ""
 	elif data:
 		out["path"] = data.resource_path
 	if is_armor():
@@ -344,7 +403,15 @@ static func from_wire(wire: Dictionary) -> Item:
 					var part := load(str(bolted)) as AttachmentData
 					if part:
 						item.parts.append(part)
-				if not item.parts.is_empty():
+				# from_weapon() has already fitted the free stock cell; this
+				# overrides it with whatever the far end actually had, which
+				# may be that same stock cell, a paid-for upgrade, or - sent as
+				# "" - nothing at all, because the gun really was stripped bare.
+				if wire.has("energy"):
+					var epath: String = wire.get("energy", "")
+					item.energy = load(epath) as EnergyCellData \
+						if not epath.is_empty() else null
+				if not item.parts.is_empty() or wire.has("energy"):
 					item.rebuild()
 					item.count = clampi(count_in, 0, item.weapon.mag_size)
 		Kind.ARMOR:

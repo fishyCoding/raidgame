@@ -27,3 +27,5 @@ reload_time = 2.4
 bullet_color = Color(1, 0.454902, 0.372549, 1)
 bullet_length = 25.0
 bullet_width = 2.5
+base_tier = 1
+heat_capacity = 50.0

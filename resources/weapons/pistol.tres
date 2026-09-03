@@ -36,3 +36,5 @@ loudness_trim = 0.0
 bullet_color = Color(1, 0.882353, 0.658824, 1)
 bullet_length = 22.0
 bullet_width = 2.0
+base_tier = 1
+heat_capacity = 25.0

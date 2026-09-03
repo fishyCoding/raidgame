@@ -123,6 +123,30 @@ extends Resource
 @export_range(0.0, 4.0) var armor_wear_scale := 1.0
 @export var bullet_range := 2000.0
 
+@export_group("Energy")
+## The tier of energy cell this gun ships on. See EnergyCellData for what a
+## tier is; the short version is that a cell at this number or up to two above
+## it will run the gun, and nothing below it will. Fixed per weapon rather
+## than picked freely, the same way ammo_type is - a pistol was never going to
+## take the same cell as an LMG, and the four values this actually holds
+## (pistol 1, SMG/shotgun 2, AR/slug 3, LMG/sniper 4) are the whole reason the
+## tier system has six rungs and not four: the top two only exist as
+## somewhere for every gun to overclock into.
+@export_range(1, 4) var base_tier := 1
+## Thermal mass, 0 to 100 - not "how good", the way every other dial on this
+## resource reads, but "how heavy the gun's own heat system is", and both
+## halves of what that means point the same way. A high number is an LMG: it
+## takes a long, sustained overtiered burst to bring one up to a lock at all,
+## and once it is hot it stays hot, because that much metal does not shed
+## heat quickly either - running one two tiers over is a commitment to a
+## style of play, not a button you tap. A low number is an SMG: light enough
+## to spike and drop in the same couple of seconds, so it punishes and
+## forgives fast rather than slow. See get_heat_per_shot, get_heat_recovery
+## and get_heat_recovery_delay - all three read this dial in the same
+## direction - and Gunsmith's ENERGY_* constants for the tier deltas the
+## result is scaling.
+@export_range(0.0, 100.0) var heat_capacity := 55.0
+
 @export_group("Range")
 ## Full damage out to this distance, in pixels.
 @export var falloff_start := 600.0
@@ -396,3 +420,168 @@ func get_accel_multiplier() -> float:
 ## Extra cone added while running at full speed.
 func get_move_penalty() -> float:
 	return deg_to_rad(lerpf(6.0, 1.0, handling * 0.01))
+
+
+# --- overheat -----------------------------------------------------------------
+#
+# Only ever asked about while `delta` (how many tiers over base the fitted cell
+# is) is 1 or 2 - a same-tier cell never calls into any of this, because there
+# is nothing for it to build. See Weapon.gd's `heat` field for where these
+# numbers actually get used, and Gunsmith.energy_delta for where `delta` comes
+# from.
+#
+# heat_capacity is the one hand-tuned dial, in the same shape every other stat
+# on this resource is: a 0-100 knob a designer sets per gun, turned into a
+# gameplay number by a curve rather than typed in directly. The alternative -
+# deriving heat entirely from rounds_per_minute and mag_size - was the other
+# option and it was the wrong one for this codebase specifically: every other
+# number on this file is authored, not computed, because a designer needs to
+# be able to say "the LMG should feel deliberately harder to overheat than its
+# fire rate alone would suggest" without fighting a formula to get there. A
+# derived number can't be handed an opinion; this one can.
+
+## Delta 2 does not build heat twice as fast as delta 1 - it builds it two and
+## a half times as fast. See Gunsmith's own ENERGY_* comment for why the stat
+## curve escalates rather than doubles between the two overtiers, and this is
+## the same shape applied to heat: one tier over should read as a real trade,
+## two tiers over should read as a different, more reckless decision, and a
+## flat multiplier would have made the second tier just a bigger first one.
+const HEAT_DELTA2_MULT := 2.5
+
+## Delta 1's own reading of the base curve - not "softened" against it any
+## more, that undershot: an AR (heat_capacity 45) one tier over is
+## calibrated to lock at exactly 20 rounds, and solving that backwards
+## against the base curve below is what actually sets this, whichever side
+## of 1.0 it lands on. It is still the gentler of the two overtiers - 2.5
+## against 1.15 is still a real escalation to delta 2 - it just is not
+## gentle enough to read as "barely notice it for most of a magazine".
+const HEAT_DELTA1_MULT := 1.15
+
+## How far an automatic has to cool from a hard lock before it can fire again,
+## as a fraction of max heat. Not all the way to zero - see try_fire() in
+## weapon.gd - because "vent completely" and "vent enough to trust it again"
+## are different asks, and demanding the first turns every lockout into the
+## same fixed pause regardless of how the gun got there. One flat threshold
+## for both overtiers now rather than two different ones - the thing that
+## makes delta 2 the harsher lock is not a deeper vent, it is getting there
+## faster and cooling slower once it has, both of which already live
+## elsewhere (get_heat_per_shot, get_heat_recovery) - so a second knob here
+## saying the same thing again was just a number to keep in sync with those.
+const HEAT_UNLOCK_FRACTION := 0.25
+
+## How much longer a semi-auto's own chamber cooldown runs at full heat, as a
+## multiple of its ordinary get_shot_interval(). 1.6x at delta 1, 2.5x at
+## delta 2 - a real tax on spamming an overtiered bolt gun, never a wall: see
+## try_fire(), which always lets the shot go the instant the (now longer)
+## cooldown ends.
+const HEAT_STRETCH_CAP := [0.0, 0.6, 1.5]
+
+
+## A semi-auto has no lock to punish it the slow way an automatic's hundred-
+## round mag does - see try_fire() in weapon.gd, which never sets
+## heat_locked for one. A handful of shots is the whole magazine on most of
+## these guns, so the bar has to move fast enough to matter within two or
+## three pulls of the trigger, not dozens the way an automatic's does.
+## Calibrated the same way HEAT_DELTA2_MULT was: a sniper (heat_capacity 35)
+## on a cell two tiers over its own reaches the ceiling in exactly two
+## consecutive shots, which is what solving this backwards against the base
+## curve below sets it to.
+const SEMI_HEAT_MULT := 4.2
+
+## Heat added per shot fired on an overtiered cell, 0 to 1 against a max of 1.
+## `delta` must be 1 or 2; callers on a same-tier cell should never reach here.
+##
+## Calibrated off two concrete cases rather than picked in the abstract: an
+## SMG (heat_capacity 30) two tiers over its own tier - a T4 cell, delta 2 -
+## gets a full eight rounds out before it locks, and an AR (heat_capacity 45)
+## one tier over - a T4 cell, delta 1 - locks at exactly twenty. Solving
+## those backwards against each other is what sets both the 0.063/0.02 range
+## below and HEAT_DELTA1_MULT; everything else on the shelf is read off the
+## same curve rather than tuned to its own target, so a heavier gun like the
+## LMG earns proportionally more rounds at either delta and a lighter one
+## earns fewer, without needing a second number per gun to keep them in
+## line with each other. Semi-autos read the same curve again on top,
+## through SEMI_HEAT_MULT - a different shot count needs a different
+## multiplier, not a different curve.
+func get_heat_per_shot(delta: int) -> float:
+	if delta <= 0:
+		return 0.0
+	var base := lerpf(0.063, 0.02, heat_capacity * 0.01)
+	var per_shot := base * (HEAT_DELTA1_MULT if delta == 1 else HEAT_DELTA2_MULT)
+	return per_shot * (1.0 if automatic else SEMI_HEAT_MULT)
+
+
+## How much slower heat bleeds off while an automatic is actually locked,
+## against the ordinary rate below - real enough to feel, not a second wall
+## on top of the first one. A jammed-feeling gun that vents at the same
+## speed it was quietly cooling at all along undersells the moment; this is
+## what makes reaching the lock cost more than *almost* reaching it does.
+## Cut again on top of the first pass at this (0.55 - too quick to actually
+## feel like a real pause) down to little over a third of the ordinary rate.
+const LOCKED_HEAT_RECOVERY_SCALE := 0.35
+
+## Heat lost per second once the recovery delay below has passed. Not scaled
+## by delta - venting is a property of the gun, not of how it got hot - so the
+## whole difference between a bad and a brutal overtier is on the way in,
+## through get_heat_per_shot, and on how far it has to fall before an
+## automatic trusts it again, through get_heat_unlock_threshold. Scaled by
+## `locked` instead, through LOCKED_HEAT_RECOVERY_SCALE - see its own comment.
+##
+## Reads heat_capacity the same direction get_heat_per_shot does, not the
+## opposite one: a high-mass gun that took a long time to heat up also takes
+## a long time to cool, the same way a real barrel does, so this goes down
+## as capacity goes up rather than up.
+func get_heat_recovery(locked := false) -> float:
+	var rate := lerpf(0.42, 0.10, heat_capacity * 0.01)
+	return rate * LOCKED_HEAT_RECOVERY_SCALE if locked else rate
+
+
+## Grace period after the last shot before heat starts falling, mirroring
+## get_recovery_delay() above - a burst does not get to vent between rounds
+## just because the trigger let up for a single frame. Longer for a
+## high-mass gun for the same reason get_heat_recovery() is slower for one:
+## heat that took a while to build does not start leaving the instant the
+## trigger does.
+##
+## Floored at 1.15x this gun's own get_shot_interval() *at its most stretched*
+## - HEAT_STRETCH_CAP's own ceiling of 2.5 - rather than at the bare
+## interval, which is the half of this formula that actually makes the
+## semi-auto side of the feature work. Without it, a slow single-shot gun -
+## the sniper is the case that exposed this, twice - has a natural interval
+## longer than the capacity-based delay above, so firing it back-to-back as
+## fast as it legally allows would always leave enough of a gap for full
+## recovery between shots, and heat could never accumulate under ordinary
+## rapid fire at all: the mechanic would be a bar that is never seen. Using
+## the bare interval fixed that for a *cold* gun, but a gun that is already
+## hot sets its own trap back up - a stretched cooldown is itself a longer
+## gap, so as heat climbed the very cooldown it bought started to hand heat
+## back before the next shot. Flooring against the worst case a stretch can
+## reach closes that: firing at every legal opportunity, at any heat, never
+## gives a semi-auto enough of a gap to vent, so heat only ever drains when a
+## player deliberately holds off past their own trigger's natural rhythm -
+## the "spaced, deliberate shots barely trigger this, quickscoping does"
+## split the feature asks for, now true at the top of the bar as well as the
+## bottom of it. An automatic's own interval is always far below its
+## capacity-based delay - the trigger is held, not tapped - so the floor
+## never engages for one and this changes nothing about how those behave.
+func get_heat_recovery_delay() -> float:
+	return maxf(lerpf(0.5, 1.1, heat_capacity * 0.01),
+		get_shot_interval() * (1.0 + HEAT_STRETCH_CAP[2]) * 1.15)
+
+
+## Where a locked gun's trigger un-refuses, whichever class it is. Heat
+## still has to fall this far even though the trigger is no longer adding to
+## it. Takes `delta` for the
+## callers that already have one to hand - see try_fire() in weapon.gd - but
+## reads the same flat threshold whichever tier bought the lock; see the
+## header comment on HEAT_UNLOCK_FRACTION for why that stopped needing to
+## vary by delta.
+func get_heat_unlock_threshold(_delta: int) -> float:
+	return HEAT_UNLOCK_FRACTION
+
+
+## The most a semi-auto's chamber cooldown will stretch at full heat, `delta`
+## tiers over base - see try_fire() in weapon.gd for where this actually
+## multiplies get_shot_interval().
+func get_heat_stretch_cap(delta: int) -> float:
+	return HEAT_STRETCH_CAP[clampi(delta, 0, 2)]

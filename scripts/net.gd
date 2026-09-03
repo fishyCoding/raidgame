@@ -848,46 +848,75 @@ func forget_player(body: Node2D) -> void:
 ## fired on this machine. The path is what travels, because a WeaponData does
 ## not fit down a wire and both ends already have the catalogue - see the note
 ## in _round().
+## `speed_scale` follows the exact same shape `damage_scale` already does, for
+## the exact same reason: an overtiered energy cell speeds a round up as well
+## as hardening it - see Gunsmith.ENERGY_SPEED_SCALE - and that number lives
+## on `built`, which only this machine has. Defaulted to 1.0 because nothing
+## else currently has an ordinary per-holder reason to touch bullet speed the
+## way a guard's damage_scale does for damage.
+##
+## `heat` and `muzzle_reach` are different in kind from the other two: neither
+## is read off `built` at all. `heat` is the shooter's live Weapon.heat at the
+## instant of the shot, and `muzzle_reach` is how far past the rig's fixed
+## Muzzle marker this specific gun's barrel (and whatever is bolted to it)
+## actually reaches, in world pixels - both runtime numbers that only exist
+## on the machine holding the trigger, the same way bloom and kick are. They
+## ride straight through, unmodified, rather than being folded into a ratio,
+## because there is no "shelf" value of either to compare against.
 func fire(origin: Vector2, angle: float, weapon_path: String, mask: int,
-		damage_scale: float, shooter: int, built: WeaponData = null) -> void:
+		damage_scale: float, shooter: int, built: WeaponData = null,
+		speed_scale := 1.0, heat := 0.0, muzzle_reach := 0.0) -> void:
 	var shelf := load(weapon_path) as WeaponData
 	# The round fired here is the gun as it actually is. Its damage is already
 	# the modified number, so the scale it gets is only the weapon's own knob -
 	# folding the parts in again here is how a suppressed rifle ended up doing
 	# ninety percent of ninety percent.
-	_round(origin, angle, built if built != null else shelf, mask, damage_scale, shooter)
+	_round(origin, angle, built if built != null else shelf, mask, damage_scale,
+		shooter, speed_scale, heat, muzzle_reach)
 	if not is_networked():
 		return
 	# What travels is the catalogue gun, which every machine already has. The
-	# parts cannot ride along on every shot, so what they did to the damage is
-	# folded into the scale instead - that is the one number the far end could
-	# not work out for itself, and the one that decides whether somebody dies.
+	# parts cannot ride along on every shot, so what they did to the damage and
+	# the muzzle velocity is folded into these two scales instead - the two
+	# numbers the far end could not otherwise work out, and between them the
+	# whole difference between a shot fired on a stock cell and an overclocked
+	# one.
 	var wire_scale := damage_scale
 	if built != null and shelf != null and shelf.damage > 0.0:
 		wire_scale *= built.damage / shelf.damage
+	var wire_speed := speed_scale
+	if built != null and shelf != null and shelf.bullet_speed > 0.0:
+		wire_speed *= built.bullet_speed / shelf.bullet_speed
 	if is_host:
 		# To everyone but the shooter, which drew its own the moment it fired.
 		for peer in multiplayer.get_peers():
 			if peer != shooter:
 				_make_bullet.rpc_id(peer, origin, angle, weapon_path, mask,
-					wire_scale, shooter)
+					wire_scale, shooter, wire_speed, heat, muzzle_reach)
 	else:
-		_ask_to_fire.rpc_id(1, origin, angle, weapon_path, mask, wire_scale)
+		_ask_to_fire.rpc_id(1, origin, angle, weapon_path, mask, wire_scale,
+			wire_speed, heat, muzzle_reach)
 
 
 @rpc("any_peer", "reliable")
 func _ask_to_fire(origin: Vector2, angle: float, weapon_path: String, mask: int,
-		damage_scale: float) -> void:
+		damage_scale: float, speed_scale := 1.0, heat := 0.0,
+		muzzle_reach := 0.0) -> void:
 	if not is_host:
 		return
+	# `built` stays null here: the scales this carries have already had
+	# whatever `built` would have contributed baked into them on the machine
+	# that actually fired, the same way wire_scale always has - see fire().
 	fire(origin, angle, weapon_path, mask, damage_scale,
-		multiplayer.get_remote_sender_id())
+		multiplayer.get_remote_sender_id(), null, speed_scale, heat, muzzle_reach)
 
 
 @rpc("authority", "unreliable")
 func _make_bullet(origin: Vector2, angle: float, weapon_path: String, mask: int,
-		damage_scale: float, shooter: int) -> void:
-	_round(origin, angle, load(weapon_path) as WeaponData, mask, damage_scale, shooter)
+		damage_scale: float, shooter: int, speed_scale := 1.0, heat := 0.0,
+		muzzle_reach := 0.0) -> void:
+	_round(origin, angle, load(weapon_path) as WeaponData, mask, damage_scale,
+		shooter, speed_scale, heat, muzzle_reach)
 
 
 ## One round, from a weapon this machine is holding rather than from a path.
@@ -903,11 +932,13 @@ func _make_bullet(origin: Vector2, angle: float, weapon_path: String, mask: int,
 ## round; the shooter's own machine draws the true one, and the difference that
 ## matters - what the round does - rides along in damage_scale.
 func _round(origin: Vector2, angle: float, data: WeaponData, mask: int,
-		damage_scale: float, shooter: int) -> void:
+		damage_scale: float, shooter: int, speed_scale := 1.0, heat := 0.0,
+		muzzle_reach := 0.0) -> void:
 	if data == null:
 		push_error("a round was fired from a weapon that could not be resolved")
 		return
-	Bullet.spawn(get_tree(), origin, angle, data, mask, damage_scale, shooter)
+	Bullet.spawn(get_tree(), origin, angle, data, mask, damage_scale, shooter,
+		speed_scale, heat)
 	# Every machine that gets the round gets the report, which is the only way a
 	# gunfight sounds like one from more than one seat. A shooter of 0 is a
 	# guard - see fire() - and guards are pitched down so an ear can tell a
@@ -915,6 +946,21 @@ func _round(origin: Vector2, angle: float, data: WeaponData, mask: int,
 	var audio := get_node_or_null(^"/root/Audio")
 	if audio:
 		audio.gunshot(data, origin, shooter == 0)
+	_spawn_muzzle_flash(origin, angle, data, heat, muzzle_reach)
+
+
+## The spark at the barrel's own end, on every machine - see the header
+## comment on fire() for why `muzzle_reach` gets here as a plain pixel
+## offset rather than something this function works out for itself: only the
+## shooter's machine ever has the parts array a suppressor or an extended
+## barrel would show up in.
+func _spawn_muzzle_flash(origin: Vector2, angle: float, data: WeaponData,
+		heat: float, muzzle_reach: float) -> void:
+	var flash := preload("res://scenes/muzzle_flash.tscn").instantiate()
+	flash.global_position = origin + Vector2.RIGHT.rotated(angle) * muzzle_reach
+	flash.rotation = angle
+	flash.setup(data, heat)
+	effect_root().add_child(flash)
 
 
 ## The same arrangement for a thrown gadget. The grenade itself falls under its

@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="EnergyCellData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/energy_cell_data.gd" id="1_energy"]
+
+[resource]
+script = ExtResource("1_energy")
+display_name = "Tier 5 Cell"
+short_name = "T5"
+tier = 5
+price = 2800
+blurb = "Nothing ships on this tier. A real overtier, one rung up."
+tint = Color(0.9, 0.55, 0.35, 1)

@@ -31,4 +31,6 @@ ads_lead_scale = 0.8
 bullet_color = Color(1, 0.65098, 0.309804, 1)
 bullet_length = 5.0
 bullet_width = 1.0
+base_tier = 2
+heat_capacity = 35.0
 

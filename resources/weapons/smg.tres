@@ -32,4 +32,6 @@ ads_speed_scale = 0.75
 bullet_color = Color(1, 0.756863, 0.407843, 1)
 bullet_length = 23.0
 bullet_width = 2.0
+base_tier = 2
+heat_capacity = 30.0
 

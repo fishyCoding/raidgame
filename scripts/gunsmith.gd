@@ -78,6 +78,45 @@ const SLOTS := [
 	AttachmentData.Slot.STOCK,
 ]
 
+## The six tiers of energy cell, cheapest first. Not filed by weapon the way
+## SHELF above is - every gun looks at the same six cells and
+## EnergyCellData.fits() does the filtering, because what a cell fits is a
+## question about its tier next to the gun's own, not about calibre or a
+## rail it bolts to.
+const ENERGY_SHELF := [
+	"res://resources/energy/tier1_cell.tres",
+	"res://resources/energy/tier2_cell.tres",
+	"res://resources/energy/tier3_cell.tres",
+	"res://resources/energy/tier4_cell.tres",
+	"res://resources/energy/tier5_cell.tres",
+	"res://resources/energy/tier6_cell.tres",
+]
+
+## What running a gun `delta` tiers over its own base costs it, index 0..2.
+## Zero at index 0 on purpose - a same-tier cell is what the gun already reads
+## as on the shelf, exactly the way an unmodified WeaponData is.
+##
+## Escalating rather than linear, and deliberately so: doubling every delta-1
+## number would have made delta 2 nothing but "the same trade, more of it,"
+## and the brief was for two genuinely different decisions - one tier over is
+## a real, respectable trade, two tiers over is an aggressive commitment. So
+## every row below jumps further from index 1 to index 2 than it did from 0
+## to 1, which is what makes the second overtier feel like a different choice
+## rather than a bigger version of the first one.
+## Recoil in particular got a second pass: a gun on an overtiered cell is
+## meant to feel like it is fighting you, not politely climbing a bit faster,
+## so the climb itself has to be a bigger part of the trade than the other
+## four numbers are.
+const ENERGY_RECOIL_DELTA := [0.0, 16.0, 40.0]
+const ENERGY_STABILITY_DELTA := [0.0, -8.0, -21.0]
+## Accuracy is the resting cone - see WeaponData.get_base_spread() - so this
+## going down is the spread opening up, the same sense every other accuracy
+## number on a card already reads in.
+const ENERGY_ACCURACY_DELTA := [0.0, -6.0, -16.0]
+const ENERGY_LOUDNESS_DELTA := [0.0, 3.0, 8.0]
+const ENERGY_DAMAGE_SCALE := [1.0, 1.08, 1.22]
+const ENERGY_SPEED_SCALE := [1.0, 1.12, 1.30]
+
 
 ## Everything on the shelf for one slot that will actually go on this gun.
 ##
@@ -93,6 +132,52 @@ static func shelf_for(which: int, gun: WeaponData) -> Array:
 	return out
 
 
+## Every cell on the shelf that will actually run this gun. Filtered here for
+## the same reason shelf_for() filters the attachment shelf: offering a cell
+## and refusing it at the till wastes the one thing the player brought, which
+## is attention.
+static func energy_shelf_for(gun: WeaponData) -> Array:
+	var out: Array = []
+	for path in ENERGY_SHELF:
+		var cell := load(path) as EnergyCellData
+		if cell and cell.fits(gun):
+			out.append(cell)
+	return out
+
+
+## How many tiers over its own base the fitted cell is running this gun, 0 to
+## 2. Clamped rather than trusted, so a cell that should never have been
+## fittable in the first place - EnergyCellData.fits() is what is meant to
+## stop that at the bench - still cannot push a gun's stats past what two
+## tiers over is supposed to mean.
+static func energy_delta(base: WeaponData, energy: EnergyCellData) -> int:
+	if base == null or energy == null:
+		return 0
+	return clampi(energy.tier - base.base_tier, 0, 2)
+
+
+## The lines a cell's card prints under it, in the same [text, good] shape
+## effect_lines() below returns for a part - good decides the colour, and a
+## same-tier cell says so rather than printing six zeroes.
+static func energy_effect_lines(base: WeaponData, energy: EnergyCellData) -> Array:
+	var out: Array = []
+	if base == null or energy == null:
+		return out
+	var delta := energy_delta(base, energy)
+	if delta <= 0:
+		out.append(["stock tier - no change, no heat", true])
+		return out
+	out.append(["damage %+.0f%%" % ((ENERGY_DAMAGE_SCALE[delta] - 1.0) * 100.0), true])
+	out.append(["bullet speed %+.0f%%" % ((ENERGY_SPEED_SCALE[delta] - 1.0) * 100.0), true])
+	out.append(["recoil %+.0f" % -ENERGY_RECOIL_DELTA[delta], false])
+	out.append(["stability %+.0f" % ENERGY_STABILITY_DELTA[delta], false])
+	out.append(["accuracy %+.0f" % ENERGY_ACCURACY_DELTA[delta], false])
+	out.append(["noise %+.0f dB" % ENERGY_LOUDNESS_DELTA[delta], false])
+	out.append(["builds heat while firing" if delta == 1 else
+		"builds heat fast while firing", false])
+	return out
+
+
 ## The gun as it comes out of the workshop.
 ##
 ## Order does not matter: every delta is a sum and every scale is a product, so
@@ -100,10 +185,11 @@ static func shelf_for(which: int, gun: WeaponData) -> Array:
 ## Deltas are clamped only at the end, on the finished numbers, so a part that
 ## takes stability to -3 and another that puts +20 back is worth exactly what the
 ## arithmetic says rather than being quietly floored in the middle.
-static func build(base: WeaponData, parts: Array) -> WeaponData:
+static func build(base: WeaponData, parts: Array, energy: EnergyCellData = null) -> WeaponData:
 	if base == null:
 		return null
-	if parts.is_empty():
+	var delta := energy_delta(base, energy)
+	if parts.is_empty() and delta <= 0:
 		return base
 	var gun: WeaponData = base.duplicate()
 	# A duplicate keeps the original's resource_path, which would make it
@@ -139,6 +225,18 @@ static func build(base: WeaponData, parts: Array) -> WeaponData:
 		gun.falloff_end *= it.falloff_scale
 
 		gun.grid_size.x += it.cells_delta
+
+	# The energy cell folds in the same way a part does - deltas added, scales
+	# multiplied, clamped once at the end alongside everything the parts did -
+	# which is what lets a suppressor and an overtiered cell sit on the same
+	# gun and add up rather than fight over who clamps last.
+	if delta > 0:
+		gun.recoil += ENERGY_RECOIL_DELTA[delta]
+		gun.stability += ENERGY_STABILITY_DELTA[delta]
+		gun.accuracy += ENERGY_ACCURACY_DELTA[delta]
+		gun.loudness_trim += ENERGY_LOUDNESS_DELTA[delta]
+		gun.damage *= ENERGY_DAMAGE_SCALE[delta]
+		gun.bullet_speed *= ENERGY_SPEED_SCALE[delta]
 
 	gun.accuracy = clampf(gun.accuracy, 0.0, 100.0)
 	gun.handling = clampf(gun.handling, 0.0, 100.0)

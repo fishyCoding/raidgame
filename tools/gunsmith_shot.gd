@@ -55,6 +55,17 @@ func _run() -> void:
 	await _save("res://tools/scr_gunsmith_shelf.png")
 	print("gunsmith_shot | saved scr_gunsmith_shelf.png - weighing up a 4x")
 
+	# The sixth slot: weighing up an overtiered cell, so the damage curve
+	# below the dials shows what running this AR two tiers hot actually buys
+	# and costs - see energy-source-overheat-system in project memory.
+	smith._slot = smith.ENERGY_SLOT
+	smith._hover = null
+	smith._hover_energy = load("res://resources/energy/tier5_cell.tres")
+	await _wait(4)
+	await _save("res://tools/scr_gunsmith_energy.png")
+	print("gunsmith_shot | saved scr_gunsmith_energy.png - weighing up a hot cell")
+	smith._hover_energy = null
+
 	# And built out. Bought through the screen's own path rather than fitted
 	# behind its back, so the credits in the corner are the real ones.
 	for part in ["marksman_4x", "suppressor", "drum_mag", "vertical_grip", "heavy_stock"]:

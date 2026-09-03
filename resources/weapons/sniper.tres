@@ -40,4 +40,6 @@ ads_sway_speed = 0.45
 bullet_color = Color(0.741176, 0.921569, 1, 1)
 bullet_length = 54.0
 bullet_width = 3.0
+base_tier = 4
+heat_capacity = 35.0
 

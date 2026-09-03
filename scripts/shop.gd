@@ -24,16 +24,12 @@ signal deployed()
 const SMITH_SCRIPT := preload("res://scripts/gunsmith_screen.gd")
 var _smith: Control = null
 
-## Doubled again, to 16000, and this one is scaffolding rather than balance.
-##
-## Kitting out now costs more than it did: there is a third armour tier to buy
-## into and a surgical kit is a thing you want in the bag before you need it,
-## and neither of those decisions is worth testing on a budget that only covers
-## one of them. Armour is now a consumable that dies inside a single fight and
-## comes with repair kits to buy as well, so trying a loadout twice costs what
-## trying it once used to. This is a testing number: halve it, twice, once the
-## loadouts have settled.
-const CREDITS := 16000
+## Doubled again, to 32000, for the same reason as last time: a new decision
+## arrived - a matched energy cell for each hand, with both allowed to run
+## hot - and it is not worth testing on a budget that makes trying it cost
+## giving something else up. This is still a testing number: halve it, again,
+## once loadouts including a pair of overtiered cells have settled.
+const CREDITS := 32000
 ## Uses in one bought repair kit. Two, so a kit is a decision about one fight
 ## rather than a subscription: armour that dies in four rounds and comes back
 ## twice is still armour you run out of.
@@ -79,35 +75,44 @@ const PACK_CELL := 26.0
 const GAP := 2.0
 
 const MARGIN := 44.0
-## The middle column: how wide its sections rule, how tall a gun box is, and the
-## air between one section and the next.
-const COLUMN_W := 300.0
-const GUN_BOX_H := 74.0
+## Air between one middle-column section and the next.
 const SECTION_GAP := 18.0
 const SLOT_W := 272.0
 const SLOT_H := 46.0
 const SLOT_GAP := 6.0
+## How tall a gun box is, a pocket is, and one line of the energy row - all
+## three scale with the column's actual width (see _draw_carried), so these
+## are the sizes at the column's *old* fixed width of 300 and everything that
+## uses them multiplies by the same ratio the column grew by. Kept as named
+## constants rather than baked-in numbers because they are still what a
+## designer would tune first if a box read as too cramped or too tall.
+const GUN_BOX_H := 74.0
+## The energy row under the gun rack - one line per hand, so it does not need
+## anything like the height a picture does.
+const ENERGY_BOX_H := 36.0
 const POCKET_BOX := 40.0
-## The shelf, and the widest column on the screen. It holds cards rather than
-## rows now: choosing a gun is the biggest decision here and it was being made
-## off two lines of 10 pt text.
-const PICK_W := 520.0
-## A gun card carries a damage curve and four stat bars; everything else is a
-## name, a line about it and a price.
-const CARD_TALL := 132.0
+## The width the ratio above is measured against - what COLUMN_W used to be
+## a fixed constant of, before the column grew to fill whatever space is
+## actually left between the loadout slots and the shelf. See _draw_carried.
+const BASE_COLUMN_W := 300.0
+## The shelf. Narrower than it was: a gun card used to carry a damage curve
+## and four stat bars and needed the room for them, and now it carries a
+## picture of the gun instead - see _draw_weapon_card. Those numbers still
+## exist, they just live in the gunsmith now, where they are actually
+## actionable rather than a thing to remember while you decide what to buy.
+const PICK_W := 380.0
+## A gun card holds a picture rather than a graph now, so it is shorter than
+## it was; everything else is a name, a line about it and a price.
+const CARD_TALL := 112.0
 const CARD_SHORT := 62.0
 ## Ammunition needs a line the others do not: which of your two guns it is for.
 const CARD_AMMO := 76.0
-const CURVE_SIZE := Vector2(212.0, 40.0)
 ## Pixels per wheel notch. A little over half a gun card, so one notch always
 ## brings something new into view without losing what you were reading.
 const SCROLL_STEP := 76.0
 ## How far a thumb may travel and still count as a press rather than a scroll.
 ## Generous, because a thumb on a phone is never as still as a mouse is.
 const TAP_SLOP := 14.0
-## World scale for the range readout on a damage curve. The character is 48 px
-## tall, so this puts them a bit under two metres.
-const PX_PER_M := 28.0
 
 ## The slots on your body, top to bottom, and which catalogue each one opens.
 ## `id` is what the rest of the file matches on.
@@ -440,7 +445,7 @@ func _press(at: Vector2) -> void:
 			"clear":
 				_sell_back()
 			"smith":
-				_open_gunsmith(region.item)
+				_open_gunsmith(region.item, region.get("start_slot", -1))
 		return
 
 
@@ -518,7 +523,7 @@ func _sell_back() -> void:
 ## This screen hides rather than being drawn over. A kit screen still taking
 ## clicks underneath a full-screen panel is a slot bought by accident, and the
 ## two screens share a mouse.
-func _open_gunsmith(gun: Item) -> void:
+func _open_gunsmith(gun: Item, start_slot := -1) -> void:
 	if gun == null or not gun.is_weapon():
 		return
 	if _smith == null:
@@ -529,7 +534,7 @@ func _open_gunsmith(gun: Item) -> void:
 		# and hiding this screen is exactly what opening the workshop does.
 		get_parent().add_child(_smith)
 		_smith.closed.connect(_on_gunsmith_closed)
-	_smith.open(self, gun)
+	_smith.open(self, gun, start_slot)
 	visible = false
 
 
@@ -801,7 +806,12 @@ func _draw() -> void:
 
 	var top := 112.0
 	_draw_slots(Vector2(MARGIN, top))
-	_draw_carried(Vector2(MARGIN + SLOT_W + 30.0, top))
+	# However much room is actually between the loadout slots and the shelf,
+	# rather than a fixed width that left a bare gap once the shelf narrowed -
+	# see the header comment on _draw_carried.
+	var mid_x := MARGIN + SLOT_W + 30.0
+	var mid_w := (size.x - MARGIN - PICK_W) - 26.0 - mid_x
+	_draw_carried(Vector2(mid_x, top), mid_w)
 	_draw_picker(Vector2(size.x - MARGIN - PICK_W, top))
 
 	# The header last, over the shelf. A card is drawn whole the moment any part
@@ -877,18 +887,29 @@ func _draw_slots(at: Vector2) -> void:
 		# slots then differ by more than the word inside them, which is what lets
 		# you count what is missing without reading the column.
 		if item:
-			draw_rect(Rect2(box.position, Vector2(3.0, box.size.y)), item.tint())
+			# A gun with no cell in it will not fire in the raid, and that is
+			# not something to find out the hard way - so the same chip that
+			# says what is in the slot says "wrong" instead, in the one colour
+			# on this screen that already means that, rather than leaving it
+			# for the gunsmith to notice.
+			var broken := item.is_weapon() and item.energy == null
+			draw_rect(Rect2(box.position, Vector2(3.0, box.size.y)),
+				BAD if broken else item.tint())
 		draw_string(font, box.position + Vector2(10.0, 17.0), slot.label,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, ACCENT if selected else DIM)
 
 		if item:
 			# A rack gets its own drawing rather than a grid of footprint cells:
 			# the footprint is what it costs to carry, and what matters about a
-			# rack is the shape of what it holds.
+			# rack is the shape of what it holds. A gun's footprint is left
+			# off entirely - the MODIFY pill and the ENERGY row below already
+			# say plenty about a weapon slot, and the cell count was never a
+			# decision you make from here: it is decided the moment you pick a
+			# gun off the shelf, not something worth spending room on twice.
 			if item.is_power():
 				_draw_power_source(Rect2(Vector2(box.end.x - 62.0, box.position.y + 3.0),
 					Vector2(52.0, box.size.y - 6.0)), item.power, true)
-			else:
+			elif not item.is_weapon():
 				_draw_footprint(item, Vector2(box.end.x - 12.0, box.position.y + 7.0))
 			# Every filled slot says what is in it, whatever was drawn above -
 			# putting this inside one of the branches is how the POWER row ended
@@ -999,17 +1020,47 @@ func _draw_footprint(item: Item, right_edge: Vector2) -> void:
 ## Every one of them is drawn at the size it really is. That is the whole point
 ## of this column - the left-hand slots tell you what you own, and this tells you
 ## whether it fits.
-func _draw_carried(at: Vector2) -> void:
+##
+## `wide` is whatever is actually left between the loadout slots and the
+## shelf, not a fixed number - the shelf narrowed when its cards stopped
+## carrying a damage graph (see PICK_W), and a fixed-width middle column left
+## the gap between the two as bare background instead of putting it to work.
+##
+## Width and height scale separately, and that split is the whole trick here.
+## A wider window can be a *lot* wider - there is nothing below this column
+## to run into - so gun pictures and the energy row stretch to fill it. Every
+## box's *height* cannot follow the same number: five stacked sections at 60%
+## more height than they draw at today ran the backpack grid straight through
+## the deploy button on a 720-tall window. So height grows only as far as
+## this exact loadout has room to grow into - a small bag or an empty rack
+## leaves more headroom than a heavy rucksack does - worked out below rather
+## than assumed, and never past what the width itself grew by either.
+func _draw_carried(at: Vector2, wide: float) -> void:
+	var width_scale := wide / BASE_COLUMN_W
+	var power_h1 := 52.0
+	if _inventory.power_item:
+		power_h1 = float(_inventory.power.height) * (PACK_CELL + GAP) + 23.0
+	var pack_h1 := 52.0
+	if _inventory.backpack_item:
+		pack_h1 = float(_inventory.backpack.height) * (PACK_CELL + GAP)
+	# Five section headers (18 px each) and four gaps between them - the part
+	# of the column's height that never scales, whatever the boxes do.
+	var fixed_h := 18.0 * 5.0 + SECTION_GAP * 4.0
+	var scalable_h1 := GUN_BOX_H + ENERGY_BOX_H + POCKET_BOX + power_h1 + pack_h1
+	var avail_h := size.y - at.y - 86.0
+	var height_scale := clampf((avail_h - fixed_h) / maxf(scalable_h1, 1.0), 0.7, width_scale)
+
 	var y := at.y
-	y = _draw_gun_rack(Vector2(at.x, y)) + SECTION_GAP
-	y = _draw_pockets(Vector2(at.x, y)) + SECTION_GAP
-	y = _draw_power_rack(Vector2(at.x, y)) + SECTION_GAP
-	_draw_pack(Vector2(at.x, y))
+	y = _draw_gun_rack(Vector2(at.x, y), wide, height_scale) + SECTION_GAP
+	y = _draw_energy_row(Vector2(at.x, y), wide, height_scale) + SECTION_GAP
+	y = _draw_pockets(Vector2(at.x, y), wide, height_scale) + SECTION_GAP
+	y = _draw_power_rack(Vector2(at.x, y), wide, height_scale) + SECTION_GAP
+	_draw_pack(Vector2(at.x, y), wide, height_scale)
 
 
 ## A heading with a rule under it. Every section on this screen gets one, so the
 ## eye can find where a box begins without reading the words.
-func _section(at: Vector2, title: String, note := "", wide := COLUMN_W) -> float:
+func _section(at: Vector2, title: String, note := "", wide := BASE_COLUMN_W) -> float:
 	var font := ThemeDB.fallback_font
 	draw_string(font, at, title, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, ACCENT)
 	var used := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x
@@ -1028,18 +1079,19 @@ func _section(at: Vector2, title: String, note := "", wide := COLUMN_W) -> float
 ## a scope and a can off looks like that gun and not like the word "AR". It is
 ## also the second way into the workshop, and the obvious one: you click the
 ## picture of the gun to work on the gun.
-func _draw_gun_rack(at: Vector2) -> float:
+func _draw_gun_rack(at: Vector2, total_width: float, height_scale: float) -> float:
 	var font := ThemeDB.fallback_font
-	var y := _section(at, "WEAPONS", "click one to take it apart")
-	var wide := (COLUMN_W - 8.0) * 0.5
+	var y := _section(at, "WEAPONS", "click one to take it apart", total_width)
+	var wide := (total_width - 8.0) * 0.5
+	var box_h := GUN_BOX_H * height_scale
 
 	for i in 2:
 		var item: Item = _inventory.primary if i == 0 else _inventory.secondary
-		var box := Rect2(Vector2(at.x + float(i) * (wide + 8.0), y), Vector2(wide, GUN_BOX_H))
+		var box := Rect2(Vector2(at.x + float(i) * (wide + 8.0), y), Vector2(wide, box_h))
 		draw_rect(box, CELL_BG)
 		if item == null:
 			draw_rect(box, LINE, false, 1.0)
-			draw_string(font, box.position + Vector2(0.0, GUN_BOX_H * 0.5 + 4.0),
+			draw_string(font, box.position + Vector2(0.0, box_h * 0.5 + 4.0),
 				"no primary" if i == 0 else "no sidearm",
 				HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 11, Color(DIM, 0.7))
 			continue
@@ -1061,7 +1113,44 @@ func _draw_gun_rack(at: Vector2) -> float:
 			draw_string(font, Vector2(0.0, box.end.y - 7.0),
 				"%d fitted" % item.parts.size(), HORIZONTAL_ALIGNMENT_RIGHT,
 				box.end.x - 8.0, 10, ACCENT)
-	return y + GUN_BOX_H
+	return y + box_h
+
+
+## The cell running each hand, primary left and secondary right - the same
+## split the gun rack above draws in. A gun with nothing here will not fire
+## in the raid (see Weapon.try_fire), which is exactly why this sits in the
+## column you cannot help but look at while kitting out rather than only
+## inside the gunsmith one click away. Clicking either box opens the
+## gunsmith on that gun's own energy slot - see _open_gunsmith's start_slot.
+func _draw_energy_row(at: Vector2, total_width: float, height_scale: float) -> float:
+	var font := ThemeDB.fallback_font
+	var y := _section(at, "ENERGY", "click a hand to load or swap its cell", total_width)
+	var wide := (total_width - 8.0) * 0.5
+	var box_h := ENERGY_BOX_H * height_scale
+
+	for i in 2:
+		var item: Item = _inventory.primary if i == 0 else _inventory.secondary
+		var box := Rect2(Vector2(at.x + float(i) * (wide + 8.0), y), Vector2(wide, box_h))
+		draw_rect(box, CELL_BG)
+		if item == null:
+			draw_rect(box, LINE, false, 1.0)
+			draw_string(font, box.position + Vector2(0.0, box_h * 0.5 + 4.0),
+				"no primary" if i == 0 else "no sidearm",
+				HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 11, Color(DIM, 0.7))
+			continue
+
+		var cell := item.energy
+		_regions.append({"kind": "smith", "rect": box, "item": item, "id": "smith",
+			"start_slot": SMITH_SCRIPT.ENERGY_SLOT})
+		draw_rect(box, (Color(cell.tint, 0.7) if cell else BAD), false, 1.0)
+		if cell:
+			draw_rect(Rect2(box.position, Vector2(3.0, box.size.y)), cell.tint)
+			draw_string(font, box.position + Vector2(10.0, box_h * 0.5 + 4.0),
+				cell.display_name, HORIZONTAL_ALIGNMENT_LEFT, wide - 18.0, 12, TEXT)
+		else:
+			draw_string(font, box.position + Vector2(8.0, box_h * 0.5 + 4.0),
+				"NO CELL - WON'T FIRE", HORIZONTAL_ALIGNMENT_LEFT, wide - 16.0, 11, BAD)
+	return y + box_h
 
 
 ## The power source itself, drawn.
@@ -1111,13 +1200,18 @@ func _draw_power_source(box: Rect2, source: PowerData, lit: bool) -> void:
 
 ## Pockets: each its own box because each is its own container. Drawing them as
 ## one strip of five would suggest a medkit could lie across two of them.
-func _draw_pockets(at: Vector2) -> float:
+func _draw_pockets(at: Vector2, total_width: float, height_scale: float) -> float:
 	var font := ThemeDB.fallback_font
-	var y := _section(at, "POCKETS", "one cell each - small things only")
+	var y := _section(at, "POCKETS", "one cell each - small things only", total_width)
+	# Square, so they scale with height_scale rather than the column's own
+	# width - a pocket stretched wide and left short is not a bigger pocket,
+	# it is a pocket drawn wrong.
+	var box_size := POCKET_BOX * height_scale
+	var box_gap := 6.0 * height_scale
 	for i in _inventory.pockets.size():
 		var pocket: ItemGrid = _inventory.pockets[i]
-		var box := Rect2(Vector2(at.x + i * (POCKET_BOX + 6.0), y),
-			Vector2(POCKET_BOX, POCKET_BOX))
+		var box := Rect2(Vector2(at.x + i * (box_size + box_gap), y),
+			Vector2(box_size, box_size))
 		var id := "pocket%d" % i
 		var selected: bool = _open.get("id", "") == id
 		_regions.append({
@@ -1130,9 +1224,9 @@ func _draw_pockets(at: Vector2) -> float:
 		if held:
 			_draw_stack(held, box)
 		else:
-			draw_string(font, box.position + Vector2(0.0, 25.0), str(i + 1),
+			draw_string(font, box.position + Vector2(0.0, box_size * 0.5 + 5.5), str(i + 1),
 				HORIZONTAL_ALIGNMENT_CENTER, box.size.x, 13, Color(DIM, 0.5))
-	return y + POCKET_BOX
+	return y + box_size
 
 
 ## The rack, and what is running in it.
@@ -1141,28 +1235,32 @@ func _draw_pockets(at: Vector2) -> float:
 ## labelled slots because that is what it is: a shape, with gadgets of different
 ## shapes laid into it, and the whole decision is whether the two you want will
 ## both go in the thing you could afford.
-func _draw_power_rack(at: Vector2) -> float:
+func _draw_power_rack(at: Vector2, total_width: float, height_scale: float) -> float:
 	var font := ThemeDB.fallback_font
 	var source: Item = _inventory.power_item
 	var note := "no source - ultimates have nowhere to go"
 	if source:
 		note = "%s  -  %s" % [source.power.display_name, source.power.summary()]
-	var y := _section(at, "POWER", note)
+	var y := _section(at, "POWER", note, total_width)
+	var width_scale := total_width / BASE_COLUMN_W
 
 	if source == null:
-		var empty := Rect2(Vector2(at.x, y), Vector2(240.0, 52.0))
+		var empty := Rect2(Vector2(at.x, y),
+			Vector2(minf(240.0 * width_scale, total_width), 52.0 * height_scale))
 		draw_rect(empty, SLOT_BG)
 		draw_rect(empty, LINE, false, 1.0)
-		draw_string(font, empty.position + Vector2(0.0, 23.0), "nothing to run an ultimate",
+		draw_string(font, empty.position + Vector2(0.0, empty.size.y * 0.44),
+			"nothing to run an ultimate",
 			HORIZONTAL_ALIGNMENT_CENTER, empty.size.x, 13, DIM)
-		draw_string(font, empty.position + Vector2(0.0, 40.0),
+		draw_string(font, empty.position + Vector2(0.0, empty.size.y * 0.77),
 			"buy one in the POWER slot", HORIZONTAL_ALIGNMENT_CENTER,
 			empty.size.x, 10, Color(DIM, 0.7))
-		return y + 52.0
+		return y + empty.size.y
 
+	var cell_size := PACK_CELL * height_scale
 	var grid := _inventory.power
 	var box := Rect2(Vector2(at.x + 8.0, y + 6.0),
-		Vector2(grid.width, grid.height) * (PACK_CELL + GAP))
+		Vector2(grid.width, grid.height) * (cell_size + GAP))
 	var selected: bool = _open.get("id", "") == "rack"
 	_regions.append({
 		"kind": "pack", "rect": box, "id": "rack", "list": "ultimate", "label": "POWER RACK",
@@ -1210,15 +1308,15 @@ func _draw_power_rack(at: Vector2) -> float:
 
 	for cy in grid.height:
 		for cx in grid.width:
-			var cell := Rect2(box.position + Vector2(cx, cy) * (PACK_CELL + GAP),
-				Vector2(PACK_CELL, PACK_CELL))
+			var cell := Rect2(box.position + Vector2(cx, cy) * (cell_size + GAP),
+				Vector2(cell_size, cell_size))
 			# Recessed, so a cell reads as a socket in the casing rather than as
 			# a square drawn on it.
 			draw_rect(cell, Color(0.07, 0.08, 0.10))
 			draw_rect(Rect2(cell.position, Vector2(cell.size.x, 1.5)), Color(tint, 0.18))
 	for item in grid.items:
-		var tile := Rect2(box.position + Vector2(item.cell) * (PACK_CELL + GAP),
-			Vector2(item.size) * (PACK_CELL + GAP) - Vector2(GAP, GAP))
+		var tile := Rect2(box.position + Vector2(item.cell) * (cell_size + GAP),
+			Vector2(item.size) * (cell_size + GAP) - Vector2(GAP, GAP))
 		_draw_stack(item, tile)
 		# The charge bar along the bottom of the gadget. It is zero in the shop,
 		# and it is here anyway: this is the tile you will be looking at in the
@@ -1248,40 +1346,43 @@ func _draw_power_rack(at: Vector2) -> float:
 
 ## The pack, drawn at the size it actually is. An empty back is an empty
 ## rectangle with the reason written in it, not a missing panel.
-func _draw_pack(at: Vector2) -> float:
+func _draw_pack(at: Vector2, total_width: float, height_scale: float) -> float:
 	var font := ThemeDB.fallback_font
 	var bag := _inventory.backpack_item
 	var note := "no bag - only what is in your pockets"
 	if bag:
 		note = "%s  -  %d/%d cells" % [bag.backpack.display_name,
 			_inventory.backpack.used_cells(), _inventory.backpack.cell_count()]
-	var y := _section(at, "BACKPACK", note)
+	var y := _section(at, "BACKPACK", note, total_width)
+	var width_scale := total_width / BASE_COLUMN_W
 
 	if bag == null:
-		var empty := Rect2(Vector2(at.x, y), Vector2(240.0, 52.0))
+		var empty := Rect2(Vector2(at.x, y),
+			Vector2(minf(240.0 * width_scale, total_width), 52.0 * height_scale))
 		draw_rect(empty, SLOT_BG)
 		draw_rect(empty, LINE, false, 1.0)
-		draw_string(font, empty.position + Vector2(0.0, 23.0), "no bag",
+		draw_string(font, empty.position + Vector2(0.0, empty.size.y * 0.44), "no bag",
 			HORIZONTAL_ALIGNMENT_CENTER, empty.size.x, 13, DIM)
-		draw_string(font, empty.position + Vector2(0.0, 40.0),
+		draw_string(font, empty.position + Vector2(0.0, empty.size.y * 0.77),
 			"buy one in the BACKPACK slot", HORIZONTAL_ALIGNMENT_CENTER,
 			empty.size.x, 10, Color(DIM, 0.7))
-		return y + 52.0
+		return y + empty.size.y
 
+	var cell_size := PACK_CELL * height_scale
 	var grid := _inventory.backpack
 	var box := Rect2(Vector2(at.x, y),
-		Vector2(grid.width, grid.height) * (PACK_CELL + GAP))
+		Vector2(grid.width, grid.height) * (cell_size + GAP))
 	var selected: bool = _open.get("id", "") == "pack"
 	_regions.append({
 		"kind": "pack", "rect": box, "id": "pack", "list": "stow", "label": "BACKPACK",
 	})
 	for cy in grid.height:
 		for cx in grid.width:
-			draw_rect(Rect2(box.position + Vector2(cx, cy) * (PACK_CELL + GAP),
-				Vector2(PACK_CELL, PACK_CELL)), CELL_BG)
+			draw_rect(Rect2(box.position + Vector2(cx, cy) * (cell_size + GAP),
+				Vector2(cell_size, cell_size)), CELL_BG)
 	for item in grid.items:
-		_draw_stack(item, Rect2(box.position + Vector2(item.cell) * (PACK_CELL + GAP),
-			Vector2(item.size) * (PACK_CELL + GAP) - Vector2(GAP, GAP)))
+		_draw_stack(item, Rect2(box.position + Vector2(item.cell) * (cell_size + GAP),
+			Vector2(item.size) * (cell_size + GAP) - Vector2(GAP, GAP)))
 	if selected:
 		draw_rect(box, ACCENT, false, 2.0)
 	return y + box.size.y
@@ -1475,11 +1576,15 @@ func _can_clear() -> bool:
 	return false
 
 
-## A gun, at the size a gun deserves: what it does up close, what it still does
-## far away, and the four numbers that decide whether you can hold it on target.
+## A gun, at the size a gun deserves - drawn rather than statted, the same
+## picture the gun rack above draws for one you already own.
 ##
-## These used to be on the in-game HUD, where they were unreadable and useless -
-## you cannot change your mind about a rifle mid-raid. Here they are the decision.
+## The damage curve and the four dials used to live here, and they moved to
+## the gunsmith instead: this shelf is for deciding *which* gun, and a number
+## you cannot act on until you own it and open the workshop was never doing
+## anything here but taking up the room a picture now uses better. The
+## picture is also the one thing the gunsmith cannot show before you have
+## bought the gun to look at.
 func _draw_weapon_card(box: Rect2, entry: Dictionary) -> void:
 	var font := ThemeDB.fallback_font
 	var data := load(entry.path) as WeaponData
@@ -1504,73 +1609,17 @@ func _draw_weapon_card(box: Rect2, entry: Dictionary) -> void:
 		draw_string(font, box.position + Vector2(0.0, 40.0), "IN YOUR HANDS",
 			HORIZONTAL_ALIGNMENT_RIGHT, box.size.x - 14.0, 10, ACCENT)
 
-	# Left: what it hits for, and how far that lasts.
-	_draw_damage_curve(Rect2(box.position + Vector2(14.0, 54.0), CURVE_SIZE), data)
-
-	# Right: how much of that you will actually land.
-	var stat_x := box.position.x + 14.0 + CURVE_SIZE.x + 22.0
-	var stat_w := box.end.x - 14.0 - stat_x
-	var y := box.position.y + 62.0
-	for pair in [["ACCURACY", data.accuracy, false], ["HANDLING", data.handling, false],
-			["RECOIL", data.recoil, true], ["STABILITY", data.stability, false]]:
-		_draw_stat_bar(Vector2(stat_x, y), pair[0], pair[1], pair[2], stat_w)
-		y += 16.0
-
-
-## Damage per trigger pull against distance: flat out to falloff_start, sloping
-## to falloff_end, flat after. The shape tells you what the gun is for without
-## having to memorise any of the numbers.
-func _draw_damage_curve(graph: Rect2, data: WeaponData) -> void:
-	var font := ThemeDB.fallback_font
-	var burst := data.get_burst_damage()
-
-	draw_string(font, Vector2(graph.position.x, graph.position.y - 4.0), "DAMAGE",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 9, DIM)
-	draw_string(font, Vector2(graph.position.x + 52.0, graph.position.y - 4.0),
-		"%d" % roundi(burst), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, TEXT)
-	draw_string(font, Vector2(graph.position.x, graph.position.y - 4.0),
-		"%d far" % roundi(burst * data.min_damage_factor),
-		HORIZONTAL_ALIGNMENT_RIGHT, graph.size.x, 10, BAD.lerp(TEXT, 0.35))
-
-	draw_rect(graph, Color(0.13, 0.15, 0.19))
-	var max_dist := maxf(data.falloff_end * 1.15, 1.0)
-	var curve := PackedVector2Array()
-	for dist in [0.0, data.falloff_start, data.falloff_end, max_dist]:
-		var px := graph.position.x + graph.size.x * clampf(dist / max_dist, 0.0, 1.0)
-		var py := graph.end.y - graph.size.y * data.get_damage_factor(dist)
-		curve.append(Vector2(px, py))
-
-	var under := PackedVector2Array(curve)
-	under.append(Vector2(graph.end.x, graph.end.y))
-	under.append(Vector2(graph.position.x, graph.end.y))
-	draw_colored_polygon(under, Color(ACCENT.r, ACCENT.g, ACCENT.b, 0.18))
-	draw_polyline(curve, ACCENT, 2.0, true)
-
-	var start_x := graph.position.x + graph.size.x * (data.falloff_start / max_dist)
-	draw_line(Vector2(start_x, graph.position.y), Vector2(start_x, graph.end.y),
-		Color(0.55, 0.6, 0.7, 0.35), 1.0)
-	var label_y := graph.end.y + 11.0
-	draw_string(font, Vector2(graph.position.x, label_y), "0m",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 9, DIM)
-	draw_string(font, Vector2(graph.position.x, label_y),
-		"%dm+" % roundi(data.falloff_end / PX_PER_M),
-		HORIZONTAL_ALIGNMENT_RIGHT, graph.size.x, 9, DIM)
-
-
-## Recoil is the one stat where a full bar is bad news, so it is drawn in the
-## opposite colour to keep the card honest at a glance.
-func _draw_stat_bar(at: Vector2, label: String, value: float, inverted: bool,
-		width: float) -> void:
-	var font := ThemeDB.fallback_font
-	draw_string(font, Vector2(at.x, at.y), label,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 9, DIM)
-	var bar := Rect2(Vector2(at.x + 62.0, at.y - 8.0), Vector2(maxf(width - 92.0, 20.0), 8.0))
-	draw_rect(bar, Color(0.16, 0.18, 0.22))
-	var fill := clampf(value * 0.01, 0.0, 1.0)
-	draw_rect(Rect2(bar.position, Vector2(bar.size.x * fill, bar.size.y)),
-		BAD.lerp(GOOD, 1.0 - fill if inverted else fill))
-	draw_string(font, Vector2(bar.end.x + 6.0, at.y), str(roundi(value)),
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 9, DIM)
+	# Scaled to fit under the two text lines above, the same way the gun rack
+	# and the gunsmith's own bench scale to whatever box they are drawn into
+	# - see GunArt.span, which is the one place that knows how.
+	var picture := Rect2(box.position + Vector2(10.0, 50.0),
+		Vector2(box.size.x - 20.0, box.size.y - 58.0))
+	var span := GunArt.span(data, [])
+	var zoom := minf((picture.size.x - 16.0) / maxf(span.x, 1.0),
+		(picture.size.y - 10.0) / maxf(span.y, 1.0))
+	var bore := Vector2(picture.get_center().x - (span.x * 0.5 - span.z) * zoom,
+		picture.position.y + picture.size.y * 0.55)
+	GunArt.draw_gun(self, bore, zoom, data, [])
 
 
 ## A box of rounds, with the gun it belongs to written on it.

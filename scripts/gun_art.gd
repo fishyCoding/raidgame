@@ -123,6 +123,26 @@ static func mounts(gun: WeaponData) -> Dictionary:
 	}
 
 
+## How far forward of the origin this gun's barrel actually ends, in gun-space
+## units - the flat face a muzzle device bolts to (see mounts()), plus
+## whatever that device itself adds if one is fitted. Not the same question
+## span() answers: span() is "how big a box does this need," which already
+## folds a muzzle attachment's length in, but hands back the *whole* gun's
+## extent rather than the one point on it - the barrel's tip - that a muzzle
+## flash needs to sit at. See Weapon._muzzle_reach_px, the one place in
+## actual gameplay that reads this rather than the gunsmith's own drawing.
+static func muzzle_reach(gun: WeaponData, parts: Array) -> float:
+	var p := profile(gun)
+	var body: Vector2 = p["receiver"]
+	var barrel: Vector2 = p["barrel"]
+	var ahead := 0.0
+	for part in parts:
+		var it := part as AttachmentData
+		if it and it.slot == AttachmentData.Slot.MUZZLE:
+			ahead += it.art_size.x
+	return body.x + barrel.x + ahead
+
+
 ## How much room this gun needs, drawn: length, depth, and how far it reaches
 ## behind the origin.
 ##

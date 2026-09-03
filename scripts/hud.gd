@@ -278,11 +278,56 @@ func _draw() -> void:
 	elif mag <= 0:
 		draw_string(_font, Vector2(x + mag_width + 74.0, y), "R TO RELOAD",
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 12, _fade(LOW_AMMO))
+	_draw_heat(Vector2(x, y))
 	# Under the card when it is at the top of the screen, over it when it is at
 	# the bottom - either way the pair reads as one block rather than one of them
 	# hanging off the edge.
 	_draw_slots(Vector2(origin.x,
 		origin.y + PANEL_SIZE.y + 22.0 if PlayerInput.is_touch() else origin.y - 30.0))
+
+
+## The heat bar for a gun firing on an overtiered energy cell. Undrawn the
+## rest of the time - a same-tier cell never touches Weapon.heat at all, so
+## there is nothing here worth a player's attention unless they chose to run
+## something hot. Both gun classes lock at the ceiling now and read
+## identically here - see the header comment on Weapon.heat_locked - a
+## semi-auto's own tell is only in how it got there: a climbing stretch on
+## _cooldown rather than a sudden refusal.
+func _draw_heat(at: Vector2) -> void:
+	var value := _weapon.get_heat()
+	var locked := _weapon.is_heat_locked()
+	if value <= 0.001 and not locked:
+		return
+	var bar := Rect2(Vector2(at.x, at.y + 10.0), Vector2(PANEL_SIZE.x - 32.0, 7.0))
+	draw_rect(bar, _fade(Color(0.16, 0.18, 0.22)))
+
+	# A bar that just sits there red while the trigger is refused is easy to
+	# miss in the middle of a fight - so while actually locked, the fill
+	# pulses instead of holding still. Layered on top of the ordinary
+	# aim/panel fade rather than instead of it.
+	var shade := ACCENT.lerp(LOW_AMMO, value)
+	var fill_alpha := 1.0
+	if locked:
+		fill_alpha = lerpf(0.5, 1.0, (sin(Time.get_ticks_msec() * 0.012) + 1.0) * 0.5)
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * value, bar.size.y)),
+		_fade(Color(shade, fill_alpha)))
+
+	# The unlock mark: how far the bar has to drop before an automatic
+	# trusts the trigger again, drawn as a line on the bar itself rather
+	# than left as a number nowhere on screen - see
+	# Weapon.get_heat_unlock_threshold(). The one thing a player watching a
+	# locked gun actually wants to track is whether the fill has crossed it
+	# yet, and a line answers that at a glance where the word "OVERHEATED"
+	# alone does not.
+	var threshold := _weapon.get_heat_unlock_threshold()
+	if threshold > 0.0:
+		var mark_x := bar.position.x + bar.size.x * threshold
+		draw_line(Vector2(mark_x, bar.position.y - 2.0), Vector2(mark_x, bar.end.y + 2.0),
+			_fade(Color(1.0, 1.0, 1.0, 0.85)), 1.5)
+
+	draw_string(_font, Vector2(bar.position.x, bar.position.y - 3.0),
+		"OVERHEATED - VENTING" if locked else "HEAT",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, _fade(LOW_AMMO if locked else DIM))
 
 
 ## How far past the edge of the screen a full-strength flash blooms. Over 1 on

@@ -15,6 +15,11 @@ signal ammo_changed(mag: int, reserve: int)
 signal reload_started(duration: float)
 signal reload_finished()
 signal shot_fired(recoil_shake: float, knockback: float)
+## Thermal lock, for a gun firing on an overtiered energy cell. `locked` only
+## ever goes true on an automatic - see the header comment on `heat` - but the
+## fraction is meaningful on a semi-auto too, so the HUD can draw the same bar
+## for both and only the lock icon differs.
+signal heat_changed(heat: float, locked: bool)
 
 
 ## What the player starts with, and nothing more: everything else is looted.
@@ -81,6 +86,28 @@ var kick := 0.0
 ## brace you against it, so it is added after the sights have had their say and
 ## only partly bought back by aiming.
 var flinch := 0.0
+
+## Heat from firing on an overtiered energy cell, 0 to 1. Zero and inert on a
+## same-tier cell - a same-tier shot never adds to it, full stop - so this is
+## entirely a cost of the loadout decision to overtier a gun, never something
+## an ordinary loadout has to think about.
+##
+## NOT the same thing as `_cooldown` below, which is the ordinary per-shot
+## fire-rate gate every gun has regardless of what is feeding it. `heat` is
+## what an overtiered cell costs on top of that - see try_fire() for how it
+## stretches `_cooldown` on a semi-auto on the way up, and how either gun
+## class locks outright once it tops out - see `heat_locked`.
+var heat := 0.0
+## True from the shot that fills the heat bar until it has bled back down
+## under the gun's own unlock threshold - see
+## WeaponData.get_heat_unlock_threshold(). Applies to both gun classes: an
+## automatic has nothing else guarding it (there is no gap between shots to
+## stretch, the trigger is held continuously), and a semi-auto pays the
+## stretched-`_cooldown` tax on the way up to this and then the same flat
+## refusal an automatic gets once it actually arrives - a semi-auto that
+## reached full heat and kept firing right through it read as broken, not
+## as a gun that had earned some slack.
+var heat_locked := false
 
 var _cooldown := 0.0
 var _reload_left := 0.0
@@ -167,6 +194,8 @@ func _refresh(force := false) -> void:
 	_reload_left = 0.0
 	bloom = 0.0
 	kick = 0.0
+	heat = 0.0
+	heat_locked = false
 	if data:
 		_equip_left = data.get_equip_time()
 	weapon_changed.emit(data, slot)
@@ -256,6 +285,18 @@ func tick(delta: float) -> void:
 		bloom = maxf(bloom - data.get_bloom_recovery() * delta, 0.0)
 		kick = move_toward(kick, 0.0, kick * data.get_kick_recovery() * delta + 0.0005)
 
+	# Heat rides the same grace timer, reusing `_since_shot` rather than a
+	# clock of its own - the same shape bloom and kick recover on above, for
+	# the same reason: a burst does not get to vent between rounds just
+	# because the trigger let up for one frame.
+	if heat > 0.0 and _since_shot >= data.get_heat_recovery_delay():
+		# Slower while actually locked - see LOCKED_HEAT_RECOVERY_SCALE - so
+		# reaching the lock costs more than almost reaching it does.
+		heat = maxf(heat - data.get_heat_recovery(heat_locked) * delta, 0.0)
+		if heat_locked and heat <= data.get_heat_unlock_threshold(_energy_delta()):
+			heat_locked = false
+			heat_changed.emit(heat, heat_locked)
+
 
 ## Current cone half-angle, including bloom, the run-and-gun penalty, whether the
 ## shooter's feet are on the ground, and however far into the sights they
@@ -317,6 +358,32 @@ func get_reload_progress() -> float:
 	return clampf(1.0 - _reload_left / _reload_total, 0.0, 1.0)
 
 
+func get_heat() -> float:
+	return heat
+
+
+func is_heat_locked() -> bool:
+	return heat_locked
+
+
+## Where the heat bar's own unlock mark belongs, 0 to 1 - the HUD draws it as
+## a line on the bar so "how far below this you need to be" is something a
+## player can see rather than something they have to have memorised. Zero
+## with nothing equipped or on a same-tier cell, where it means nothing.
+## Meaningful for both gun classes now that both actually lock at the
+## ceiling - see the header comment on `heat_locked`.
+func get_heat_unlock_threshold() -> float:
+	return data.get_heat_unlock_threshold(_energy_delta()) if data else 0.0
+
+
+## How many tiers over its own base the fitted cell is running whatever is in
+## hand. Zero with nothing equipped, which is also what a same-tier cell
+## reads as - both mean "no overheat behaviour applies".
+func _energy_delta() -> int:
+	var item := _item()
+	return item.energy_delta() if item else 0
+
+
 # --- firing -------------------------------------------------------------------
 
 
@@ -362,6 +429,33 @@ func try_fire(origin: Vector2, angle: float, pressed: bool, held: bool,
 	if not wants_shot or is_reloading() or is_equipping() or _cooldown > 0.0:
 		return false
 
+	# No cell, no fire. A magazine full of rounds with nothing feeding the
+	# chamber is exactly as useless as an empty one, so it fails the same
+	# way - a dry click, the one failure state every player already knows
+	# how to read - rather than a jam or a silent refusal. See EnergyCellData
+	# and Item.DEFAULT_ENERGY_BY_TIER for why this is reachable at all: only
+	# by stripping the cell a gun starts with and never fitting another.
+	if item.energy == null:
+		if _audio and (pressed or not data.automatic):
+			_audio.dry_fire(origin)
+		return false
+
+	var delta := item.energy_delta()
+
+	# Full heat refuses the trigger outright on any gun now, automatic or
+	# not - stays refused until it has bled back down past the gun's own
+	# threshold. This used to be automatic-only, on the theory that a
+	# semi-auto's stretched cooldown was punishment enough on its own; in
+	# practice that left a semi-auto that reached the ceiling still firing
+	# right through it, which read as the mechanic simply not working
+	# rather than as a gun that had earned some slack. The stretch below is
+	# still what a semi-auto pays on the way *up* to full heat - this is
+	# what it pays once it gets there, the same as an automatic does.
+	if heat_locked:
+		if _audio and (pressed or not data.automatic):
+			_audio.dry_fire(origin)
+		return false
+
 	if item.count <= 0:
 		# Only click on the press, not on every frame of a held empty trigger.
 		if _audio and (pressed or not data.automatic):
@@ -370,9 +464,30 @@ func try_fire(origin: Vector2, angle: float, pressed: bool, held: bool,
 		return false
 
 	item.count -= 1
-	_cooldown = data.get_shot_interval()
+	# The one piece that is still semi-auto-only: on the way *up* to a full
+	# heat bar, every shot's own cooldown stretches by however hot the gun
+	# already was the instant the trigger broke, capped per the gun's own
+	# delta - so this bites gradually, before the lock above ever has
+	# anything to say. An automatic has no equivalent, because the trigger
+	# is held down continuously on one and there is no gap between shots to
+	# stretch in the first place.
+	var stretch := 1.0
+	if not data.automatic and delta > 0:
+		stretch += heat * data.get_heat_stretch_cap(delta)
+	_cooldown = data.get_shot_interval() * stretch
 	_since_shot = 0.0
 	ammo_changed.emit(get_mag(), get_reserve())
+
+	# Updated here, before the round is even spawned, rather than after - the
+	# bullet this shot fires and the shove it gives the camera both read this
+	# value, and both should read what firing it just cost rather than what
+	# it cost one shot ago. Same-tier fire never reaches this at all:
+	# get_heat_per_shot() answers zero for delta 0.
+	if delta > 0:
+		heat = minf(heat + data.get_heat_per_shot(delta), 1.0)
+		if heat >= 1.0:
+			heat_locked = true
+		heat_changed.emit(heat, heat_locked)
 
 	# The report is not played here. A shot exists on every machine as a bullet -
 	# see Net._make_bullet - and that is where the noise belongs: fired from here
@@ -399,6 +514,7 @@ func try_fire(origin: Vector2, angle: float, pressed: bool, held: bool,
 	# as it approaches the limit, so it keeps creeping and never has an edge.
 	bloom += data.get_bloom_per_shot() * _headroom(bloom, data.get_max_bloom())
 	kick += data.get_kick_per_shot() * _headroom(kick, data.get_max_kick())
+
 	shot_fired.emit(data.get_shake(), data.get_knockback())
 	return true
 
@@ -437,9 +553,40 @@ func _spawn_bullet(origin: Vector2, angle: float) -> void:
 	var shelf: WeaponData = item.base_weapon if item and item.base_weapon else data
 	# Both the shelf path and the gun in hand: Net draws this one from the object
 	# and sends the other end the path, and works out for itself what the parts
-	# did to the damage - see Net.fire.
+	# did to the damage - see Net.fire. `heat` and `_muzzle_reach_px` ride along
+	# unmodified - see the header comment on Net.fire() for why neither needs
+	# a shelf/built ratio the way damage and speed do.
 	Net.fire(origin, angle, shelf.resource_path, hit_mask, damage_scale,
-		_shooter_id(), data)
+		_shooter_id(), data, 1.0, heat, _muzzle_reach_px(item))
+
+
+## The baseline every gun's muzzle_reach() is measured against: the AR's own
+## receiver (58) plus barrel (40). Not zero, because GunArt's gun-space
+## numbers are not world pixels and have no reason to start at zero meaning
+## "this rig's fixed Muzzle marker" - they need a reference point, and the
+## AR is the one this whole file already benchmarks everything else against
+## (see the damage model comment at the top of WeaponData). A gun shorter
+## than that pulls the flash back toward the hand; a longer one - or a can
+## screwed onto the end of any of them - pushes it out past the barrel.
+const MUZZLE_REACH_BASELINE := 98.0
+## Gun-space units to world pixels. Invented rather than derived - GunArt's
+## numbers were never meant to describe the actual rig, only to draw a
+## readable side-on diagram of one - so this is picked to put a sniper's
+## much longer barrel a noticeable but not silly distance past where a
+## pistol's flash sits, and wants a look in play to confirm.
+const MUZZLE_REACH_SCALE := 0.4
+
+
+## How far past the rig's fixed Muzzle marker this specific gun, with
+## whatever is bolted to its muzzle, actually reaches - in world pixels,
+## forward along the shot. Purely cosmetic: nothing about where the bullet
+## itself begins reads this, only where the flash it leaves the barrel with
+## is drawn. See GunArt.muzzle_reach() for the number this is built from.
+func _muzzle_reach_px(item: Item) -> float:
+	if item == null or item.base_weapon == null:
+		return 0.0
+	var reach := GunArt.muzzle_reach(item.base_weapon, item.parts)
+	return (reach - MUZZLE_REACH_BASELINE) * MUZZLE_REACH_SCALE
 
 
 ## The peer to credit for this shot. A gun held by a guard answers 0: guards are
