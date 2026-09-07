@@ -245,3 +245,4 @@ virtual_controller/ios/enable_button_y=true
 rendering_device/driver.windows="d3d12"
 renderer/rendering_method="mobile"
 2d/shadow_atlas/size=8192
+textures/vram_compression/import_etc2_astc=true
