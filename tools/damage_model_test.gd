@@ -268,15 +268,19 @@ func _init() -> void:
 	_eq("SMG time to kill, medium vest (ms)", smg_vested * 1000.0, 128.0, 1.0)
 	_eq("SMG time to kill, nothing on (ms)", smg_bare * 1000.0, 64.0, 1.0)
 
-	# Two: it gives up the corridor. Its rounds stop existing before the rifle's
-	# curve has even finished falling.
+	# Two: it gives up the corridor. Its damage curve finishes falling well
+	# before the rifle's does - bullet_range plays no part in this any more
+	# (see the field's own comment in weapon_data.gd): every gun travels the
+	# same generous distance now, purely so a round does not vanish before it
+	# reaches something visible, and falloff_end is the only dial left that
+	# says how far a gun is actually worth firing.
 	if smg.get_damage_at(9999.0) >= ar.get_damage_at(9999.0) * 0.75:
 		_failures.append("the SMG keeps too much of itself at range")
-	if smg.falloff_end >= ar.falloff_end or smg.bullet_range >= ar.bullet_range:
+	if smg.falloff_end >= ar.falloff_end:
 		_failures.append("the SMG outreaches the rifle it is not allowed to outreach")
-	print("  ok   %-42s %.0f at range vs %.0f, and stops at %.0fpx"
+	print("  ok   %-42s %.0f at range vs %.0f, falls off by %.0fpx"
 		% ["gives up the corridor", smg.get_damage_at(9999.0),
-			ar.get_damage_at(9999.0), smg.bullet_range])
+			ar.get_damage_at(9999.0), smg.falloff_end])
 
 	# Three: it cannot break armour. A vest it is shooting keeps working, which
 	# is the whole reason wearing one still means something against the fastest

@@ -121,7 +121,23 @@ extends Resource
 ## the machine working out what happened to your armour is yours, not the one
 ## holding the gun. See Net.armor_wear.
 @export_range(0.0, 4.0) var armor_wear_scale := 1.0
-@export var bullet_range := 2000.0
+## Not the gun's effective range - that is falloff_start/falloff_end/
+## min_damage_factor below, and this plays no part in it. This is a travel
+## budget, purely so a round that hits nobody eventually frees itself instead
+## of raycasting forever: every gun is set to 16000, comfortably past the
+## quarry's own diagonal (~12700 px, the biggest sightline in the game), so a
+## shot only ever ends by hitting something.
+##
+## Used to sit at 480-4000, one number per gun, on the theory that this was
+## each weapon's reach. It was not, quite: a scope pushes the camera's aim
+## zoom and lean out with it (Player.get_camera_zoom, _get_lead_offset), and
+## neither of those consulted this field - so a strong scope could show a
+## target well past where its own gun's round would expire, silently, no
+## impact, no sound, mid-air. Worst on the sniper's own 6x scope: it could
+## see 7196 px down the sightline against a 4000 px round. Falloff already
+## governs whether a hit that far out matters; this was just an extra, wrong
+## wall a visible shot could quietly run into first.
+@export var bullet_range := 16000.0
 
 @export_group("Energy")
 ## The tier of energy cell this gun ships on. See EnergyCellData for what a
