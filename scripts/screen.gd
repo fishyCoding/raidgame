@@ -194,7 +194,10 @@ func _draw() -> void:
 	if _breaking > 0.0:
 		_draw_break()
 		return
-	if caster != Net.peer_id():
+	# Visible to whoever placed it, and to their squadmate exactly the same
+	# way - a screen is a lie you and your partner are both in on, not a
+	# secret one of you keeps from the other.
+	if caster != Net.peer_id() and not Net.is_teammate(Net.peer_id(), caster):
 		return
 	var half := _span * 0.5
 	var shimmer := 0.10 + 0.05 * sin(_life * 3.0)

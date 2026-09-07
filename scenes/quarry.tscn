@@ -14,6 +14,7 @@
 [ext_resource type="Script" uid="uid://ydgxhwysseee" path="res://scripts/controls_hint.gd" id="12_urngg"]
 [ext_resource type="Script" uid="uid://oshl4qhxdbwj" path="res://scripts/inventory_ui.gd" id="13_no0n7"]
 [ext_resource type="Script" uid="uid://xeib8hy0neca" path="res://scripts/hud.gd" id="14_en4m8"]
+[ext_resource type="Script" path="res://scripts/minimap.gd" id="20_minimap"]
 [ext_resource type="Script" uid="uid://cb34p0md66qw0" path="res://scripts/touch_controls.gd" id="15_sceho"]
 [ext_resource type="Script" uid="uid://deaufp2rknqug" path="res://scripts/map_screen.gd" id="16_a62tk"]
 [ext_resource type="Script" uid="uid://ds77uggwicvrj" path="res://scripts/screens.gd" id="17_1sjku"]
@@ -2611,6 +2612,16 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("14_en4m8")
+
+[node name="Minimap" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("20_minimap")
 
 [node name="TouchControls" type="Control" parent="HUD" unique_id=771044213]
 layout_mode = 3

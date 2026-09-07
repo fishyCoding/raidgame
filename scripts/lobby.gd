@@ -33,6 +33,7 @@ var _shop: Control
 var _status: Label
 var _controls: Button
 var _map: Button
+var _duos: Button
 var _kit: Inventory
 
 
@@ -88,6 +89,11 @@ func _take_orders_from_the_command_line() -> void:
 			return
 		if arg.begins_with("--port="):
 			_port = int(arg.get_slice("=", 1))
+		if arg == "--duos":
+			# Read before --join below, whatever order they were typed in: the
+			# queue call it triggers has to see the flag already set.
+			Net.wants_duos = true
+			_refresh_duos_label()
 		if arg.begins_with("--join"):
 			# Bare --join means the same machine, which is the common case when
 			# you are testing against a server you started in the next window.
@@ -163,6 +169,24 @@ func _build() -> void:
 	_map.pressed.connect(_on_cycle_map)
 	add_child(_map)
 	_refresh_map_label()
+
+	# Solo/FFA or duos-filled: which queue JOIN MATCHMAKING actually joins.
+	# Independent of "play alone" below, which never queues at all.
+	#
+	# A row of its own, above the others rather than squeezed in beside them -
+	# that whole row sits at the same y the shop draws its centred deploy
+	# button on (see Shop._deploy_button), so anything added to it past
+	# about x=500 on an ordinary window width lands under DEPLOY/JOIN
+	# MATCHMAKING rather than beside it.
+	_duos = Button.new()
+	_duos.flat = true
+	_duos.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_duos.position = Vector2(316.0, -102.0)
+	_duos.custom_minimum_size = Vector2(190.0, 34.0)
+	_duos.tooltip_text = "duos fills you a squadmate from the queue - free revives while knocked, one paid one from dead; solo is every player for themselves"
+	_duos.pressed.connect(_on_cycle_duos)
+	add_child(_duos)
+	_refresh_duos_label()
 
 	# Cycles auto / touch / desktop and remembers the answer. On this screen
 	# rather than buried in a settings menu because the reason to touch it is to
@@ -249,6 +273,16 @@ func _choose_map(wanted: String) -> void:
 func _refresh_map_label() -> void:
 	if _map:
 		_map.text = "map: %s" % Net.solo_name()
+
+
+func _on_cycle_duos() -> void:
+	Net.wants_duos = not Net.wants_duos
+	_refresh_duos_label()
+
+
+func _refresh_duos_label() -> void:
+	if _duos:
+		_duos.text = "queue: %s" % ("duos (fill)" if Net.wants_duos else "solo")
 
 
 ## Alone, on whichever map the button says. A real run: everything carried in

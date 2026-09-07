@@ -85,6 +85,12 @@ properties/19/replication_mode = 1
 properties/20/path = NodePath(".:arc_stop")
 properties/20/spawn = true
 properties/20/replication_mode = 1
+properties/21/path = NodePath(".:max_health")
+properties/21/spawn = true
+properties/21/replication_mode = 2
+properties/22/path = NodePath(".:used_death_revive")
+properties/22/spawn = true
+properties/22/replication_mode = 2
 
 [node name="Player" type="CharacterBody2D" groups=["player"]]
 collision_layer = 4

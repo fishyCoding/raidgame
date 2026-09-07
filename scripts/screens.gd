@@ -24,6 +24,10 @@ enum Phase { SHOP, WAITING, BRIEFING, INTRO, PLAYING, DEAD, EXTRACTED }
 var phase := Phase.SHOP
 var _clock := 0.0
 var _knocked_out := false
+## Whether a squadmate could still bring this death back - see
+## Player._death_is_recoverable. Softens the death screen while true: this
+## is not the end of the run yet, just the end of standing up on your own.
+var _recoverable := false
 ## What was on you as the run ended, as text. Read once, when it ends, rather
 ## than off the body every frame: dying hands the kit to the corpse immediately,
 ## and leaving the session frees the body out from under a screen that is still
@@ -82,9 +86,9 @@ func _start_session() -> void:
 	# the host and it decides - which is also how a client picks up everyone who
 	# was already in the world before it arrived.
 	if Net.is_networked():
-		Net.request_character.rpc_id(1)
+		Net.request_character.rpc_id(1, Net.wants_duos)
 	else:
-		Net.request_character()
+		Net.request_character(Net.wants_duos)
 	# Whatever was bought in the menu, waiting for the body it belongs to. Taken
 	# rather than copied: nothing else is going to use it, and leaving it on Net
 	# would hand the same rifle to the next raid started without going back
@@ -100,6 +104,10 @@ func _on_player_spawned(body: Node) -> void:
 	if not _player.died.is_connected(_on_player_died):
 		_player.died.connect(_on_player_died)
 		_player.extracted.connect(_on_extracted)
+		# A squadmate can bring you back from the death screen itself - see
+		# Player._resurrect. Harmless while merely knocked (revived also fires
+		# for that, and phase is already PLAYING then, so this is a no-op).
+		_player.revived.connect(_on_player_revived)
 	# Deferred because the shop is created after this node - it has to draw over
 	# the HUD, so it sits later in the scene and is not in the tree yet.
 	_wire_shop.call_deferred()
@@ -268,11 +276,23 @@ func _back_to_the_kit_menu() -> void:
 	get_tree().change_scene_to_file(LOBBY_SCENE)
 
 
-func _on_player_died(knocked_out: bool) -> void:
+func _on_player_died(knocked_out: bool, recoverable: bool) -> void:
 	phase = Phase.DEAD
 	_knocked_out = knocked_out
+	_recoverable = recoverable
 	_carried = _player.lost_kit if _player else ""
 	_clock = 0.0
+
+
+## Brought back - either a knockdown revive (phase is already PLAYING, so
+## this changes nothing) or a squadmate's one-time resurrection from the
+## death screen itself, which is the case this exists for: nothing else ever
+## takes the DEAD phase down again except the player choosing to leave.
+func _on_player_revived() -> void:
+	if phase == Phase.DEAD:
+		phase = Phase.PLAYING
+		_recoverable = false
+		_clock = 0.0
 
 
 func _draw() -> void:
@@ -296,9 +316,16 @@ func _draw() -> void:
 func _draw_waiting() -> void:
 	var font := ThemeDB.fallback_font
 	var centre := size * 0.5
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.02, 0.025, 0.035, 0.72))
+	# Opaque once the countdown is actually running - these ten seconds are
+	# for looking at what you and your squad brought in, not at the level
+	# through a haze. Merely waiting for a second player stays translucent,
+	# so the level going on behind it is still what makes that wait feel like
+	# standing somewhere rather than staring at a loading screen.
+	var counting := Net.match_state == Net.Match.COUNTDOWN
+	draw_rect(Rect2(Vector2.ZERO, size),
+		Color(0.02, 0.025, 0.035, 1.0 if counting else 0.72))
 
-	if Net.match_state == Net.Match.COUNTDOWN:
+	if counting:
 		var seconds := int(ceilf(Net.seconds_left))
 		draw_string(font, Vector2(0.0, centre.y - 54.0), "DEPLOYING IN",
 			HORIZONTAL_ALIGNMENT_CENTER, size.x, 18, DIM)
@@ -312,14 +339,25 @@ func _draw_waiting() -> void:
 		_draw_kit_footer()
 		return
 
-	draw_string(font, Vector2(0.0, centre.y - 16.0), "WAITING FOR PLAYERS",
+	# Queued duos with nobody paired yet: say so plainly rather than the
+	# generic count, which would otherwise show "1 of 2" while somebody
+	# else's solo queue silently fills the raid without you - see
+	# Net._is_ready, which is what actually keeps you off the level for it.
+	var stuck_alone := Net.wants_duos and Net.teammate(Net.peer_id()) == 0
+	draw_string(font, Vector2(0.0, centre.y - 16.0),
+		"WAITING FOR A SQUADMATE" if stuck_alone else "WAITING FOR PLAYERS",
 		HORIZONTAL_ALIGNMENT_CENTER, size.x, 34, TITLE)
-	draw_string(font, Vector2(0.0, centre.y + 22.0),
-		"%d of %d" % [Net.player_slots(), Net.MIN_PLAYERS],
-		HORIZONTAL_ALIGNMENT_CENTER, size.x, 20, TEXT)
-	draw_string(font, Vector2(0.0, centre.y + 62.0),
-		"the raid starts when someone else arrives",
-		HORIZONTAL_ALIGNMENT_CENTER, size.x, 14, DIM)
+	if stuck_alone:
+		draw_string(font, Vector2(0.0, centre.y + 22.0),
+			"queued for duos - matched the instant somebody else queues the same way",
+			HORIZONTAL_ALIGNMENT_CENTER, size.x, 16, TEXT)
+	else:
+		draw_string(font, Vector2(0.0, centre.y + 22.0),
+			"%d of %d" % [Net.player_slots(), Net.MIN_PLAYERS],
+			HORIZONTAL_ALIGNMENT_CENTER, size.x, 20, TEXT)
+		draw_string(font, Vector2(0.0, centre.y + 62.0),
+			"the raid starts when someone else arrives",
+			HORIZONTAL_ALIGNMENT_CENTER, size.x, 14, DIM)
 	_draw_kit_footer()
 
 
@@ -334,6 +372,13 @@ func _draw_kit_footer() -> void:
 	draw_string(font, Vector2(0.0, size.y - 40.0),
 		"going in with:  %s" % _kit.summary(),
 		HORIZONTAL_ALIGNMENT_CENTER, size.x, 13, DIM)
+	# Known the moment the host pairs the squad - see Net._set_teammates -
+	# which is well before either of you has a body, so there is nothing to
+	# wait on here beyond the message having arrived yet.
+	if not Net.teammate_kit_text.is_empty():
+		draw_string(font, Vector2(0.0, size.y - 22.0),
+			"your teammate:  %s" % Net.teammate_kit_text,
+			HORIZONTAL_ALIGNMENT_CENTER, size.x, 13, DIM)
 
 
 ## Black, lifting off the level, with the brief on top of it.
@@ -378,8 +423,40 @@ func _draw_extracted() -> void:
 		HORIZONTAL_ALIGNMENT_CENTER, size.x, 15, Color(TITLE, fade * 0.9))
 
 
+## A squadmate could still bring this one back - see
+## Player._death_is_recoverable - so it is not shown as the run ending.
+## Deliberately light: no blood, no black takeover, the level still drawing
+## behind it exactly the way the WAITING screen leaves it visible. Giving up
+## and buying another kit is still on the table, just no longer the only
+## thing this screen is telling you.
+func _draw_down_waiting() -> void:
+	var font := ThemeDB.fallback_font
+	var centre := size * 0.5
+	var pulse := 0.6 + 0.4 * sin(_clock * 2.4)
+	var lit := Color(0.74, 0.56, 0.94)
+	var box := Rect2(Vector2(centre.x - 220.0, centre.y - 70.0), Vector2(440.0, 128.0))
+	draw_rect(box, Color(0.04, 0.05, 0.07, 0.82))
+	draw_rect(Rect2(box.position, Vector2(3.0, box.size.y)), Color(lit, pulse))
+
+	draw_string(font, box.position + Vector2(20.0, 36.0), "DOWN - NOT OUT",
+		HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 40.0, 28, lit)
+	draw_string(font, box.position + Vector2(20.0, 62.0),
+		"your squad can still bring you back with a revive kit",
+		HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 40.0, 14, TEXT)
+	if not _carried.is_empty():
+		draw_string(font, box.position + Vector2(20.0, 86.0), "on the body:  %s" % _carried,
+			HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 40.0, 12, DIM)
+	draw_string(font, box.position + Vector2(20.0, 112.0),
+		("TAP  give up and buy another kit" if PlayerInput.is_touch()
+			else "ENTER  give up and buy another kit"),
+		HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 40.0, 12, DIM)
+
+
 ## Red bleeding in, then the verdict. No timer, no respawn.
 func _draw_death() -> void:
+	if _recoverable:
+		_draw_down_waiting()
+		return
 	var t := clampf(_clock / DEATH_FADE, 0.0, 1.0)
 	var font := ThemeDB.fallback_font
 	# Blood first, then black over it: the colour reads as the hit, the dark as

@@ -85,6 +85,11 @@ var _scanned_left := 0.0
 ## telling you to move, and it should be out of the way while you do.
 const SCANNED_TIME := 2.4
 
+## Seconds left of the "your teammate got a kill/knock" banner.
+var _teammate_credit_left := 0.0
+var _teammate_credit_killed := false
+const TEAMMATE_CREDIT_TIME := 3.0
+
 ## Seconds left of the mark a Headcount leaves on your screen. Kept here for the
 ## same reason _scanned_left is: it is a thing on a screen and nothing else, and
 ## dying should not leave it frozen mid-fade.
@@ -182,6 +187,7 @@ func _ready() -> void:
 		_weapon = _player.weapon
 		_player.scanned.connect(_on_scanned)
 		_player.counted.connect(_on_counted)
+		_player.teammate_credit.connect(_on_teammate_credit)
 
 
 ## Characters arrive after the level does now - spawned per peer rather than
@@ -195,6 +201,8 @@ func _on_player_spawned(body: Node) -> void:
 		_player.scanned.connect(_on_scanned)
 	if not _player.counted.is_connected(_on_counted):
 		_player.counted.connect(_on_counted)
+	if not _player.teammate_credit.is_connected(_on_teammate_credit):
+		_player.teammate_credit.connect(_on_teammate_credit)
 
 
 func _on_scanned() -> void:
@@ -205,6 +213,11 @@ func _on_counted() -> void:
 	_watched_left = WATCHED_FADE
 
 
+func _on_teammate_credit(killed: bool) -> void:
+	_teammate_credit_left = TEAMMATE_CREDIT_TIME
+	_teammate_credit_killed = killed
+
+
 func _process(delta: float) -> void:
 	# The bar needs the full duration, and only the player knows it - catch it on
 	# the frame it starts rather than hard-coding eight seconds here.
@@ -212,6 +225,7 @@ func _process(delta: float) -> void:
 		_overload_span = _ult_left()
 	_scanned_left = maxf(_scanned_left - delta, 0.0)
 	_watched_left = maxf(_watched_left - delta, 0.0)
+	_teammate_credit_left = maxf(_teammate_credit_left - delta, 0.0)
 	queue_redraw()
 
 
@@ -231,6 +245,8 @@ func _draw() -> void:
 		_draw_watched()
 	if _scanned_left > 0.0:
 		_draw_scanned()
+	if _teammate_credit_left > 0.0:
+		_draw_teammate_credit()
 	if _weapon == null:
 		_draw_flash()
 		return
@@ -441,6 +457,11 @@ func _draw_health() -> void:
 	draw_rect(Rect2(bar.position - Vector2(3, 3), bar.size + Vector2(6, 6)), PANEL_BG)
 	draw_rect(bar, Color(0.16, 0.18, 0.22))
 
+	# Not gated behind is_downed the way most of this is - the one moment you
+	# most want to know whether your squadmate is still up is exactly the
+	# moment your own bar has stopped being useful.
+	_draw_teammate_health()
+
 	# What you have to spend, and what is being spent on you, in both states.
 	#
 	# These four used to live inside _draw_downed, so the ultimate, the throwables,
@@ -480,6 +501,13 @@ func _draw_health() -> void:
 		BAD.lerp(GOOD, fraction))
 	draw_string(_font, Vector2(bar.position.x, bar.position.y - 6.0),
 		"%d HP" % roundi(_player.health), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, DIM)
+	if _player.used_death_revive:
+		# max_health itself already reads 65 by this point, so the bar is
+		# honest on its own - this just says why it is shorter than it used
+		# to be, once, rather than leaving you to work that out mid-fight.
+		draw_string(_font, Vector2(bar.position.x, bar.position.y - 20.0),
+			"REVIVED - %d MAX HEALTH" % roundi(_player.max_health),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.74, 0.56, 0.94))
 
 	_draw_injuries(bar)
 	_draw_using(bar)
@@ -501,6 +529,67 @@ func _draw_health() -> void:
 	if _player.extracting:
 		_draw_extraction(_player.extracting)
 	_draw_flash()
+
+
+## A colour of its own, distinct from the player's own health bar, so the two
+## are never mistaken for each other at a glance.
+const TEAMMATE := Color(0.55, 0.78, 0.98)
+
+## Your squadmate's own vitals, stacked in the bottom-left corner - above the
+## weapon card on a desktop, since that card is what already lives there;
+## clear of the pad on a phone, where the card moves to the top-left instead.
+## Drawn every frame regardless of your own is_downed/is_alive: the one
+## moment you most want this readout is exactly the state your own bar stops
+## answering anything.
+func _draw_teammate_health() -> void:
+	var mate := Net.my_teammate()
+	if mate == null or not is_instance_valid(mate):
+		return
+	var alive: Variant = mate.get(&"is_alive")
+	if typeof(alive) != TYPE_BOOL:
+		return
+
+	# Clear of both the weapon card and the "1 AR / 2 PISTOL" quick-reference
+	# row under/over it - that pair together claim size.y-158..size.y-20 on a
+	# desktop (68..188 on a phone, where the card sits at the top instead),
+	# and this used to land right on top of the slot row before anyone
+	# noticed the gap was smaller than it looked.
+	var box := Rect2(
+		Vector2(MARGIN, 196.0) if PlayerInput.is_touch()
+			else Vector2(MARGIN, size.y - 204.0),
+		Vector2(160.0, 40.0))
+	draw_rect(box, PANEL_BG)
+	draw_rect(Rect2(box.position, Vector2(3.0, box.size.y)), TEAMMATE)
+	draw_string(_font, box.position + Vector2(10.0, 15.0), "TEAMMATE",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, TEAMMATE)
+
+	if not bool(alive):
+		var revivable: Variant = mate.get(&"used_death_revive")
+		draw_string(_font, box.position + Vector2(10.0, 32.0),
+			"DEAD - can still be revived" if typeof(revivable) == TYPE_BOOL and not revivable
+				else "DEAD",
+			HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 16.0, 11, BAD)
+		return
+
+	var downed: Variant = mate.get(&"is_downed")
+	var bar := Rect2(box.position + Vector2(10.0, 22.0), Vector2(box.size.x - 20.0, 8.0))
+	draw_rect(bar, Color(0.16, 0.18, 0.22))
+
+	if typeof(downed) == TYPE_BOOL and downed:
+		draw_rect(bar, Color(0.86, 0.18, 0.2, 0.85))
+		draw_string(_font, box.position + Vector2(10.0, 32.0), "KNOCKED - go get them",
+			HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 16.0, 10, Color(1.0, 0.4, 0.4))
+		return
+
+	var health: Variant = mate.get(&"health")
+	var mate_max: Variant = mate.get(&"max_health")
+	var h := float(health) if typeof(health) in [TYPE_FLOAT, TYPE_INT] else 0.0
+	var mh := float(mate_max) if typeof(mate_max) in [TYPE_FLOAT, TYPE_INT] else 100.0
+	var fraction := clampf(h / maxf(mh, 1.0), 0.0, 1.0)
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * fraction, bar.size.y)),
+		BAD.lerp(GOOD, fraction))
+	draw_string(_font, box.position + Vector2(10.0, 32.0), "%d / %d" % [roundi(h), roundi(mh)],
+		HORIZONTAL_ALIGNMENT_LEFT, box.size.x - 16.0, 10, DIM)
 
 
 ## Wounds, as notches under the left end of the health bar.
@@ -651,6 +740,8 @@ func _draw_using(bar: Rect2) -> void:
 		what = "STITCHING"
 	elif _player.using == Player.Using.REPAIR:
 		what = "REPAIRING"
+	elif _player.using == Player.Using.REVIVE_TEAMMATE:
+		what = "REVIVING TEAMMATE"
 	draw_string(_font, strip.position + Vector2(0.0, -4.0), what,
 		HORIZONTAL_ALIGNMENT_LEFT, strip.size.x, 11, GOOD)
 	draw_string(_font, strip.position + Vector2(0.0, -4.0),
@@ -764,6 +855,24 @@ func _draw_scanned() -> void:
 		big, Color(RECON.r, RECON.g, RECON.b, alpha * pulse))
 	draw_string(_font, Vector2(0.0, y + 26.0), "they can see you - move",
 		HORIZONTAL_ALIGNMENT_CENTER, size.x, 16, Color(TEXT.r, TEXT.g, TEXT.b, alpha * 0.9))
+
+
+## Your squadmate scored a hit worth knowing about. A small, quiet toast
+## rather than anything the size of SCANNED above - this is good news, not a
+## warning, and it should not interrupt whatever you are doing to read it.
+func _draw_teammate_credit() -> void:
+	var t := clampf(_teammate_credit_left / TEAMMATE_CREDIT_TIME, 0.0, 1.0)
+	var alpha := clampf(t * 2.0, 0.0, 1.0)
+	var text := "TEAMMATE KILL" if _teammate_credit_killed else "TEAMMATE KNOCK"
+	var tint := GOOD if _teammate_credit_killed else HEADCOUNT
+	var y := size.y * 0.18
+	var width := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	var box := Rect2(Vector2(size.x * 0.5 - width * 0.5 - 16.0, y - 4.0),
+		Vector2(width + 32.0, 30.0))
+	draw_rect(box, Color(0.05, 0.09, 0.07, 0.7 * alpha))
+	draw_rect(Rect2(box.position, Vector2(3.0, box.size.y)), Color(tint, alpha))
+	draw_string(_font, Vector2(0.0, y + 18.0), text,
+		HORIZONTAL_ALIGNMENT_CENTER, size.x, 20, Color(tint, alpha))
 
 
 ## A headcount running: how many people are inside it, and roughly where.
@@ -1396,8 +1505,20 @@ func _draw_bow_meter(at: Vector2, width: float) -> void:
 ## the body, so it is always in the same place and never behind the player.
 func _draw_loot_prompt(y: float) -> void:
 	var body = _player.loot_target
+	var mate = _player.revive_target
 	var text := ""
-	if body != null and is_instance_valid(body):
+	if _player.using == Player.Using.REVIVE_TEAMMATE:
+		pass # the progress strip above the bar already says so - see _draw_using
+	elif mate != null and is_instance_valid(mate):
+		# Ahead of a body: a squadmate you can actually revive is always the
+		# more urgent thing to be standing near, and player.gd's own key
+		# handling agrees. Only ever shown when it is actually actionable -
+		# see Player._nearby_revivable_teammate.
+		var mate_alive: Variant = mate.get(&"is_alive")
+		var word := "revive teammate" if typeof(mate_alive) == TYPE_BOOL and mate_alive \
+			else "revive teammate (uses a kit)"
+		text = "REVIVE" if PlayerInput.is_touch() else "F    %s" % word
+	elif body != null and is_instance_valid(body):
 		# The key is not the control on a phone - the LOOT button that appears
 		# over the thumb is - so the caption names whichever one is true.
 		text = ("LOOT    %s" if PlayerInput.is_touch() else "F    search %s") 			% body.get_prompt()

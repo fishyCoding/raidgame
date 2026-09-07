@@ -38,9 +38,12 @@ const MIN_PLAYERS := 2
 const COUNTDOWN := 10.0
 
 const DEFAULT_PORT := 27015
-## Enough for a squad. Raising it is a number here and a spawn point per player
-## in the level, nothing else.
-const MAX_PLAYERS := 4
+## Room for four duos squads (or eight FFA solos) in one lobby. Raising it is a
+## number here and a spawn point per player in the level, nothing else -
+## _assign_insertions falls back to reusing points once it runs out of them,
+## so a level with fewer than eight spawns still works, just with some
+## overlap.
+const MAX_PLAYERS := 8
 
 ## Where JOIN MATCHMAKING goes. One address, compiled in, because a player has
 ## no use for the question: there is one world, it is always up, and the only
@@ -105,6 +108,26 @@ var test_drive := false
 ## dying builds a fresh one, and a map you picked should outlive the run you
 ## picked it for. The same reason staged_kit is here.
 var solo_level := 0
+
+## Whether the menu is queuing for a duos-filled squad rather than solo/FFA.
+## Sent with request_character; the host decides who actually ends up teamed
+## with whom - see _maybe_pair_teams. Meaningless to play_solo(), which is a
+## session of one and has nobody to be teamed with regardless.
+var wants_duos := false
+
+## Which duos peer is teamed with which, both directions. Filled by the host
+## the moment two duos-queued peers are both waiting and broadcast at once -
+## see _maybe_pair_teams - rather than held for match start, so there is time
+## to show a teammate's kit during the countdown (see Screens._draw_kit_footer).
+## A peer with no entry here is playing solo/FFA, teamed with nobody.
+var teammate_of := {}
+
+## Our squadmate's own kit, as the same summary string Inventory.summary()
+## already gives everything else that shows one - set the moment they are
+## known, well before either of you has a body. See tell_teammate_kit and
+## Screens._draw_kit_footer, which is the only reader.
+var teammate_kit_text := ""
+signal teammate_kit_received(summary: String)
 
 ## The map this session is being played on, as a scene path.
 ##
@@ -347,6 +370,8 @@ func leave(reason := "left the session") -> void:
 	_waiting.clear()
 	_insertion.clear()
 	_searchers.clear()
+	teammate_of.clear()
+	teammate_kit_text = ""
 	match_state = Match.WAITING
 	seconds_left = 0.0
 	local_player = null
@@ -417,6 +442,26 @@ func player_for(id: int) -> Node2D:
 	return body if is_instance_valid(body) else null
 
 
+## The peer teamed with this one in a duos squad, or 0 for nobody - playing
+## solo/FFA, or duos with nobody paired yet.
+func teammate(id: int) -> int:
+	return teammate_of.get(id, 0)
+
+
+## Whether these two peers are squadmates. Symmetric - teammate_of is filled
+## both directions by _set_teammates - and false whenever either id is 0, so
+## an unresolved "nobody" on one side of a check never reads as a match.
+func is_teammate(a: int, b: int) -> bool:
+	if a == 0 or b == 0:
+		return false
+	return teammate(a) == b
+
+
+## This machine's own squadmate, as a body, or null.
+func my_teammate() -> Node2D:
+	return player_for(teammate(peer_id()))
+
+
 # --- spawning -----------------------------------------------------------------
 
 
@@ -428,13 +473,13 @@ func player_for(id: int) -> Node2D:
 ## belongs under does not exist there yet, the spawn packet lands on nothing, and
 ## that peer spends the rest of the session unable to see anybody.
 @rpc("any_peer", "call_local", "reliable")
-func request_character() -> void:
+func request_character(duos := false) -> void:
 	if not is_host:
 		return
 	var who := multiplayer.get_remote_sender_id() if is_networked() else 1
 	if who == 0:
 		who = 1
-	_waiting[who] = true
+	_waiting[who] = duos
 
 	# Solo has nobody to wait for, so there is no match to run - it goes in at
 	# once, at whichever insertion the level thinks is quietest.
@@ -443,6 +488,11 @@ func request_character() -> void:
 		match_changed.emit(match_state, 0.0)
 		_make_character(who, -1)
 		return
+
+	# Paired as soon as a pair exists, not held for match start - see
+	# _maybe_pair_teams for why: it is what lets the countdown screen show a
+	# teammate's kit before anybody has a body.
+	_maybe_pair_teams()
 
 	# The peer is holding the level, so it may be told about the world now - even
 	# though it has no body in it yet. Waiting players still watch the guards
@@ -454,26 +504,133 @@ func request_character() -> void:
 
 	# Everything that fell before they got here. Sent now rather than when they
 	# deploy, because a player waiting out a countdown is already watching the
-	# level and an empty floor is a lie about what has happened in it.
+	# level and an empty floor is a lie about what has happened in it. Sent
+	# even to a duos peer with nobody to pair with yet - waiting on the kit
+	# screen still means watching a level that already has guards patrolling
+	# it, the same way it always has for a solo queuer.
 	_send_bodies(who)
 
+	_advance_match()
+
+
+## Whether a waiting peer may actually be put in the world. Solo/FFA always
+## is; duos is gated on having a real squadmate - see teammate_of - which is
+## the whole point of asking for one rather than being deployed alone the
+## moment somebody unrelated also happens to be queuing.
+func _is_ready(id: int) -> bool:
+	if not bool(_waiting.get(id, false)):
+		return true
+	return teammate_of.has(id)
+
+
+func _ready_count() -> int:
+	var n := 0
+	for id in _waiting.keys():
+		if _is_ready(id):
+			n += 1
+	return n
+
+
+## Looks at everyone currently waiting and decides what the match should do
+## next. Called after anything that can change who is ready - a fresh queue,
+## or a duos pairing completing - rather than only reacting to the peer that
+## just called request_character, because pairing two already-waiting duos
+## peers can make *both* of them ready without either of them having just
+## queued.
+func _advance_match() -> void:
 	match match_state:
 		Match.LIVE:
-			# Said before they are put in it, and said to everybody. The newcomer
-			# joined after the only announcement this match ever made, so without
-			# this its own match_state sits at WAITING for the rest of the raid;
-			# and the count of who is here has just changed for everyone else.
+			# Anyone ready who is not in the match yet drops in - a fresh
+			# queue, or a duos pair that just completed. A duos peer with no
+			# teammate is excluded here exactly the way _begin_match excludes
+			# one from the initial deploy: not ready is not ready, however
+			# long the rest of the server has already been running.
+			var newcomers: Array = []
+			for id in _waiting.keys():
+				if _is_ready(id) and not _insertion.has(id):
+					newcomers.append(id)
+			if newcomers.is_empty():
+				return
+			# Said before they are put in it, and said to everybody - the
+			# count of who is here has just changed for everyone else.
 			_announce(Match.LIVE, 0.0)
-			# A latecomer does not sit out the rest of the raid. It drops in.
-			_assign_insertions([who])
-			_deploy([who])
+			_assign_insertions(newcomers)
+			_deploy(newcomers)
 		Match.COUNTDOWN:
 			_announce(Match.COUNTDOWN, seconds_left)
 		_:
-			if _waiting.size() >= MIN_PLAYERS:
+			if _ready_count() >= MIN_PLAYERS:
 				_announce(Match.COUNTDOWN, COUNTDOWN)
 			else:
 				_announce(Match.WAITING, 0.0)
+
+
+## Pairs up not-yet-teamed peers that both asked for duos, in the order they
+## queued. Called every time _waiting changes rather than once at match start,
+## so a pair is announced the moment it exists - see the note on
+## teammate_of. Solo-queued peers are simply never touched: no entry in
+## teammate_of at all is what "playing solo/FFA" means everywhere else.
+func _maybe_pair_teams() -> void:
+	var pending: Array = []
+	for id in _waiting.keys():
+		if bool(_waiting[id]) and not teammate_of.has(id):
+			pending.append(id)
+	if pending.size() < 2:
+		return
+
+	var pairs: Array = []
+	var i := 0
+	while i + 1 < pending.size():
+		var a: int = pending[i]
+		var b: int = pending[i + 1]
+		teammate_of[a] = b
+		teammate_of[b] = a
+		pairs.append([a, b])
+		i += 2
+	if pairs.is_empty():
+		return
+	if is_networked():
+		_set_teammates.rpc(pairs)
+	else:
+		_set_teammates(pairs)
+
+
+## Told to every machine the moment the host pairs up a duos squad. Filling
+## teammate_of both directions here (rather than trusting the host's own copy
+## to have done it already) is what makes call_local safe: the host runs
+## through the same assignment its own rpc carries, harmlessly repeating what
+## _maybe_pair_teams already set.
+@rpc("authority", "call_local", "reliable")
+func _set_teammates(pairs: Array) -> void:
+	for pair in pairs:
+		var a: int = pair[0]
+		var b: int = pair[1]
+		teammate_of[a] = b
+		teammate_of[b] = a
+	players_changed.emit()
+	# The countdown screen shows a teammate's kit alongside your own - see
+	# Screens._draw_kit_footer - which needs their own machine to have said
+	# what it is; only that machine has a staged_kit worth reading. If this
+	# pairing named us, send it now regardless of whether we are the host or
+	# whichever peer's request_character happened to trigger the pairing.
+	var mine := teammate(peer_id())
+	if mine != 0 and staged_kit != null:
+		tell_teammate_kit(mine, staged_kit.summary())
+
+
+## Sends this machine's own staged kit summary to a newly-known squadmate,
+## so the countdown screen can show it before either of you has a body -
+## see _set_teammates and Screens._draw_kit_footer.
+func tell_teammate_kit(target_peer: int, summary: String) -> void:
+	if not is_networked() or target_peer == peer_id():
+		return
+	_do_teammate_kit.rpc_id(target_peer, summary)
+
+
+@rpc("any_peer", "reliable")
+func _do_teammate_kit(summary: String) -> void:
+	teammate_kit_text = summary
+	teammate_kit_received.emit(summary)
 
 
 # --- running a match ----------------------------------------------------------
@@ -498,9 +655,16 @@ func _process(delta: float) -> void:
 		_announce(Match.COUNTDOWN, seconds_left)
 
 
-## Everyone goes in at once, at the points chosen for them.
+## Everyone ready goes in at once, at the points chosen for them. A duos peer
+## who queued without ever being paired stays behind on the kit screen - the
+## countdown having reached zero does not make them ready, only a real
+## teammate does (see _is_ready) - and _advance_match drops them in later,
+## the moment one arrives.
 func _begin_match() -> void:
-	var going := _waiting.keys()
+	var going: Array = []
+	for id in _waiting.keys():
+		if _is_ready(id):
+			going.append(id)
 	_assign_insertions(going)
 	_announce(Match.LIVE, 0.0)
 	_deploy(going)
@@ -624,11 +788,43 @@ func _assign_insertions(ids: Array) -> void:
 	if pending.is_empty():
 		return
 
-	# The pair case, solved exactly. Two players is the shape this game is
+	# A teammate already placed is a placement, not a decision: coming in
+	# together is what having a squad means, so anybody whose other half
+	# already has a point simply takes the same one. Handled first and taken
+	# out of `pending` so the widest-pair / furthest-from-crowd rules below
+	# never have to know teams exist.
+	var still_pending: Array = []
+	for id in pending:
+		var mate := teammate(id)
+		if mate != 0 and _insertion.has(mate):
+			_insertion[id] = _insertion[mate]
+		else:
+			still_pending.append(id)
+	pending = still_pending
+	if pending.is_empty():
+		return
+
+	# Collapse a duos pair arriving in the same batch into one placement unit,
+	# so the rules below choose between *squads* and never split one across
+	# two corners of the map.
+	var units: Array = []
+	var claimed := {}
+	for id in pending:
+		if claimed.has(id):
+			continue
+		var mate := teammate(id)
+		if mate != 0 and pending.has(mate) and not claimed.has(mate):
+			units.append([id, mate])
+			claimed[mate] = true
+		else:
+			units.append([id])
+		claimed[id] = true
+
+	# The pair case, solved exactly. Two squads is the shape this game is
 	# actually played in, and for two the right answer is simply the widest pair
 	# of points on the map - which is worth the double loop to get right rather
 	# than approaching one point at a time.
-	if pending.size() == 2 and points.size() >= 2 and _insertion.is_empty():
+	if units.size() == 2 and points.size() >= 2 and _insertion.is_empty():
 		var best := Vector2i(0, 1)
 		var furthest := -1.0
 		for a in points.size():
@@ -637,20 +833,21 @@ func _assign_insertions(ids: Array) -> void:
 				if apart > furthest:
 					furthest = apart
 					best = Vector2i(a, b)
-		_insertion[pending[0]] = best.x
-		_insertion[pending[1]] = best.y
+		_place_unit(units[0], best.x)
+		_place_unit(units[1], best.y)
 		return
 
-	# Everyone else - a third and fourth player, or somebody dropping into a raid
+	# Everyone else - a third and fourth squad, or somebody dropping into a raid
 	# already under way - takes the free point that is furthest from everyone
 	# already placed. Handing out whatever happened to be unused put a latecomer
 	# wherever the scene file listed first, which on this map is next door to
 	# somebody. Furthest-from-the-crowd is the same rule the pair case follows,
-	# applied one player at a time.
-	for id in pending:
+	# applied one unit at a time.
+	for unit in units:
 		var taken: Array[int] = []
 		for placed in _insertion.values():
-			taken.append(placed)
+			if not taken.has(placed):
+				taken.append(placed)
 
 		var choice := -1
 		var best_clearance := -1.0
@@ -664,11 +861,18 @@ func _assign_insertions(ids: Array) -> void:
 				best_clearance = clearance
 				choice = i
 
-		# More players than the map has points: start again from the far end
+		# More units than the map has points: start again from the far end
 		# rather than stacking everyone on the last one.
 		if choice < 0:
 			choice = taken.size() % points.size()
-		_insertion[id] = choice
+		_place_unit(unit, choice)
+
+
+## Hands every member of a placement unit (one solo peer, or a whole duos
+## pair) the same insertion index - see the note above _assign_insertions.
+func _place_unit(unit: Array, at: int) -> void:
+	for id in unit:
+		_insertion[id] = at
 
 
 ## The insertion points, in an order every machine agrees on. Sorted by name
@@ -1430,8 +1634,17 @@ func drop_body(kit: Inventory, at: Vector2, tint: Color, body_size: Vector2,
 ## This is the half of the loop that was missing. Everything a player is carrying
 ## is what somebody else came here to take, and until now it left the world with
 ## them - killing someone paid nothing at all.
+##
+## Left on the floor even when the kit is empty - unlike drop_body, which
+## skips an empty guard for the same reason a guard's kit is never really
+## empty in the first place. A player can die genuinely carrying nothing
+## after already spending their one resurrection (see Player._resurrect,
+## which hands back an empty Inventory on purpose) - dying a second time
+## with nothing on them still has to leave a body, or a squadmate watching
+## for it sees their partner die for good and finds no marker anywhere.
+## "picked clean" is a state this screen already knows how to show.
 func drop_kit(kit: Inventory, at: Vector2, tint: Color, body_size: Vector2) -> void:
-	if kit == null or kit.is_empty():
+	if kit == null:
 		return
 	if is_networked() and not is_host:
 		_ask_to_drop_kit.rpc_id(1, kit.to_wire(), at, tint, body_size)
@@ -1464,9 +1677,9 @@ func _lay_out_kit(who: int, kit: Dictionary, at: Vector2, tint: Color,
 	var where := _body_path_for(scene.get_path_to(fell)) if fell \
 		else NodePath("Players/Body_%d" % who)
 	if is_networked():
-		_make_body.rpc(kit, at, tint, body_size, where, "player")
+		_make_body.rpc(kit, at, tint, body_size, where, "player", who)
 	else:
-		_make_body(kit, at, tint, body_size, where, "player")
+		_make_body(kit, at, tint, body_size, where, "player", who)
 
 
 ## Where the body of whoever is at `who` should be laid down, as a path relative
@@ -1502,7 +1715,7 @@ func _body_path_for(who: NodePath) -> NodePath:
 
 @rpc("authority", "call_local", "reliable")
 func _make_body(kit: Dictionary, at: Vector2, tint: Color, body_size: Vector2,
-		where: NodePath, tag: String) -> void:
+		where: NodePath, tag: String, owner_peer := 0) -> void:
 	var scene := get_tree().current_scene
 	if scene == null:
 		return
@@ -1514,7 +1727,11 @@ func _make_body(kit: Dictionary, at: Vector2, tint: Color, body_size: Vector2,
 
 	var body: Lootable = preload("res://scenes/lootable.tscn").instantiate()
 	# Before it enters the tree: Lootable draws itself from these in _ready.
-	body.setup(Inventory.from_wire(kit), tint, body_size, tag)
+	# owner_peer is 0 for a guard - see Lootable.owner_peer - and whoever it
+	# actually was for a player's own kit, threaded through from drop_kit,
+	# which is what lets the loot screen offer a squadmate a REVIVE button on
+	# this specific body rather than on any body tagged "player".
+	body.setup(Inventory.from_wire(kit), tint, body_size, tag, owner_peer)
 
 	# Laid down where the host said, under the same parent and with the same name
 	# on every machine. The path is relative to the level rather than absolute so
@@ -1547,7 +1764,40 @@ func _send_bodies(to: int) -> void:
 			continue
 		var kit := body.inventory.to_wire() if body.inventory else {}
 		_make_body.rpc_id(to, kit, body.global_position, body.tint,
-			body.body_size, scene.get_path_to(body), body.tag)
+			body.body_size, scene.get_path_to(body), body.tag, body.owner_peer)
+
+
+## Takes a body off the floor of every machine at once - used when its owner
+## is resurrected (see Player._resurrect): there is nothing left to search on
+## a person who just stood back up. A Lootable is otherwise independent per
+## machine, the same way a Screen is, so removing this machine's own copy
+## would leave the other one standing forever - hence the broadcast, host
+## side, exactly like break_screen.
+func take_down_body(path: NodePath) -> void:
+	if not is_networked():
+		_take_down_body(path)
+		return
+	if is_host:
+		_take_down_body.rpc(path)
+	else:
+		_ask_remove_body.rpc_id(1, path)
+
+
+@rpc("any_peer", "reliable")
+func _ask_remove_body(path: NodePath) -> void:
+	if not is_host:
+		return
+	take_down_body(path)
+
+
+@rpc("authority", "call_local", "reliable")
+func _take_down_body(path: NodePath) -> void:
+	var scene := get_tree().current_scene
+	if scene == null:
+		return
+	var body := scene.get_node_or_null(path)
+	if body:
+		body.queue_free()
 
 
 # --- going through a body -----------------------------------------------------
@@ -1870,6 +2120,122 @@ func _scanned(soft := false) -> void:
 		local_player.call(what)
 
 
+# --- a squad looks after its own ------------------------------------------
+#
+# Three messages, all the same shape as tell_scanned above: sent directly at
+# one specific peer by rpc_id rather than relayed by hand through the host,
+# because SceneMultiplayer's default server_relay forwards a targeted rpc_id
+# to the peer it names even when neither end is the host. is_alive/is_downed/
+# health all replicate outward from their own owner, so in every one of these
+# the actor's machine only ever asks - the target's own machine is the one
+# that actually changes anything about itself.
+
+
+## The free knockdown revive: a teammate reached you, no item spent. See
+## Player._nearby_knocked_teammate / _begin_revive_teammate, which have
+## already checked range and that you are actually down before this is sent.
+func ask_revive_teammate(target_peer: int) -> void:
+	if not is_networked() or target_peer == peer_id():
+		return
+	_do_revive_teammate.rpc_id(target_peer)
+
+
+@rpc("any_peer", "reliable")
+func _do_revive_teammate() -> void:
+	if local_player and local_player.has_method(&"_revive_by_teammate"):
+		local_player.call(&"_revive_by_teammate")
+
+
+## Brought back from being fully dead. Only ever sent after the caller has
+## already checked `not target.used_death_revive` and spent a REVIVE_KIT out
+## of its own inventory - see inventory_ui.gd's REVIVE button on a teammate's
+## body - so the one-per-player limit is enforced again here, defensively, on
+## the only machine that can actually enforce it.
+func ask_resurrect_teammate(target_peer: int) -> void:
+	if not is_networked() or target_peer == peer_id():
+		return
+	_do_resurrect_teammate.rpc_id(target_peer)
+
+
+@rpc("any_peer", "reliable")
+func _do_resurrect_teammate() -> void:
+	if local_player == null or not local_player.has_method(&"_resurrect"):
+		return
+	if bool(local_player.get(&"used_death_revive")):
+		return
+	local_player.call(&"_resurrect")
+
+
+## Relays a recon-bow or rail-bomb reveal to a squadmate - see
+## Player.broadcast_reveal, which has already set the same meta locally and
+## filtered out the squadmate from `paths` if they were ever a candidate.
+func tell_team_reveal(target_peer: int, paths: Array, until: float) -> void:
+	if not is_networked() or target_peer == peer_id():
+		return
+	_do_team_reveal.rpc_id(target_peer, paths, until)
+
+
+@rpc("any_peer", "reliable")
+func _do_team_reveal(paths: Array, until: float) -> void:
+	var scene := get_tree().current_scene
+	if scene == null:
+		return
+	for path in paths:
+		var node := scene.get_node_or_null(path as NodePath)
+		if node:
+			node.set_meta(&"revealed_until", until)
+
+
+## Your squadmate just knocked or killed somebody. Sent from the victim's own
+## machine, which is where take_damage/_die actually run - see
+## Player.take_damage, right after Damage.report_hit credits the shooter
+## themselves.
+func tell_team_credit(target_peer: int, killed: bool) -> void:
+	if not is_networked() or target_peer == peer_id():
+		return
+	_do_team_credit.rpc_id(target_peer, killed)
+
+
+@rpc("any_peer", "reliable")
+func _do_team_credit(killed: bool) -> void:
+	if local_player and local_player.has_method(&"on_teammate_credit"):
+		local_player.call(&"on_teammate_credit", killed)
+
+
+## A manual ping - see Player._place_ping, which has already echoed it on
+## the sender's own map/minimap. This only ever reaches a squadmate, so a
+## solo/FFA player pressing the key spends it on nobody but themselves.
+func send_ping(at: Vector2) -> void:
+	var mate := teammate(peer_id())
+	if mate == 0 or not is_networked():
+		return
+	_do_ping.rpc_id(mate, at)
+
+
+@rpc("any_peer", "reliable")
+func _do_ping(at: Vector2) -> void:
+	if local_player and local_player.has_method(&"add_ping"):
+		local_player.call(&"add_ping", at)
+
+
+## The squad just wiped: your partner died with nobody left able to reach
+## you, so your own bleed-out timer stopped being a real chance the instant
+## theirs ran out - see Player._die. Re-checks is_downed before acting, the
+## same defensive reason _do_resurrect_teammate re-checks used_death_revive.
+func tell_squad_wipe(target_peer: int) -> void:
+	if not is_networked() or target_peer == peer_id():
+		return
+	_do_squad_wipe.rpc_id(target_peer)
+
+
+@rpc("any_peer", "reliable")
+func _do_squad_wipe() -> void:
+	if local_player == null or not local_player.has_method(&"_die"):
+		return
+	if bool(local_player.get(&"is_downed")):
+		local_player.call(&"_die", false)
+
+
 # --- peers coming and going ---------------------------------------------------
 
 
@@ -1901,9 +2267,19 @@ func _on_peer_disconnected(id: int) -> void:
 	_release_bodies_of(id)
 	# Their insertion point goes back in the pool for whoever arrives next.
 	_insertion.erase(id)
+	# Whoever was teamed with them is on their own now - erased both directions,
+	# since teammate_of is filled both ways and a one-sided entry would answer
+	# "yes" to is_teammate() for a peer that no longer exists.
+	var mate: int = teammate_of.get(id, 0)
+	if mate != 0:
+		teammate_of.erase(id)
+		teammate_of.erase(mate)
 	# A countdown for two that is now a countdown for one goes back to waiting -
-	# otherwise it runs out and drops a lone player into an empty raid.
-	if is_host and match_state == Match.COUNTDOWN and _waiting.size() < MIN_PLAYERS:
+	# otherwise it runs out and drops a lone player into an empty raid. Ready
+	# count, not raw waiting count: losing one half of a pair un-teams the
+	# other (just above), which can drop readiness even when somebody else
+	# is still sitting in _waiting unaffected.
+	if is_host and match_state == Match.COUNTDOWN and _ready_count() < MIN_PLAYERS:
 		_announce(Match.WAITING, 0.0)
 	if is_dedicated:
 		print("[server] peer %d left (%d/%d)"
@@ -1928,6 +2304,8 @@ func _start_over() -> void:
 	players_here = 0
 	_insertion.clear()
 	_searchers.clear()
+	teammate_of.clear()
+	teammate_kit_text = ""
 	# Guards, bodies and everything shot off a wall come back with the level. It
 	# is reloaded rather than tidied because a raid leaves marks in a dozen places
 	# and only one of them is a list this file keeps.

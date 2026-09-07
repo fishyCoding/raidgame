@@ -109,29 +109,42 @@ func sweep_radius() -> float:
 
 
 ## Paints everyone near where it stuck, for as long as the gadget says.
+##
+## Never a squadmate. This exists only on the machine that loosed it, so
+## Net.peer_id() here is the shooter, and Net.is_teammate checks their own
+## squad rather than anybody else's - a recon shot paints the room, not the
+## person standing next to you in it.
 func _land() -> void:
 	_stuck = true
 	_age = 0.0
 	velocity = Vector2.ZERO
 
-	var until := Time.get_ticks_msec() * 0.001 + data.active_time
-	var revealed := 0
+	var revealed: Array = []
 	for node in get_tree().get_nodes_in_group(&"hideable"):
 		var target := node as Node2D
-		if target and target.global_position.distance_to(global_position) <= sweep_radius():
-			target.set_meta(&"revealed_until", until)
-			revealed += 1
-			# A guard does not care that he has been seen. A person does, and this
-			# arrow exists only on the machine that loosed it - so the only way the
-			# other end finds out is if we say so.
-			if target.is_in_group(&"player"):
-				Net.tell_scanned(target.get_multiplayer_authority())
+		if target == null or target.global_position.distance_to(global_position) > sweep_radius():
+			continue
+		if target.is_in_group(&"player") \
+				and Net.is_teammate(Net.peer_id(), target.get_multiplayer_authority()):
+			continue
+		revealed.append(target)
+		# A guard does not care that he has been seen. A person does, and this
+		# arrow exists only on the machine that loosed it - so the only way the
+		# other end finds out is if we say so.
+		if target.is_in_group(&"player"):
+			Net.tell_scanned(target.get_multiplayer_authority())
+
+	# Marks the same targets on this machine (as always) and, if this shooter
+	# has a squadmate, on theirs too - see Player.broadcast_reveal.
+	var caster := Net.local_player
+	if caster and caster.has_method(&"broadcast_reveal"):
+		caster.broadcast_reveal(revealed, data.active_time)
 
 	var pulse: Smoke = load("res://scenes/smoke.tscn").instantiate()
 	pulse.setup(sweep_radius(), 0.9, Color(0.55, 0.85, 0.95, 0.32), false)
 	pulse.global_position = global_position
 	get_parent().add_child(pulse)
-	set_meta(&"revealed_count", revealed)
+	set_meta(&"revealed_count", revealed.size())
 
 
 ## How much of the paint is left, 1 the moment it bites and 0 as it lapses.

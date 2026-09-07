@@ -93,6 +93,9 @@ var touch_inventory_pressed := false
 ## Set true for one frame by a HUD "patch up" button.
 var touch_heal_pressed := false
 
+## Set true for one frame by a HUD "ping" button.
+var touch_ping_pressed := false
+
 ## Set true for one frame by a HUD reload button.
 var touch_reload_pressed := false
 
@@ -413,6 +416,7 @@ func _physics_process(_delta: float) -> void:
 	touch_grapple_pressed = false
 	touch_inventory_pressed = false
 	touch_heal_pressed = false
+	touch_ping_pressed = false
 	touch_weapon_slot = -1
 
 
@@ -508,6 +512,14 @@ func is_heal_just_pressed() -> bool:
 		touch_heal_pressed = false
 		return true
 	return Input.is_action_just_pressed(&"heal")
+
+
+## True on the frame the ping button is pressed (B, for now).
+func is_ping_just_pressed() -> bool:
+	if touch_ping_pressed:
+		touch_ping_pressed = false
+		return true
+	return Input.is_action_just_pressed(&"ping")
 
 
 ## True on the frame the surgical kit button is pressed (X on a keyboard).

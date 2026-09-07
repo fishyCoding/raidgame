@@ -12,11 +12,11 @@ extends RefCounted
 ## rounds is one cell whatever the calibre, because what limits ammunition is
 ## the stack size, not the footprint.
 
-## POWER is last because these travel over the wire as their own integers, and
-## renumbering the ones already in flight would make an old build read a medkit
-## as a vest.
+## POWER used to be last, and REVIVE_KIT is now - these travel over the wire as
+## their own integers, and renumbering the ones already in flight would make an
+## old build read a medkit as a vest. Always append.
 enum Kind { WEAPON, AMMO, ARMOR, MEDKIT, THROWABLE, ULTIMATE, BACKPACK, REVIVE,
-	SURGICAL, REPAIR, POWER }
+	SURGICAL, REPAIR, POWER, REVIVE_KIT }
 
 ## Rounds per stack, by calibre. Fat rifle rounds stack smaller than pistol
 ## ammunition, which is what makes carrying a sniper rifle expensive in space
@@ -281,6 +281,20 @@ static func from_revive(uses := 5) -> Item:
 	return item
 
 
+## A revive kit: the one thing that can bring a squadmate back from being
+## fully dead rather than merely knocked. Unlike a stim it is not stackable in
+## any way that matters here - a body only ever needs one used against it, and
+## a player only ever gets the one revive, ever - but it is still carried as a
+## count like every other consumable so a spare in the bag reads the same way
+## a spare stim does.
+static func from_revive_kit(uses := 1) -> Item:
+	var item := Item.new()
+	item.kind = Kind.REVIVE_KIT
+	item.size = Vector2i(2, 1)
+	item.count = uses
+	return item
+
+
 ## Throwables come in a pair by default: two of a kind is a loadout choice,
 ## one is an accident.
 static func from_gadget(data: GadgetData, uses := -1) -> Item:
@@ -445,6 +459,8 @@ static func from_wire(wire: Dictionary) -> Item:
 			item = Item.from_medkit(count_in, wire.get("heal", 45.0))
 		Kind.REVIVE:
 			item = Item.from_revive(count_in)
+		Kind.REVIVE_KIT:
+			item = Item.from_revive_kit(count_in)
 		Kind.SURGICAL:
 			item = Item.from_surgical(count_in)
 			item.heal = wire.get("heal", 25.0)
@@ -477,6 +493,10 @@ func is_medkit() -> bool:
 
 func is_revive() -> bool:
 	return kind == Kind.REVIVE
+
+
+func is_revive_kit() -> bool:
+	return kind == Kind.REVIVE_KIT
 
 
 func is_surgical() -> bool:
@@ -533,6 +553,8 @@ func title() -> String:
 		return "PLATE KIT" if repair_slot == ArmorData.Slot.BODY else "HELMET KIT"
 	if is_revive():
 		return "STIM"
+	if is_revive_kit():
+		return "REVIVE KIT"
 	if is_backpack():
 		return backpack.short_name
 	if is_power():
@@ -556,6 +578,8 @@ func label() -> String:
 		return "%s x%d" % [title(), count]
 	if is_revive():
 		return "STIM x%d" % count
+	if is_revive_kit():
+		return "REVIVE KIT x%d" % count
 	if is_backpack():
 		return "%s %dx%d" % [backpack.short_name, backpack.grid_size.x, backpack.grid_size.y]
 	if is_power():
@@ -591,6 +615,11 @@ func tint() -> Color:
 	# and a bag is read by colour before it is read by name.
 	if is_repair():
 		return Color(0.62, 0.68, 0.76)
+	# Distinct from everything else in the bag on purpose - this is the one
+	# item that decides whether a dead squadmate comes back at all, and it
+	# should never be mistaken for a stim at a glance.
+	if is_revive_kit():
+		return Color(0.74, 0.56, 0.94)
 	if is_backpack():
 		return backpack.tint
 	if is_power():

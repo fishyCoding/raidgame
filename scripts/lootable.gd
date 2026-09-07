@@ -22,6 +22,10 @@ var body_size := Vector2(30, 52)
 ## but it is worth reading - a player's body is the one carrying a raid's worth
 ## of somebody else's luck, and walking past it by mistake is expensive.
 var tag := "guard"
+## The peer this body belonged to, or 0 for a guard. What lets the loot screen
+## offer a REVIVE button on a teammate's own body rather than on any body with
+## the right tag - see Net._make_body and inventory_ui.gd.
+var owner_peer := 0
 
 @onready var _visual: Polygon2D = $Visual
 @onready var _label: Label = $Label
@@ -29,11 +33,13 @@ var tag := "guard"
 
 ## Set before the body enters the tree: the children below are not ready yet, so
 ## this only records what _ready will draw with.
-func setup(kit: Inventory, body_color: Color, size: Vector2, whose := "guard") -> void:
+func setup(kit: Inventory, body_color: Color, size: Vector2, whose := "guard",
+		whose_peer := 0) -> void:
 	inventory = kit
 	tint = body_color
 	body_size = size
 	tag = whose
+	owner_peer = whose_peer
 
 
 func _ready() -> void:

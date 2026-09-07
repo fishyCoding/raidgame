@@ -119,6 +119,12 @@ func _blast() -> void:
 	query.shape = circle
 	query.transform = Transform2D(0.0, global_position)
 	query.collision_mask = hit_mask
+	# No friendly fire: a squadmate caught in the radius takes nothing off it,
+	# the same rule bullets and Live Rail already keep - see
+	# Bullet.ignore_shooter and rail_bomb.gd's _is_a_target.
+	var mate := Net.player_for(Net.teammate(thrower_id)) as CollisionObject2D
+	if mate:
+		query.exclude = [mate.get_rid()]
 
 	for touch in space.intersect_shape(query, 16):
 		var body: Object = touch.collider

@@ -187,6 +187,7 @@ const ORDER_BUTTONS := [
 const PILLS_LEFT := [
 	{"action": &"inventory", "label": "BAG"},
 	{"action": &"map", "label": "MAP"},
+	{"action": &"ping", "label": "PING"},
 	{"action": &"heal", "label": "MEDKIT"},
 	# Next to the medkit, because the pair of them is the decision: one puts the
 	# bar back up and one stops it falling, and picking the wrong one wastes a

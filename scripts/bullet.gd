@@ -88,8 +88,11 @@ func setup(dir: Vector2, data: WeaponData, mask := Layers.PLAYER_SHOT,
 	set_meta(&"heat", heat)
 
 
-## Keeps the round from hitting whoever fired it. A guard answers 0 and needs
-## nothing: Layers.ENEMY_SHOT already leaves guards out.
+## Keeps the round from hitting whoever fired it, or their duos squadmate - no
+## friendly fire, the same rule Live Rail already enforces (see rail_bomb.gd's
+## _is_a_target). A guard answers 0 and needs nothing: Layers.ENEMY_SHOT
+## already leaves guards out, and a shooter with no teammate simply excludes
+## nobody extra.
 func ignore_shooter(id: int) -> void:
 	_exclude.clear()
 	if id == 0:
@@ -97,6 +100,9 @@ func ignore_shooter(id: int) -> void:
 	var body := Net.player_for(id) as CollisionObject2D
 	if body:
 		_exclude.append(body.get_rid())
+	var mate := Net.player_for(Net.teammate(id)) as CollisionObject2D
+	if mate:
+		_exclude.append(mate.get_rid())
 
 
 func _ready() -> void:

@@ -16,6 +16,9 @@ const DIM := Color(0.5, 0.55, 0.62)
 const ACCENT := Color(0.98, 0.78, 0.35)
 const EXIT := Color(0.45, 0.9, 0.62)
 const YOU := Color(0.95, 0.95, 1.0)
+const TEAMMATE := Color(0.55, 0.78, 0.98)
+const PING := Color(0.98, 0.82, 0.32)
+const REVEAL := Color(0.55, 0.85, 0.95)
 
 ## Briefing mode holds the map up on its own; M just toggles it.
 var briefing := false
@@ -142,6 +145,8 @@ func _draw() -> void:
 	_draw_geometry()
 	_draw_cables()
 	_draw_points(font)
+	_draw_pings()
+	_draw_teammate(font)
 
 	if _player:
 		var here := _to_map((_player as Node2D).global_position)
@@ -193,6 +198,59 @@ func _thick_enough_to_see(quad: PackedVector2Array, least := 1.5) -> PackedVecto
 		out[axis.x] += push
 		out[2] += push
 	return out
+
+
+## Your squadmate's own position and vitals-at-a-glance - the same colour
+## hud.gd's teammate health widget uses, so the two read as one readout
+## rather than two different systems that happen to agree by accident.
+func _draw_teammate(font: Font) -> void:
+	var mate := Net.my_teammate()
+	if mate == null or not is_instance_valid(mate):
+		return
+	var alive: Variant = mate.get(&"is_alive")
+	var downed: Variant = mate.get(&"is_downed")
+	var faded: bool = (typeof(alive) == TYPE_BOOL and not alive) \
+		or (typeof(downed) == TYPE_BOOL and downed)
+	var at := _to_map((mate as Node2D).global_position)
+	var tint := Color(TEAMMATE, 0.45 if faded else 1.0)
+	draw_circle(at, 6.0, tint)
+	draw_arc(at, 11.0, 0.0, TAU, 24, tint, 1.5, true)
+	var label := "TEAMMATE"
+	if typeof(alive) == TYPE_BOOL and not alive:
+		label = "TEAMMATE - DEAD"
+	elif typeof(downed) == TYPE_BOOL and downed:
+		label = "TEAMMATE - KNOCKED"
+	draw_string(font, at + Vector2(14.0, 4.0), label,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, tint)
+
+
+## Everything worth marking that is not a person standing where you can see
+## them: recon-bow/rail-bomb reveals (never a squadmate - both call sites
+## filter that out before the meta is ever set - see Player.broadcast_reveal)
+## and manual pings, yours and any a squadmate sent you alike.
+func _draw_pings() -> void:
+	var now := Time.get_ticks_msec() * 0.001
+	for node in get_tree().get_nodes_in_group(&"hideable"):
+		var target := node as Node2D
+		if target == null:
+			continue
+		var until: Variant = target.get_meta(&"revealed_until", 0.0)
+		if typeof(until) == TYPE_FLOAT and until > now:
+			draw_circle(_to_map(target.global_position), 4.0, REVEAL)
+
+	if _player == null:
+		return
+	var pings: Variant = _player.get(&"pings")
+	if typeof(pings) != TYPE_ARRAY:
+		return
+	for ping in pings:
+		var at: Vector2 = (ping as Dictionary).get("at", Vector2.INF)
+		if not at.is_finite():
+			continue
+		var p := _to_map(at)
+		draw_arc(p, 7.0, 0.0, TAU, 16, PING, 2.0, true)
+		draw_line(p - Vector2(9.0, 0.0), p + Vector2(9.0, 0.0), PING, 1.3, true)
+		draw_line(p - Vector2(0.0, 9.0), p + Vector2(0.0, 9.0), PING, 1.3, true)
 
 
 func _draw_cables() -> void:

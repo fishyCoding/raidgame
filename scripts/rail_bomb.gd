@@ -212,13 +212,18 @@ func _ready() -> void:
 	set_process(true)
 
 
+## Cut to 70% of the .tres value on the user's own instruction, alongside the
+## reveal below - the gadget trades some of its damage for the ability to
+## paint whoever it catches.
+const DAMAGE_SCALE := 0.7
+
 ## Told what it is and what it costs. The Zipline that owns it does this on the
 ## frame it builds it, from the gadget resource, so the numbers live in the
 ## .tres with the rest of the gadget's numbers rather than being typed here.
 func arm(on: Zipline, by: int, damage: float, reach: float, toughness: int) -> void:
 	cable = on
 	owner_peer = by
-	_damage = damage
+	_damage = damage * DAMAGE_SCALE
 	_reach = reach
 	_hits_left = maxi(toughness, 1)
 
@@ -326,6 +331,7 @@ func _work_the_rope(delta: float) -> void:
 		var on_the_rope: bool = typeof(rides) == TYPE_BOOL and bool(rides)
 		if on_the_rope and at.distance_to(global_position) <= STRIKE_RANGE:
 			_arcs.append(at)
+			_ping_target(body)
 			_jolt(body, delta, ROPE_JOLT_INTERVAL, true)
 			continue
 		_next_jolt.erase(body.get_instance_id())
@@ -359,7 +365,30 @@ func _work_the_air(delta: float) -> void:
 			# this delay exists to remove.
 			continue
 		_arcs.append(at)
+		_ping_target(body)
 		_jolt(body, delta, JOLT_INTERVAL, false)
+
+
+## How long a ping this bomb leaves lasts once it stops actively shooting at
+## somebody - refreshed every frame it is still shooting them, so a target it
+## is actually engaging never fades mid-fight, only a few seconds after.
+const PING_TIME := 3.0
+
+
+## Paints whoever this bomb is actively shooting at, the same reveal a recon
+## bow leaves - see Player.broadcast_reveal. Every machine runs
+## _work_the_rope/_work_the_air for the drawing, but only the owner's own
+## machine may actually cast this: broadcast_reveal reads Net.peer_id() as
+## "who is casting", and calling it from a bystander's machine would ask
+## that bystander's own squad question instead of the owner's.
+func _ping_target(body: Node2D) -> void:
+	if owner_peer != Net.peer_id():
+		return
+	if body.is_in_group(&"player") and Net.is_teammate(owner_peer, body.get_multiplayer_authority()):
+		return
+	var caster := Net.local_player
+	if caster and caster.has_method(&"broadcast_reveal"):
+		caster.broadcast_reveal([body], PING_TIME)
 
 
 ## Whether a body is something this bomb is willing to shoot.
@@ -367,10 +396,13 @@ func _work_the_air(delta: float) -> void:
 ## Your own does not bite you, which is the same rule the Live Rail had and for
 ## the same reason: it is a tool you place on a route, and one that punished you
 ## for standing near your own trap would be a tool nobody placed anywhere useful.
+## Your squadmate does not either, for the same reason - it is not a weapon
+## you are pointing at them, it is a fixture on a cable you both use.
 func _is_a_target(body: Node2D) -> bool:
 	if body == null or not is_instance_valid(body):
 		return false
-	if body.get_multiplayer_authority() == owner_peer:
+	var authority := body.get_multiplayer_authority()
+	if authority == owner_peer or Net.is_teammate(owner_peer, authority):
 		return false
 	if not body.has_method(&"take_damage"):
 		return false

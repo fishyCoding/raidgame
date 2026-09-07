@@ -427,7 +427,16 @@ func _finish_drag(point: Vector2) -> void:
 		return
 	var region := _region_at(point)
 	if region.is_empty():
-		_return_drag()
+		# Nowhere on either panel: dropped clean on the right half of the
+		# screen, it goes on the floor instead of snapping back to where it
+		# came from. Looting a body puts that body's own panel on the right,
+		# so this only ever fires there once you are past its regions too -
+		# below them, say, which is exactly where a "get rid of this" drag
+		# ends up.
+		if point.x > size.x * 0.5:
+			_drop_on_ground()
+		else:
+			_return_drag()
 		return
 
 	var kit: Inventory = region.inv
@@ -451,11 +460,25 @@ func _finish_drag(point: Vector2) -> void:
 		return
 
 	if region.kind == "slot":
-		if kit.can_hold(_drag, region.slot) and kit.get_slot(region.slot) == null:
-			kit.set_slot(region.slot, _drag)
-			_clear_drag()
-		else:
+		if not kit.can_hold(_drag, region.slot):
 			_return_drag()
+			return
+		# An occupied slot swaps rather than refuses - dragging your rifle onto
+		# a body's own primary hands you theirs and leaves yours exactly where
+		# it came from, in one drag either way, instead of the three-step
+		# dance of clearing a grid cell first. The displaced gun goes back to
+		# the dragged item's own origin via the same path a failed drag
+		# already uses, which already knows how to put something back into a
+		# slot, a wear slot, a grid cell or the pack.
+		var displaced := kit.get_slot(region.slot)
+		var origin := _drag_from
+		kit.set_slot(region.slot, _drag)
+		if displaced:
+			_drag = displaced
+			_drag_from = origin
+			_return_drag()
+		else:
+			_clear_drag()
 		return
 
 	var grid: ItemGrid = region.grid
@@ -537,6 +560,18 @@ func _quick_transfer(point: Vector2) -> void:
 func _clear_drag() -> void:
 	_drag = null
 	_drag_from = {}
+
+
+## Drops whatever is on the cursor at your own feet instead of putting it back
+## anywhere. Goes through Player.drop_loose_item, which reuses the existing
+## body-drop wire path (Net.drop_kit) rather than adding one of its own - see
+## its own header comment.
+func _drop_on_ground() -> void:
+	var item := _drag
+	_clear_drag()
+	var player := Net.local_player
+	if player and player.has_method(&"drop_loose_item"):
+		player.call(&"drop_loose_item", item)
 
 
 ## Puts a dragged item back exactly where it was lifted from.

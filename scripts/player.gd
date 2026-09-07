@@ -368,6 +368,12 @@ const SCOPED_AT := 0.8
 const MEDKIT_TIME := 4.5
 const SURGICAL_TIME := 8.0
 const REPAIR_TIME := 6.0
+## Kneeling over a knocked squadmate. No item, unlike everything else in this
+## list - being there is the whole cost.
+const REVIVE_TEAMMATE_TIME := 5.0
+## Bringing one back from being fully dead. Longer than the free knockdown
+## revive above, and it costs a REVIVE_KIT - see _finish_revive_teammate.
+const RESURRECT_TEAMMATE_TIME := 8.0
 ## You do not move at all while a kit is open. Both hands are busy.
 ##
 ## This was 45% for a while, on the grounds that movement is the floor of this
@@ -378,7 +384,7 @@ const REPAIR_TIME := 6.0
 const USING_SPEED_SCALE := 0.0
 
 ## What is in your hands right now, if anything.
-enum Using { NONE, MEDKIT, SURGICAL, REPAIR }
+enum Using { NONE, MEDKIT, SURGICAL, REPAIR, REVIVE_TEAMMATE }
 ## How far a grenade can be placed. Past this the throw simply falls short -
 ## you cannot lob one across the level, and holding the key longer will not help.
 const THROW_MAX_RANGE := 720.0
@@ -418,6 +424,12 @@ const DRAG_MIN := 200.0
 ## a recon ping, because a blue circle on the ground already means "this is
 ## about to be scanned" and the preview is a promise of exactly that.
 const RECON_ARC := Color(0.55, 0.85, 0.95, 0.9)
+
+## Multiplies the torso's own grey rather than replacing it, so it reads as a
+## tinted uniform and not a paint job. The same blue hud.gd's kit footer and
+## minimap.gd's dot already use for "teammate" - one colour means one thing
+## everywhere a squadmate is marked, rather than each place inventing its own.
+const TEAMMATE_TINT := Color(0.55, 0.78, 0.98)
 
 ## Distance out along the shot line at which recoil lifts the aim point. Aiming
 ## level, a kick of N degrees still rotates the aim by exactly N degrees, so this
@@ -471,12 +483,20 @@ signal scanned()
 ## not learn whose, or from which way, and that asymmetry is the gadget.
 signal counted()
 
+## Your squadmate scored a hit worth knowing about - see on_teammate_credit.
+## `killed` distinguishes a kill from a knock the same way on_hit_dealt does.
+signal teammate_credit(killed: bool)
+
 ## Raised when a landing was heavy enough to carry. The reveal itself is Net's
 ## business - this is for anything local that wants to react to it.
 signal landed_hard(drop: float)
 
 signal revived()
-signal died(knocked_out: bool)
+## `recoverable` is whether this specific death might still be undone - see
+## _death_is_recoverable, read by Screens to decide whether to show the full
+## "run is over" death screen or something lighter while a squadmate could
+## still bring you back.
+signal died(knocked_out: bool, recoverable: bool)
 ## Went down but is still alive - crawling, unarmed, and one more burst from
 ## finished. The HUD listens for this to change what it is showing.
 signal downed(from_headshot: bool)
@@ -557,9 +577,26 @@ var is_downed := false
 ## How much more damage there is in you while down. Runs on its own rather than
 ## on health, so the bar the HUD shows while down is a different thing entirely.
 var down_health_left := 0.0
+## True once this player has been brought back from being fully dead - see
+## Net.ask_resurrect_teammate and _resurrect(). Every player gets exactly one:
+## a second full death with this already true is final, no matter what is in
+## the bag. Replicated (player.tscn) so a teammate deciding whether to spend a
+## REVIVE_KIT on this body, and the HUD showing this player's own reduced max
+## health, both know it without asking.
+var used_death_revive := false
 ## The body currently in reach, for the HUD to prompt with. Null when there is
 ## nothing within arm's length.
 var loot_target: Lootable = null
+## A knocked squadmate currently in reach, for the HUD to prompt with. Same
+## idea as loot_target - recomputed every frame in _update_loot, never trusted
+## from one frame to the next.
+var revive_target: Node2D = null
+## Manual pings on this machine's map/minimap: your own and any a squadmate
+## has sent you, indistinguishable once they arrive - `{"at": Vector2,
+## "until": float}`. Never replicated; each machine keeps only its own list,
+## the same way Item's "revealed_until" meta is per-machine rather than a
+## shared property.
+var pings: Array[Dictionary] = []
 ## The body this player has open. Held so that closing the screen - or dying, or
 ## walking off - hands it back to whoever else wants to search it.
 var _searching: Lootable = null
@@ -616,6 +653,11 @@ var throw_charge := 0.0
 var bow_out := false
 ## How far it is drawn, 0 to 1.
 var bow_drawn := 0.0
+## Arrows left in this draw of the bow before the ultimate is actually spent.
+## One full charge is two shots now, fired one after another - see
+## _loose_arrow, which is what decrements this and what finally spends the
+## charge once it reads 0.
+var bow_shots_left := 0
 ## The exit currently being stood in, and how far through the hold it is.
 var extracting: SpawnPoint = null
 var extracted_out := false
@@ -878,6 +920,17 @@ func _ready() -> void:
 	if _vision:
 		_vision.enabled = mine
 
+	# A duos squadmate reads at a glance rather than by walking up and reading a
+	# name tag - a cool tint on the torso only your own teammate wears, so who
+	# not to shoot is legible from the same distance an enemy silhouette is.
+	# Torso only, not Head or Face (see shield_outline.gd's comment on the
+	# three sitting on top of each other) - a friend still has an ordinary face,
+	# not a green one. self_modulate rather than color: take_damage tweens
+	# _torso.color directly for the hit flash, and stacking a second animation
+	# on the same property is how the two would end up fighting over it.
+	if not mine and Net.is_teammate(Net.peer_id(), get_multiplayer_authority()):
+		_torso.self_modulate = TEAMMATE_TINT
+
 	# Other people obey the same cover rules the guards do. Drawn through walls,
 	# another player is a permanent free answer to the only question this level
 	# asks - is there anybody in that room - and every wall, catwalk and container
@@ -951,6 +1004,13 @@ func _choose_insertion(index := -1) -> void:
 	var start: SpawnPoint = points[index] if index >= 0 and index < points.size() \
 		else _quietest_insertion(points)
 	global_position = start.global_position + Vector2(0.0, -20.0)
+	# A duos squad shares one insertion index (see Net._assign_insertions) -
+	# offset by peer id, deterministically, so the two of you land side by side
+	# rather than stacked on the exact same point. Ordered by id rather than by
+	# who got here first, so both machines agree without asking each other.
+	var mate := Net.teammate(Net.peer_id())
+	if mate != 0:
+		global_position += Vector2(32.0 * (-1.0 if Net.peer_id() < mate else 1.0), 0.0)
 
 	var others: Array = []
 	for node in points:
@@ -1634,6 +1694,7 @@ func _leave_zipline(hop := true) -> void:
 func _update_loot(delta: float) -> void:
 	loot_message_left = maxf(loot_message_left - delta, 0.0)
 	loot_target = _nearest_body()
+	revive_target = _nearby_revivable_teammate() if not is_downed else null
 
 	# A request that never came back must not leave the key dead forever.
 	_asking_left = maxf(_asking_left - delta, 0.0)
@@ -1663,8 +1724,85 @@ func _update_loot(delta: float) -> void:
 		return
 	if inventory_open:
 		_close_screen()
+	elif revive_target and using == Using.NONE:
+		# Ahead of the body check: a squadmate you can actually revive right
+		# now is always the more urgent reason to be pressing this key.
+		# _nearby_revivable_teammate() already refuses to return one you
+		# have no way to help - a dead teammate with no kit to spend on them
+		# falls through to the loot_target branch below instead, so their
+		# body can still be searched.
+		_begin_revive_teammate(revive_target)
 	elif loot_target:
 		_begin_search(loot_target)
+
+
+## A squadmate within arm's reach who can actually be revived right now, or
+## null - either knocked (free, always actionable), or fully dead, not yet
+## used their one revive, *and* you are carrying a REVIVE_KIT. That last
+## clause matters: without it, standing near a dead teammate you have no kit
+## for would claim this key forever and refuse to let you loot their body
+## instead - see _update_loot, which checks this before loot_target.
+##
+## is_alive/is_downed/used_death_revive are all replicated outward from the
+## owner, so this reads as true everywhere the instant they actually change -
+## no round trip needed to ask.
+func _nearby_revivable_teammate() -> Node2D:
+	var mate := Net.my_teammate()
+	if mate == null or not is_instance_valid(mate):
+		return null
+	if global_position.distance_to((mate as Node2D).global_position) > loot_range:
+		return null
+	var alive: Variant = mate.get(&"is_alive")
+	if typeof(alive) != TYPE_BOOL:
+		return null
+	if not alive:
+		var used: Variant = mate.get(&"used_death_revive")
+		if typeof(used) == TYPE_BOOL and used:
+			return null
+		return mate if _first_of(&"is_revive_kit") != null else null
+	var downed: Variant = mate.get(&"is_downed")
+	return mate if typeof(downed) == TYPE_BOOL and downed else null
+
+
+## Kneeling over a squadmate. Knocked is free - no item, no charge, being
+## there for the hold is the whole cost. Fully dead spends a REVIVE_KIT, but
+## only once the hold actually completes - see _finish_revive_teammate -
+## same as every other kit in this file. Checked again here regardless (the
+## kit could be gone by the time this fires if this refuses), so a hold that
+## cannot possibly pay for itself never starts.
+func _begin_revive_teammate(mate: Node2D) -> void:
+	var alive: Variant = mate.get(&"is_alive")
+	if typeof(alive) == TYPE_BOOL and not alive and _first_of(&"is_revive_kit") == null:
+		_say_loot("no revive kit")
+		return
+	var announcement := "reviving teammate..." if not PlayerInput.is_touch() else "REVIVING"
+	var seconds := REVIVE_TEAMMATE_TIME
+	if typeof(alive) == TYPE_BOOL and not alive:
+		announcement = "reviving teammate (uses a kit)..." if not PlayerInput.is_touch() else "REVIVING"
+		seconds = RESURRECT_TEAMMATE_TIME
+	_begin_use(Using.REVIVE_TEAMMATE, seconds, announcement)
+
+
+## `mate` is not kept from _begin_revive_teammate - re-derived here, the same
+## way _use_repair does not remember which piece of armour was worst when it
+## started, so a target that stopped being valid mid-hold is caught by
+## _tick_use before this ever runs.
+func _finish_revive_teammate() -> void:
+	var mate := _nearby_revivable_teammate()
+	if mate == null:
+		return
+	var alive: Variant = mate.get(&"is_alive")
+	if typeof(alive) == TYPE_BOOL and not alive:
+		var kit := _first_of(&"is_revive_kit")
+		if kit == null:
+			_say_loot("no revive kit")
+			return
+		_spend(kit)
+		Net.ask_resurrect_teammate(mate.get_multiplayer_authority())
+		_say_loot("teammate revived")
+		return
+	Net.ask_revive_teammate(mate.get_multiplayer_authority())
+	_say_loot("teammate back up")
 
 
 ## Kneeling over somebody is exclusive, so this asks rather than opens. The host
@@ -1773,10 +1911,14 @@ func _nearest_body() -> Lootable:
 ## Weapon handling that is about the kit rather than the shooting: swapping
 ## hands, pulling a gun out of the bags, and opening the inventory screen.
 func _update_inventory_keys() -> void:
+	_tick_pings()
 	if Input.is_action_just_pressed(&"map"):
 		var map := get_tree().get_first_node_in_group(&"map_screen")
 		if map:
 			map.toggle()
+
+	if PlayerInput.is_ping_just_pressed():
+		_place_ping()
 
 	if PlayerInput.is_inventory_just_pressed():
 		if inventory_open:
@@ -2179,7 +2321,18 @@ func _update_weapon() -> void:
 			bow_out = false
 			bow_drawn = 0.0
 			_hide_arrow_flight()
-			_say_loot("bow away")
+			# Only a full refund if nothing has actually left the bow yet -
+			# see _loose_arrow. A shot already fired has already spent the
+			# charge, and bow_shots_left has to survive being stowed or
+			# pulling it back out would mint a second free pair every time.
+			if bow_shots_left >= 2:
+				bow_shots_left = 0
+			_say_loot("bow away" if bow_shots_left <= 0 else "bow away - one more arrow owed")
+		elif bow_shots_left > 0:
+			# The second half of an already-paid-for draw: no charge check -
+			# the charge was committed the moment the first arrow left.
+			bow_out = true
+			bow_drawn = 0.0
 		else:
 			_use_ultimate(0)
 	# The second slot. Its own button, because both of these are things you reach
@@ -2394,12 +2547,15 @@ func _use_ultimate(slot := 0) -> void:
 				else "HEADCOUNT - %d other%s in reach" % [
 					heard, "" if heard == 1 else "s"])
 		GadgetData.Kind.RECON_BOW:
-			# Q only brings the bow out. The charge is not spent until an arrow
-			# actually leaves it, so thinking better of the shot costs nothing.
+			# Q only brings the bow out. The charge is not spent until the
+			# second arrow leaves it - one full draw is two shots now, fired
+			# one after another, so thinking better of either costs nothing
+			# and the first shot does not have to be the one you meant.
 			ult.charge = keep_charge
 			bow_out = true
 			bow_drawn = 0.0
-			_say_loot("bow out - hold fire to draw, release to loose")
+			bow_shots_left = 2
+			_say_loot("bow out - hold fire to draw, release to loose (2 shots)")
 	if _audio:
 		_audio.reload_finished(global_position)
 
@@ -2864,18 +3020,34 @@ func _loose_arrow(power: float) -> void:
 		inventory.slot_of_kind(GadgetData.Kind.RECON_BOW)) if inventory else null
 	if ult == null:
 		bow_out = false
+		bow_shots_left = 0
 		return
 
 	_fire_recon(ult.gadget, power)
-	# Now the charge is spent: an arrow has left the bow.
-	ult.charge = 0.0
-	bow_out = false
-	bow_drawn = 0.0
 	_hide_arrow_flight()
 	_shake = minf(_shake + 4.0, max_shake)
-	_say_loot("arrow away at %d%% draw" % roundi(power * 100.0))
 	if _audio:
 		_audio.dry_fire(_muzzle.global_position)
+
+	var was_first_shot := bow_shots_left >= 2
+	bow_shots_left = maxi(bow_shots_left - 1, 0)
+	if was_first_shot:
+		# Spent the instant the first arrow leaves, not the second - see the
+		# Q-press handler above. Deferring this to the second shot is what
+		# let stowing the bow between the two mint a fresh pair for free:
+		# the charge sat at 1.0 the whole time, ready to pass _use_ultimate's
+		# check again. Committed here, a stow-and-redraw has nothing left to
+		# recast with - only the one arrow already owed comes back out.
+		ult.charge = 0.0
+
+	if bow_shots_left > 0:
+		bow_drawn = 0.0
+		_say_loot("arrow away at %d%% draw - one more in the bow" % roundi(power * 100.0))
+		return
+
+	bow_out = false
+	bow_drawn = 0.0
+	_say_loot("arrow away at %d%% draw" % roundi(power * 100.0))
 
 
 ## Looses an arrow. It flies, it drops, and it paints whatever it lands near -
@@ -3023,6 +3195,13 @@ func _tick_use(delta: float) -> void:
 	if not is_alive or is_downed:
 		_cancel_use("")
 		return
+	# Reviving is the one kit here with a target that can stop being true
+	# without anything happening to the reviver: the squadmate can get back up
+	# on their own, bleed out, or simply walk out of reach while you are still
+	# kneeling there.
+	if using == Using.REVIVE_TEAMMATE and _nearby_revivable_teammate() == null:
+		_cancel_use("nobody left to revive")
+		return
 	use_left -= delta
 	if use_left > 0.0:
 		return
@@ -3035,6 +3214,8 @@ func _tick_use(delta: float) -> void:
 			_finish_surgical()
 		Using.REPAIR:
 			_finish_repair()
+		Using.REVIVE_TEAMMATE:
+			_finish_revive_teammate()
 
 
 ## Stops what you were doing, with nothing spent. Called by anything that means
@@ -3234,6 +3415,38 @@ func _use_revive() -> void:
 	_say_loot("no stim")
 
 
+## Whether going down right now would leave somebody able to get to you.
+## True whenever you have no teammate at all - solo/FFA has no squad-wipe rule
+## to apply - or your teammate is alive and not themselves knocked.
+func _squad_can_still_save_me() -> bool:
+	var mate := Net.my_teammate()
+	if mate == null or not is_instance_valid(mate):
+		return true
+	var mate_alive: Variant = mate.get(&"is_alive")
+	var mate_downed: Variant = mate.get(&"is_downed")
+	if typeof(mate_alive) != TYPE_BOOL or not mate_alive:
+		return false
+	return not (typeof(mate_downed) == TYPE_BOOL and mate_downed)
+
+
+## Whether this specific death might still be undone - the opposite question
+## to _squad_can_still_save_me() above, and deliberately not the same
+## function: no teammate at all answers "no" here (nobody to bring you back)
+## but "yes" there (no wipe rule to apply, go down normally). Also false once
+## used_death_revive is already true - the one revive is spent, full stop.
+func _death_is_recoverable() -> bool:
+	if used_death_revive:
+		return false
+	var mate := Net.my_teammate()
+	if mate == null or not is_instance_valid(mate):
+		return false
+	var mate_alive: Variant = mate.get(&"is_alive")
+	if typeof(mate_alive) != TYPE_BOOL or not mate_alive:
+		return false
+	var mate_downed: Variant = mate.get(&"is_downed")
+	return not (typeof(mate_downed) == TYPE_BOOL and mate_downed)
+
+
 ## Back on your feet. The mirror of _go_down: everything that was taken away
 ## comes back, and the brief invulnerability is what stops the round that is
 ## already in the air from putting you straight back down.
@@ -3245,6 +3458,59 @@ func _revive() -> void:
 	_invulnerable = invulnerable_time
 	health_changed.emit(health, max_health)
 	revived.emit()
+
+
+## The free knockdown revive a squadmate performs on you, rather than the stim
+## you spend on yourself - see Net.ask_revive_teammate. Same recovery either
+## way; said differently on your own screen because nobody spent an item on
+## this one, they spent the time.
+func _revive_by_teammate() -> void:
+	_revive()
+	_say_loot("your teammate got you back up")
+
+
+## Brought back from being fully dead - see Net.ask_resurrect_teammate, which
+## has already checked used_death_revive and spent the caster's REVIVE_KIT
+## before this is ever called. Every player gets exactly one of these, ever:
+## a second full death with used_death_revive already true is final.
+##
+## Comes back exactly where the body fell rather than at _spawn - unlike
+## respawn(), which is for a run starting over and pretends nothing happened.
+## Nothing is handed back to carry: inventory is already the empty one
+## _leave_the_kit_behind left in its place, and the body itself - whatever a
+## squadmate had not already taken off it - is removed below rather than
+## left lying there for someone to search a person who is walking around
+## again.
+func _resurrect(new_max_health := 65.0) -> void:
+	velocity = Vector2.ZERO
+	armored = false
+	shield = 0.0
+	injuries = 0
+	max_health = new_max_health
+	health = max_health
+	used_death_revive = true
+	_invulnerable = invulnerable_time
+	focus = 0.0
+	weapon.focus = 0.0
+	_shape.set_deferred(&"disabled", false)
+	visible = true
+	is_alive = true
+	is_downed = false
+	down_health_left = 0.0
+	health_changed.emit(health, max_health)
+	_say_loot("brought back - 65 max health for the rest of this raid")
+	revived.emit()
+
+	# The body you left behind is not lying anywhere any more. A Lootable is
+	# independent per machine (see Net._make_body), so removing it here
+	# would only take it off this one screen - the broadcast is what clears
+	# it everywhere, including for whoever might still have it open.
+	var scene := get_tree().current_scene
+	if scene:
+		for node in get_tree().get_nodes_in_group(&"lootable"):
+			var body := node as Lootable
+			if body and body.owner_peer == Net.peer_id():
+				Net.take_down_body(scene.get_path_to(body))
 
 
 func revives_left() -> int:
@@ -3628,6 +3894,15 @@ func take_damage(amount: float, at: Vector2, direction: Vector2) -> void:
 	# finished anyone. Net routes the mark back to whoever pulled the trigger.
 	Damage.report_hit(get_tree(), hit.headshot, is_downed or not is_alive)
 
+	# Tell the shooter's own squadmate, not just the shooter - "your partner
+	# just knocked somebody" is exactly the thing a HUD toast is for, and the
+	# squadmate is not the one who gets the hitmarker above. Net.attributing_to
+	# is 0 for a guard's round, which is also "nobody to tell" here.
+	if (is_downed or not is_alive) and Net.attributing_to != 0:
+		var shooters_mate := Net.teammate(Net.attributing_to)
+		if shooters_mate != 0:
+			Net.tell_team_credit(shooters_mate, not is_alive)
+
 
 ## Whether a hit you survived leaves something behind.
 ##
@@ -3697,6 +3972,79 @@ func _bleed_out(delta: float) -> void:
 		_die(false)
 
 
+## Marks every target revealed on this machine - the same through-wall
+## `revealed_until` meta a recon bow or a rail bomb has always set locally -
+## and, if this player has a squadmate, relays the same paths and expiry to
+## the squadmate's own machine too. hud.gd's existing recon-ping drawing
+## (`_draw_recon_pings`) reads that meta generically, so the teammate's
+## screen lights up with an identical marker for zero new drawing code.
+##
+## Callers filter their own squadmate out of `targets` before it ever reaches
+## here - see ReconBolt._land and RailBomb._work_the_rope/_work_the_air - so
+## a squad never paints its own members through a wall.
+func broadcast_reveal(targets: Array, seconds: float) -> void:
+	if targets.is_empty():
+		return
+	var scene := get_tree().current_scene
+	var until := Time.get_ticks_msec() * 0.001 + seconds
+	var paths: Array = []
+	for target in targets:
+		if target == null or not is_instance_valid(target):
+			continue
+		target.set_meta(&"revealed_until", until)
+		if scene:
+			paths.append(scene.get_path_to(target))
+	if paths.is_empty():
+		return
+	var mate := Net.teammate(Net.peer_id())
+	if mate != 0:
+		Net.tell_team_reveal(mate, paths, until)
+
+
+## How long a manual ping stays on the map/minimap.
+const PING_DURATION := 12.0
+
+
+## Drops a manual ping at wherever you are looking. Echoed locally at once -
+## nothing about marking a spot for yourself needs anybody else's say-so -
+## and sent to a squadmate, if there is one, the same direct way every other
+## one-to-one message in this file is. The map and minimap draw straight out
+## of `pings`; see map_screen.gd and minimap.gd.
+func _place_ping() -> void:
+	var at := _ping_point()
+	pings.append({"at": at, "until": Time.get_ticks_msec() * 0.001 + PING_DURATION})
+	_say_loot("ping placed")
+	Net.send_ping(at)
+
+
+## Where B marks one: the cursor on a desktop, the reticle's own aim point on
+## touch - the same split _screen_point() makes, for the same reason.
+func _ping_point() -> Vector2:
+	if PlayerInput.is_touch():
+		return PlayerInput.get_aim_point(global_position, _aim_reach)
+	return get_global_mouse_position()
+
+
+## Told by Net that a squadmate placed a ping. Landed in the same list your
+## own pings live in, on purpose: what the map draws for a ping you were
+## sent is indistinguishable from one you placed yourself.
+func add_ping(at: Vector2) -> void:
+	pings.append({"at": at, "until": Time.get_ticks_msec() * 0.001 + PING_DURATION})
+
+
+## Drops whatever has lapsed. Called every frame from _update_inventory_keys
+## rather than left to grow for the length of a raid.
+func _tick_pings() -> void:
+	if pings.is_empty():
+		return
+	var now := Time.get_ticks_msec() * 0.001
+	var kept: Array[Dictionary] = []
+	for ping in pings:
+		if float(ping.until) > now:
+			kept.append(ping)
+	pings = kept
+
+
 ## Told by Net that another player's arrow has painted us. Only ever called on
 ## the machine the body belongs to - the message is addressed to that peer.
 func mark_scanned() -> void:
@@ -3726,6 +4074,14 @@ func mark_counted() -> void:
 	if not is_alive:
 		return
 	counted.emit()
+
+
+## Told by Net that our squadmate just knocked or killed somebody. Fires
+## regardless of our own is_alive/is_downed - it is happening to them, not to
+## us, and there is no reason a knocked player should be the one person on
+## the squad who never hears their partner got a kill.
+func on_teammate_credit(killed: bool) -> void:
+	teammate_credit.emit(killed)
 
 
 ## A flash grenade went off where this body could see it.
@@ -3785,8 +4141,16 @@ func seconds_down_left() -> float:
 
 ## Down, not out. The gun is gone, the aim is gone, and what is left is a slow
 ## crawl and whatever cover you can reach before someone walks over.
+##
+## Skipped entirely, straight to _die(), when a squadmate exists and is not
+## currently able to reach you (already down themselves, or already dead) -
+## the "both knocked or dead in any combination" rule the user asked for.
+## Playing solo/FFA, with no teammate at all, never takes this branch.
 func _go_down(from_headshot: bool) -> void:
 	if is_downed:
+		return
+	if not _squad_can_still_save_me():
+		_die(from_headshot)
 		return
 	is_downed = true
 	down_health_left = down_health
@@ -3798,6 +4162,7 @@ func _go_down(from_headshot: bool) -> void:
 	weapon.focus = 0.0
 	bow_out = false
 	bow_drawn = 0.0
+	bow_shots_left = 0
 	_cancel_throw()
 	if zipline:
 		_leave_zipline(false)
@@ -3828,7 +4193,20 @@ func _die(knocked_out := false) -> void:
 	if is_instance_valid(_dash_trail):
 		_dash_trail.clear()
 	_shape.set_deferred(&"disabled", true)
-	died.emit(knocked_out)
+	died.emit(knocked_out, _death_is_recoverable())
+
+	# The other half of the squad-wipe rule: if a squadmate was already
+	# knocked when this death happened, they had nobody left able to reach
+	# them either, and their own bleed-out timer is no longer a real chance -
+	# they are effectively dead too. Told rather than decided on their
+	# machine's behalf here, the same way every other cross-body state change
+	# in this game is: is_downed/is_alive replicate outward from their owner,
+	# so only their own machine may actually call _die on them.
+	var mate := Net.my_teammate()
+	if mate != null and is_instance_valid(mate):
+		var mate_downed: Variant = mate.get(&"is_downed")
+		if typeof(mate_downed) == TYPE_BOOL and mate_downed:
+			Net.tell_squad_wipe(mate.get_multiplayer_authority())
 
 
 ## Everything you were carrying, on the floor where you fell.
@@ -3856,6 +4234,39 @@ func _leave_the_kit_behind() -> void:
 	# all back - two copies of a pack that is the whole point of shooting you for.
 	inventory = Inventory.new()
 	weapon.set_inventory(inventory)
+
+
+## Drops one item at your feet - dragging it to the right edge of the
+## inventory screen, rather than losing your whole kit at once. Reuses
+## Net.drop_kit wholesale rather than adding a wire path of its own: a
+## one-item Inventory dropped that way lands, is searchable and replicates
+## exactly the way a death's kit already does, for zero new rpcs.
+##
+## Placed directly into a resized pocket rather than through Inventory.store()
+## - store() would refuse anything bigger than the 1x1 pockets a fresh
+## Inventory starts with (a REVIVE_KIT, a piece of armour, a rifle), and
+## silently losing the very item you just lifted off the cursor is worse than
+## the drag never having worked at all.
+func drop_loose_item(item: Item) -> void:
+	if item == null:
+		return
+	var kit := Inventory.new()
+	if item.is_weapon():
+		kit.set_slot(Inventory.Slot.SECONDARY if item.weapon.sidearm
+			else Inventory.Slot.PRIMARY, item)
+	elif item.is_armor():
+		kit.set_worn(Inventory.Wear.HELMET if item.armor.slot == ArmorData.Slot.HEAD
+			else Inventory.Wear.VEST, item)
+	elif item.is_backpack():
+		kit.set_backpack(item)
+	elif item.is_power():
+		kit.set_power(item)
+	elif item.is_throwable():
+		kit.set_throwable(0, item)
+	else:
+		kit.pockets[0] = ItemGrid.new(maxi(item.size.x, 1), maxi(item.size.y, 1))
+		kit.pockets[0].place(item, Vector2i.ZERO)
+	Net.drop_kit(kit, global_position + Vector2(0.0, size.y * 0.5 - 8.0), _torso.color, size)
 
 
 func respawn() -> void:

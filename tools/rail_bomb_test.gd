@@ -287,7 +287,15 @@ func _bomb_half() -> void:
 		if bool(bomb.hovering):
 			still_climbing = false
 	var seconds_held := float(held) / 60.0
-	var jolts: float = clung.taken / gadget.damage
+	# Per-jolt damage is DAMAGE_SCALE of the .tres value, not the raw value -
+	# see RailBomb.arm(). Read dynamically off the bomb's own script rather
+	# than written as `RailBomb.DAMAGE_SCALE`, for the same reason REACTION
+	# is looked up that way just above: naming the class here would make this
+	# file depend on rail_bomb.gd at compile time, which breaks under
+	# `--script` before the autoloads exist.
+	var damage_scale: float = float(bomb.get_script().get_script_constant_map()
+		.get("DAMAGE_SCALE", 1.0))
+	var jolts: float = clung.taken / (gadget.damage * damage_scale)
 	_say("held against it for %.2fs on the rope: %.0f damage, %.1f jolts"
 		% [seconds_held, clung.taken, jolts])
 	_check("it was still on the rope for that", still_climbing)

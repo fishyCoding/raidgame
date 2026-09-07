@@ -206,6 +206,9 @@ const CATALOGUE := {
 		{"kind": "revive", "price": 10},
 		{"kind": "repair", "slot": "vest", "price": 450},
 		{"kind": "repair", "slot": "helmet", "price": 300},
+		# Bag-only, not pocket - two cells, same as a medkit. The one item that
+		# can bring a fully dead squadmate back, and only ever once each.
+		{"kind": "revive_kit", "price": 1800},
 	],
 }
 
@@ -708,6 +711,8 @@ func _make(entry: Dictionary) -> Item:
 			return Item.from_surgical(2)
 		"revive":
 			return Item.from_revive(REVIVES_PER_STACK)
+		"revive_kit":
+			return Item.from_revive_kit()
 		"repair":
 			return Item.from_repair(ArmorData.Slot.BODY if entry.slot == "vest"
 				else ArmorData.Slot.HEAD, REPAIRS_PER_KIT)
@@ -734,6 +739,8 @@ func _label(entry: Dictionary) -> String:
 			return "%s   x%d" % [entry.ammo, entry.rounds]
 		"revive":
 			return "Stim   x%d" % REVIVES_PER_STACK
+		"revive_kit":
+			return "Revive Kit"
 		"repair":
 			return ("Plate Repair Kit   x%d" if entry.slot == "vest"
 				else "Helmet Repair Kit   x%d") % REPAIRS_PER_KIT
@@ -781,6 +788,8 @@ func _detail(entry: Dictionary) -> String:
 			return "one stack, one cell"
 		"revive":
 			return "%d uses   get up at full health   one cell" % REVIVES_PER_STACK
+		"revive_kit":
+			return "brings a fully dead squadmate back, once each - 65 max health after   2x1 cells"
 		"repair":
 			return ("%d uses   +%d durability each   %s   %s"
 				% [REPAIRS_PER_KIT, roundi(Item.from_repair(

@@ -2,6 +2,7 @@
 
 [ext_resource type="PackedScene" path="res://scenes/platform.tscn" id="1_platform"]
 [ext_resource type="Script" uid="uid://xeib8hy0neca" path="res://scripts/hud.gd" id="4_hud"]
+[ext_resource type="Script" path="res://scripts/minimap.gd" id="20_minimap"]
 [ext_resource type="Texture2D" uid="uid://r6rxopipv1df" path="res://resources/pixil-frame-0(2).png" id="5_jbj1t"]
 [ext_resource type="Script" uid="uid://bcxfmp5s3q1rv" path="res://scripts/vision_system.gd" id="5_vision"]
 [ext_resource type="PackedScene" path="res://scenes/enemy.tscn" id="6_enemy"]
@@ -846,6 +847,16 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("4_hud")
+
+[node name="Minimap" type="Control" parent="HUD"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("20_minimap")
 
 [node name="TouchControls" type="Control" parent="HUD" unique_id=771044213]
 layout_mode = 3
