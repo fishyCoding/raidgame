@@ -34,7 +34,13 @@ var _status: Label
 var _controls: Button
 var _map: Button
 var _duos: Button
+var _save_loadout: Button
 var _kit: Inventory
+
+## Debug only - dumps whatever is currently bought to disk so a test run does
+## not have to be re-bought from scratch every time the game restarts. See
+## _on_save_loadout.
+const LOADOUT_FILE := "user://saved_loadout.cfg"
 
 
 func _ready() -> void:
@@ -202,6 +208,19 @@ func _build() -> void:
 	add_child(_controls)
 	_refresh_controls_label()
 
+	# Debug only, so a test run does not have to be re-bought from scratch every
+	# time the game restarts - see _on_save_loadout. One row above _controls,
+	# the same relationship _duos has to the row below it on the other corner.
+	_save_loadout = Button.new()
+	_save_loadout.text = "save loadout"
+	_save_loadout.flat = true
+	_save_loadout.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	_save_loadout.position = Vector2(-232.0, -102.0)
+	_save_loadout.custom_minimum_size = Vector2(200.0, 34.0)
+	_save_loadout.tooltip_text = "debug: dumps the current kit to %s" % LOADOUT_FILE
+	_save_loadout.pressed.connect(_on_save_loadout)
+	add_child(_save_loadout)
+
 	_status = Label.new()
 	_status.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	_status.position = Vector2(56.0, -92.0)
@@ -291,6 +310,21 @@ func _on_solo() -> void:
 	Net.staged_kit = _kit
 	Net.play_solo()
 	_enter_level(Net.solo_scene())
+
+
+## Dumps whatever is currently sitting in the shop to disk, so the next test
+## run can be set up by hand once and then just... be there. Nothing reads
+## this file back - it exists so a saved kit can be eyeballed or copied out,
+## not as a load path. `_kit` rather than Net.staged_kit: the shop mutates
+## this same Inventory in place on every purchase (see `_shop.open(_kit)`
+## above), so it is always current, where staged_kit is only ever set at
+## queue/solo time and would be whatever was bought last raid.
+func _on_save_loadout() -> void:
+	var file := ConfigFile.new()
+	file.set_value("loadout", "kit", _kit.to_wire())
+	var err := file.save(LOADOUT_FILE)
+	_say("loadout saved to %s" % LOADOUT_FILE if err == OK
+		else "loadout save failed: %s" % error_string(err))
 
 
 ## An empty level, one of you, everything already in your hands.
