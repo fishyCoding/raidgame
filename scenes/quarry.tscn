@@ -19,6 +19,8 @@
 [ext_resource type="Script" uid="uid://deaufp2rknqug" path="res://scripts/map_screen.gd" id="16_a62tk"]
 [ext_resource type="Script" uid="uid://ds77uggwicvrj" path="res://scripts/screens.gd" id="17_1sjku"]
 [ext_resource type="Script" uid="uid://dop6bbqsgvhpd" path="res://scripts/shop.gd" id="18_8xyha"]
+[ext_resource type="PackedScene" path="res://scenes/objective.tscn" id="21_objective"]
+[ext_resource type="PackedScene" path="res://scenes/central_objective.tscn" id="22_central"]
 
 [node name="Main" type="Node2D" unique_id=612678245]
 
@@ -1876,6 +1878,9 @@ position = Vector2(-250, 130)
 size = Vector2(600, 24)
 color = Color(0.231373, 0.278431, 0.341176, 1)
 
+[node name="CentralObjective" parent="World" unique_id=1755117690 instance=ExtResource("22_central")]
+position = Vector2(-250, 90)
+
 [node name="ShaftDeck3" parent="World" unique_id=1997190641 instance=ExtResource("8_i5su0")]
 texture_filter = 4
 texture_repeat = 2
@@ -2544,6 +2549,23 @@ position = Vector2(850, 1097.5)
 top = Vector2(-150, -159.5)
 bottom = Vector2(150, 159.5)
 speed = 800.0
+
+[node name="Objectives" type="Node2D" parent="." unique_id=1755117686]
+
+[node name="CaptureSiteA" parent="Objectives" unique_id=1755117687 instance=ExtResource("21_objective")]
+position = Vector2(3150, -3160)
+id = 0
+display_name = "THE PLANT"
+
+[node name="CaptureSiteB" parent="Objectives" unique_id=1755117688 instance=ExtResource("21_objective")]
+position = Vector2(3850, 1805)
+id = 1
+display_name = "THE PIT"
+
+[node name="CaptureSiteC" parent="Objectives" unique_id=1755117689 instance=ExtResource("21_objective")]
+position = Vector2(-4270, -1033)
+id = 2
+display_name = "THE YARD"
 
 [node name="Spawns" type="Node2D" parent="." unique_id=1755117685]
 

@@ -19,6 +19,11 @@ const YOU := Color(0.95, 0.95, 1.0)
 const TEAMMATE := Color(0.55, 0.78, 0.98)
 const PING := Color(0.98, 0.82, 0.32)
 const REVEAL := Color(0.55, 0.85, 0.95)
+## The quarry's objective chain. Same gold hud.gd's OBJECTIVE and
+## central_objective.gd's unlocked tint already use - one colour for the
+## whole thing, wherever it is drawn.
+const OBJECTIVE := Color(0.95, 0.78, 0.25)
+const OBJECTIVE_LOCKED := Color(0.42, 0.46, 0.52)
 
 ## Where it sits and how big it is - top-right, clear of the gadget strip and
 ## the headcount dial, which both live centred or bottom.
@@ -98,6 +103,7 @@ func _draw() -> void:
 	draw_rect(BOX, BORDER, false, 1.5)
 	_draw_geometry()
 	_draw_exits()
+	_draw_objectives()
 	_draw_teammate()
 	_draw_pings()
 
@@ -122,6 +128,31 @@ func _draw_exits() -> void:
 		if point == null or not point.is_extraction:
 			continue
 		draw_circle(_to_map(point.global_position), 3.0, EXIT)
+
+
+## The quarry's three subobjectives and the central object, all drawn
+## unconditionally - the same "map briefing knowledge, not a stealth reveal"
+## treatment an extraction point already gets above. The object itself is the
+## one the user asked to be visible to everyone regardless of concealment;
+## the three sites are drawn alongside it for the same reason a raid's exits
+## already are - map knowledge, not a thing you have to have seen to know
+## about.
+func _draw_objectives() -> void:
+	for node in get_tree().get_nodes_in_group(&"objective"):
+		var point := node as Node2D
+		if point == null:
+			continue
+		var captured: Variant = point.get(&"captured")
+		draw_circle(_to_map(point.global_position), 3.0,
+			EXIT if typeof(captured) == TYPE_BOOL and captured else OBJECTIVE)
+
+	var centre := get_tree().get_first_node_in_group(&"central_objective") as Node2D
+	if centre == null:
+		return
+	var at := _to_map(centre.global_position)
+	var lit := Net.objective_unlocked
+	draw_arc(at, 5.0, 0.0, TAU, 16, OBJECTIVE if lit else OBJECTIVE_LOCKED, 2.0, true)
+	draw_circle(at, 2.5, OBJECTIVE if lit else OBJECTIVE_LOCKED)
 
 
 ## Your squadmate's own dot, tinted the same way the HUD's own health widget

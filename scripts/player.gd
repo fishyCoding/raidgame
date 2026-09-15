@@ -666,6 +666,25 @@ var extracted_out := false
 var _exits: Array[SpawnPoint] = []
 ## Seconds this player has stood in one of them.
 var _extract_held := 0.0
+
+## The one central objective this level has, if any - quarry only. Cached
+## once rather than searched for every frame; a level with none of these
+## answers every question below with "no", which is what every other map
+## wants without having to know this system exists at all.
+var _central_objective: CentralObjective = null
+## Whether this player is the one currently carrying it - refreshed every
+## frame from Net's broadcast state (Net.objective_carrier), the same
+## "derive from already-shared state" shape Net.rail_bombs already uses,
+## rather than a second replicated field of its own.
+var carrying_objective := false
+var _asked_for_objective := false
+## The subobjective currently being stood in, and how far through this
+## player's own hold on it is - the same two-field shape extracting/
+## _extract_held already uses for the exit rings, because capturing one
+## works exactly the same way: stand still, fill a timer, report once it is
+## full. See _update_capture.
+var capturing: CapturePoint = null
+var _capture_held := 0.0
 ## Seconds of Overload left. It is a movement ultimate: while it runs you are
 ## faster and you jump further. The gun is untouched - spending it is about
 ## crossing ground you could not otherwise cross, or leaving somewhere fast.
@@ -875,6 +894,9 @@ func _ready() -> void:
 	# nobody hands it one, so the player simply adopts what it made.
 	inventory = weapon.inventory
 	weapon.shot_fired.connect(_on_shot_fired)
+	# Null everywhere but the quarry, which is exactly what every check below
+	# reads that as - see the field's own comment.
+	_central_objective = get_tree().get_first_node_in_group(&"central_objective") as CentralObjective
 	_reticle_radius = _reticle.radius
 	_base_zoom = Vector2(base_zoom, base_zoom)
 	# The collision shape is shared between instances unless made local, and
@@ -1116,9 +1138,74 @@ func _update_extraction(delta: float) -> void:
 			if is_instance_valid(point):
 				point.show_hold(_extract_held if point == extracting else 0.0)
 
-	if extracting and _extract_held >= extracting.hold_time:
+	# A level with no central object at all (_central_objective null) never
+	# gates on this; the quarry does, and only once you are the one actually
+	# holding it - see _update_carry.
+	if extracting and _extract_held >= extracting.hold_time \
+			and (_central_objective == null or carrying_objective):
 		extracted_out = true
 		extracted.emit(extracting)
+
+
+## The quarry's three subobjectives, one hold-timer shared between whichever
+## of them you are standing in - the same shape _update_extraction already
+## uses for the exit rings, because capturing works exactly the same way:
+## stand still, fill a timer, and report once it is full rather than sending
+## the standing itself frame by frame.
+##
+## Capturing is not exclusive - see Net's own comment on why - so there is
+## nothing here that can be refused, unlike _update_carry below.
+func _update_capture(delta: float) -> void:
+	if _central_objective == null or not is_alive or is_downed:
+		return
+
+	var points := get_tree().get_nodes_in_group(&"objective")
+	capturing = null
+	for point in points:
+		var p := point as CapturePoint
+		if p and p.in_range(global_position):
+			capturing = p
+			break
+
+	if capturing:
+		_capture_held += delta
+	else:
+		_capture_held = maxf(_capture_held - delta * 2.0, 0.0)
+
+	if is_local():
+		for point in points:
+			var p := point as CapturePoint
+			if p == null:
+				continue
+			p.captured = p.id >= 0 and p.id < Net.objective_captured.size() \
+				and bool(Net.objective_captured[p.id])
+			p.show_hold(_capture_held if p == capturing else 0.0)
+
+	if capturing and _capture_held >= capturing.hold_time:
+		Net.tell_captured(capturing.id)
+		capturing = null
+		_capture_held = 0.0
+
+
+## Reaching the central object once it is unlocked and nobody else has it
+## picks it up - no key to press, the same way walking into a body's search
+## prompt does not need one either; see Net's own comment on why this one is
+## a request rather than a report.
+func _update_carry(_delta: float) -> void:
+	carrying_objective = Net.objective_carrier == Net.peer_id()
+	if _central_objective == null:
+		return
+	if carrying_objective or not Net.objective_unlocked or Net.objective_carrier != 0 \
+			or not is_alive or is_downed:
+		_asked_for_objective = false
+		return
+	if global_position.distance_to(_central_objective.global_position) \
+			> _central_objective.pickup_range:
+		_asked_for_objective = false
+		return
+	if not _asked_for_objective:
+		_asked_for_objective = true
+		Net.ask_to_carry()
 
 
 ## Derived from the designer-friendly height/time values above, so tuning the
@@ -1190,6 +1277,8 @@ func _physics_process(delta: float) -> void:
 		_update_shake(delta)
 		return
 	_update_grapple(delta)
+	_update_capture(delta)
+	_update_carry(delta)
 	_update_extraction(delta)
 	_update_shield(delta)
 	_update_crouch(delta)
@@ -4185,6 +4274,8 @@ func _die(knocked_out := false) -> void:
 	_release_body()
 	_let_go_of_grapple(false)
 	_leave_the_kit_behind()
+	if carrying_objective:
+		Net.tell_dropped_objective(global_position)
 	velocity = Vector2.ZERO
 	dash_left = 0.0
 	# Shot out of a dash. The streak points at whoever was taking it, and there

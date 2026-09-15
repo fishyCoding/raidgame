@@ -13,6 +13,11 @@ const LOW_AMMO := Color(1.0, 0.44, 0.4)
 const GOOD := Color(0.42, 0.78, 0.6)
 const BAD := Color(0.85, 0.42, 0.42)
 const OVERLOAD := Color(1.0, 0.68, 0.28)
+## The quarry's objective chain - capture panel, the two banners, and the
+## always-on tally. One colour for the whole chain, the same way EXTRACTING
+## reuses GOOD rather than each state inventing its own.
+const OBJECTIVE := Color(0.95, 0.78, 0.25)
+const OBJECTIVE_BANNER_TIME := 3.0
 const RECON := Color(0.55, 0.85, 0.95, 0.95)
 ## A scope catching the light. Nearly white on purpose - every other marker on
 ## this HUD is a tinted symbol you read, and this one is meant to be mistaken
@@ -89,6 +94,19 @@ const SCANNED_TIME := 2.4
 var _teammate_credit_left := 0.0
 var _teammate_credit_killed := false
 const TEAMMATE_CREDIT_TIME := 3.0
+
+## Whether this level even has a central objective to show any of this for -
+## checked once, since nothing about it changes mid-raid. Every draw call
+## below is gated on it so a level with none of these nodes never has to know
+## the system exists.
+var _objective_active := false
+var _objective_banner_left := 0.0
+var _objective_banner_text := ""
+## What Net's objective state looked like last time it changed, so a fresh
+## _on_objectives_changed can tell what is actually new - a capture just now,
+## or the unlock just now - rather than only what is currently true.
+var _objective_seen_captured: Array = [false, false, false]
+var _objective_seen_unlocked := false
 
 ## Seconds left of the mark a Headcount leaves on your screen. Kept here for the
 ## same reason _scanned_left is: it is a thing on a screen and nothing else, and
@@ -188,6 +206,11 @@ func _ready() -> void:
 		_player.scanned.connect(_on_scanned)
 		_player.counted.connect(_on_counted)
 		_player.teammate_credit.connect(_on_teammate_credit)
+	_objective_active = not get_tree().get_nodes_in_group(&"central_objective").is_empty()
+	if _objective_active:
+		_objective_seen_captured = Net.objective_captured.duplicate()
+		_objective_seen_unlocked = Net.objective_unlocked
+		Net.objectives_changed.connect(_on_objectives_changed)
 
 
 ## Characters arrive after the level does now - spawned per peer rather than
@@ -218,6 +241,23 @@ func _on_teammate_credit(killed: bool) -> void:
 	_teammate_credit_killed = killed
 
 
+## Told every time Net's objective state changes at all - a capture, the
+## unlock, a pickup, a drop. Only two of those are worth a banner; the rest
+## fall out of comparing what changed against what was last seen.
+func _on_objectives_changed() -> void:
+	if Net.objective_unlocked and not _objective_seen_unlocked:
+		_objective_banner_text = "OBJECTIVE UNLOCKED"
+		_objective_banner_left = OBJECTIVE_BANNER_TIME
+	else:
+		for i in Net.objective_captured.size():
+			if bool(Net.objective_captured[i]) and not bool(_objective_seen_captured[i]):
+				_objective_banner_text = "SUBOBJECTIVE CAPTURED"
+				_objective_banner_left = OBJECTIVE_BANNER_TIME
+				break
+	_objective_seen_captured = Net.objective_captured.duplicate()
+	_objective_seen_unlocked = Net.objective_unlocked
+
+
 func _process(delta: float) -> void:
 	# The bar needs the full duration, and only the player knows it - catch it on
 	# the frame it starts rather than hard-coding eight seconds here.
@@ -226,6 +266,7 @@ func _process(delta: float) -> void:
 	_scanned_left = maxf(_scanned_left - delta, 0.0)
 	_watched_left = maxf(_watched_left - delta, 0.0)
 	_teammate_credit_left = maxf(_teammate_credit_left - delta, 0.0)
+	_objective_banner_left = maxf(_objective_banner_left - delta, 0.0)
 	queue_redraw()
 
 
@@ -247,6 +288,10 @@ func _draw() -> void:
 		_draw_scanned()
 	if _teammate_credit_left > 0.0:
 		_draw_teammate_credit()
+	if _objective_active:
+		_draw_objective_tally()
+		if _objective_banner_left > 0.0:
+			_draw_objective_banner()
 	if _weapon == null:
 		_draw_flash()
 		return
@@ -493,6 +538,8 @@ func _draw_health() -> void:
 		_draw_sniper_glints()
 		if _player.extracting:
 			_draw_extraction(_player.extracting)
+		if _player.capturing:
+			_draw_capture(_player.capturing)
 		_draw_flash()
 		return
 
@@ -528,6 +575,8 @@ func _draw_health() -> void:
 	_draw_sniper_glints()
 	if _player.extracting:
 		_draw_extraction(_player.extracting)
+	if _player.capturing:
+		_draw_capture(_player.capturing)
 	_draw_flash()
 
 
@@ -1097,6 +1146,59 @@ func _draw_extraction(point) -> void:
 	var bar := Rect2(box.position + Vector2(14.0, 28.0), Vector2(box.size.x - 28.0, 8.0))
 	draw_rect(bar, Color(0.16, 0.18, 0.22))
 	draw_rect(Rect2(bar.position, Vector2(bar.size.x * point.progress(), bar.size.y)), GOOD)
+
+
+## Standing in a subobjective: the same panel EXTRACTING draws, above it
+## rather than on top of it - the two cannot really happen at once (an exit
+## and a capture site are nowhere near each other), but stacking rather than
+## overlapping costs nothing and means never finding out the hard way.
+func _draw_capture(point) -> void:
+	var box := Rect2(Vector2(size.x * 0.5 - 150.0, 138.0), Vector2(300.0, 44.0))
+	draw_rect(box, PANEL_BG)
+	draw_rect(Rect2(box.position, Vector2(3.0, box.size.y)), OBJECTIVE)
+	draw_string(_font, box.position + Vector2(14.0, 20.0), "CAPTURING - %s" % point.display_name,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, OBJECTIVE)
+	var bar := Rect2(box.position + Vector2(14.0, 28.0), Vector2(box.size.x - 28.0, 8.0))
+	draw_rect(bar, Color(0.16, 0.18, 0.22))
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * point.progress(), bar.size.y)), OBJECTIVE)
+
+
+## Always up on the quarry, so "how many left" and "who has it" are never a
+## question you have to open the map to answer. Read straight off Net rather
+## than off _player - this is squad-wide state, not this body's own.
+func _draw_objective_tally() -> void:
+	var done := 0
+	for c in Net.objective_captured:
+		if c:
+			done += 1
+	var text := "OBJECTIVES %d/3" % done
+	if Net.objective_unlocked:
+		if Net.objective_carrier == 0:
+			text += "  -  OBJECT UNCLAIMED"
+		elif _player and Net.objective_carrier == _player.get_multiplayer_authority():
+			text += "  -  YOU HAVE THE OBJECT"
+		else:
+			text += "  -  OBJECT CARRIED"
+	var tint := OBJECTIVE if Net.objective_unlocked else DIM
+	draw_string(_font, Vector2(size.x - 280.0, 26.0), text,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, tint)
+
+
+## A subobjective just fell, or the centre just unlocked - the same small,
+## quiet toast TEAMMATE KILL uses, a beat lower on screen so the two can
+## never land in the same spot.
+func _draw_objective_banner() -> void:
+	var t := clampf(_objective_banner_left / OBJECTIVE_BANNER_TIME, 0.0, 1.0)
+	var alpha := clampf(t * 2.0, 0.0, 1.0)
+	var text := _objective_banner_text
+	var y := size.y * 0.18 + 36.0
+	var width := _font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	var box := Rect2(Vector2(size.x * 0.5 - width * 0.5 - 16.0, y - 4.0),
+		Vector2(width + 32.0, 30.0))
+	draw_rect(box, Color(0.09, 0.08, 0.04, 0.7 * alpha))
+	draw_rect(Rect2(box.position, Vector2(3.0, box.size.y)), Color(OBJECTIVE, alpha))
+	draw_string(_font, Vector2(0.0, y + 18.0), text,
+		HORIZONTAL_ALIGNMENT_CENTER, size.x, 20, Color(OBJECTIVE, alpha))
 
 
 ## Overload running: a banner, a countdown and a rim of colour around the whole

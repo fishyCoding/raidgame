@@ -19,6 +19,10 @@ const YOU := Color(0.95, 0.95, 1.0)
 const TEAMMATE := Color(0.55, 0.78, 0.98)
 const PING := Color(0.98, 0.82, 0.32)
 const REVEAL := Color(0.55, 0.85, 0.95)
+## The quarry's objective chain - same gold hud.gd, minimap.gd and
+## central_objective.gd's unlocked tint already use.
+const OBJECTIVE := Color(0.95, 0.78, 0.25)
+const OBJECTIVE_LOCKED := Color(0.42, 0.46, 0.52)
 
 ## Briefing mode holds the map up on its own; M just toggles it.
 var briefing := false
@@ -145,6 +149,7 @@ func _draw() -> void:
 	_draw_geometry()
 	_draw_cables()
 	_draw_points(font)
+	_draw_objectives(font)
 	_draw_pings()
 	_draw_teammate(font)
 
@@ -277,3 +282,39 @@ func _draw_points(font: Font) -> void:
 			draw_circle(at, 3.5, DIM)
 			draw_string(font, at + Vector2(10.0, 4.0), point.display_name,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, DIM)
+
+
+## The quarry's three subobjectives and the central object, drawn the same
+## unconditional way the insertion/extraction points above are - map
+## knowledge, not a stealth reveal. The central object is the one the user
+## asked to read as visible to everyone regardless of concealment; the three
+## sites get the same treatment for the same reason the raid's own exits do.
+func _draw_objectives(font: Font) -> void:
+	for node in get_tree().get_nodes_in_group(&"objective"):
+		var point := node as Node2D
+		if point == null:
+			continue
+		var captured: Variant = point.get(&"captured")
+		var done: bool = typeof(captured) == TYPE_BOOL and bool(captured)
+		var at := _to_map(point.global_position)
+		var tint := EXIT if done else OBJECTIVE
+		draw_circle(at, 3.5, tint)
+		var label: Variant = point.get(&"display_name")
+		# Below rather than beside, the way every spawn label reads - two of
+		# these sites sit close enough to a named spawn point that sharing its
+		# row would draw one label on top of the other.
+		draw_string(font, at + Vector2(-24.0, 16.0),
+			"%s%s" % ["CAPTURED  " if done else "", str(label) if label else ""],
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, tint)
+
+	var centre := get_tree().get_first_node_in_group(&"central_objective") as Node2D
+	if centre == null:
+		return
+	var at := _to_map(centre.global_position)
+	var lit := Net.objective_unlocked
+	var tint := OBJECTIVE if lit else OBJECTIVE_LOCKED
+	draw_arc(at, 9.0, 0.0, TAU, 24, tint, 2.0, true)
+	draw_circle(at, 4.0, tint)
+	draw_string(font, at + Vector2(13.0, 4.0),
+		"THE OBJECT" if lit else "THE OBJECT (locked)",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, tint)

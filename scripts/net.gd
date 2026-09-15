@@ -509,6 +509,12 @@ func request_character(duos := false) -> void:
 	# screen still means watching a level that already has guards patrolling
 	# it, the same way it always has for a solo queuer.
 	_send_bodies(who)
+	# Objective state exists whether or not this level has any CapturePoint/
+	# CentralObjective nodes to show it on - harmless defaults everywhere
+	# else, and the one way a latecomer to the quarry finds out the shaft is
+	# already unlocked, or already claimed, without having watched it happen.
+	_set_objectives.rpc_id(who, objective_captured, objective_unlocked,
+		objective_carrier, objective_drop_at)
 
 	_advance_match()
 
@@ -1957,6 +1963,143 @@ func _release_bodies_of(id: int) -> void:
 			continue
 		var kit := found.inventory.to_wire() if found.inventory else {}
 		_set_body_contents.rpc(NodePath(key), kit)
+
+
+# --- quarry objectives ---------------------------------------------------
+#
+# Three subobjectives and a central pickup, quarry only - other maps simply
+# have no CapturePoint/CentralObjective nodes to ever touch any of this.
+#
+# Capturing a point is not exclusive the way searching a body is: two peers
+# visiting the same one at once corrupts nothing, so there is no ask/grant
+# step for it, only a report once a player's own local hold-timer finishes
+# (Player._update_capture, the same shape Player._update_extraction already
+# uses for the exit rings). Carrying the central object *is* exclusive -
+# only one peer may hold it - so that one is granted, not merely reported,
+# the same shape ask_to_search/_ask_to_search already use for a body.
+
+## Whether each subobjective (index 0-2) has been captured, by anyone - the
+## shared/display flags every machine draws a ring colour off. Never written
+## to directly; always replaced wholesale by _set_objectives.
+var objective_captured := [false, false, false]
+
+## Host-only: which subobjective ids each peer has personally captured.
+## Keyed by peer id, valued as an Array[int]. What "the same person has been
+## to all three" actually checks - see _tell_captured.
+var _peer_captures := {}
+
+## True the instant any single peer's own array above reaches all three.
+## Broadcast rather than worked out locally: only the host has every peer's
+## progress to check against.
+var objective_unlocked := false
+
+## Peer id currently carrying the central object, or 0 if it is unclaimed -
+## sitting in the shaft, or dropped where its last carrier fell.
+var objective_carrier := 0
+
+## Where the object sits while objective_carrier is 0 and it has been
+## dropped at least once - Vector2.ZERO otherwise, meaning "still exactly
+## where the level put it," which CentralObjective reads as "stay put"
+## rather than as a real drop on the origin. While carried, position is
+## instead derived every frame from the carrier's own already-replicated
+## body (CentralObjective._process) - the same trick rail_bombs uses rather
+## than sending a second position of its own.
+var objective_drop_at := Vector2.ZERO
+
+signal objectives_changed
+
+
+## A player's own hold-timer on a subobjective finished.
+func tell_captured(id: int) -> void:
+	if not is_networked():
+		_do_capture(id, peer_id())
+		return
+	_tell_captured.rpc_id(1, id)
+
+
+@rpc("any_peer", "reliable")
+func _tell_captured(id: int) -> void:
+	if not is_host:
+		return
+	var who := multiplayer.get_remote_sender_id()
+	if who == 0:
+		who = 1
+	_do_capture(id, who)
+
+
+## Host only. Adds to that peer's own progress, marks the point captured for
+## everyone to see, and checks whether this peer alone has now done all three.
+func _do_capture(id: int, who: int) -> void:
+	var mine: Array = _peer_captures.get(who, [])
+	if not mine.has(id):
+		mine.append(id)
+		_peer_captures[who] = mine
+	if id < 0 or id >= objective_captured.size():
+		return
+	var captured: Array = objective_captured.duplicate()
+	captured[id] = true
+	_push_objectives(captured, objective_unlocked or mine.size() >= 3,
+		objective_carrier, objective_drop_at)
+
+
+## Asks to pick up the central object. Refused if it is still locked or
+## somebody already has it - see the header above for why this one, unlike
+## tell_captured, has to be a request rather than a report.
+func ask_to_carry() -> void:
+	if not is_networked():
+		if objective_unlocked and objective_carrier == 0:
+			_push_objectives(objective_captured, objective_unlocked, peer_id(), objective_drop_at)
+		return
+	_ask_to_carry.rpc_id(1)
+
+
+@rpc("any_peer", "reliable")
+func _ask_to_carry() -> void:
+	if not is_host or not objective_unlocked or objective_carrier != 0:
+		return
+	var who := multiplayer.get_remote_sender_id()
+	if who == 0:
+		who = 1
+	_push_objectives(objective_captured, objective_unlocked, who, objective_drop_at)
+
+
+## The carrier died holding it. Only their own machine ever calls this - same
+## rule Player._die works under everywhere else - so the host takes the
+## report at face value once it confirms this peer really was the carrier.
+func tell_dropped_objective(at: Vector2) -> void:
+	if not is_networked():
+		if objective_carrier == peer_id():
+			_push_objectives(objective_captured, objective_unlocked, 0, at)
+		return
+	_tell_dropped_objective.rpc_id(1, at)
+
+
+@rpc("any_peer", "reliable")
+func _tell_dropped_objective(at: Vector2) -> void:
+	if not is_host:
+		return
+	var who := multiplayer.get_remote_sender_id()
+	if who == 0:
+		who = 1
+	if objective_carrier != who:
+		return
+	_push_objectives(objective_captured, objective_unlocked, 0, at)
+
+
+func _push_objectives(captured: Array, unlocked: bool, carrier: int, drop_at: Vector2) -> void:
+	if is_networked():
+		_set_objectives.rpc(captured, unlocked, carrier, drop_at)
+	else:
+		_set_objectives(captured, unlocked, carrier, drop_at)
+
+
+@rpc("authority", "call_local", "reliable")
+func _set_objectives(captured: Array, unlocked: bool, carrier: int, drop_at: Vector2) -> void:
+	objective_captured = captured
+	objective_unlocked = unlocked
+	objective_carrier = carrier
+	objective_drop_at = drop_at
+	objectives_changed.emit()
 
 
 ## Where rounds and grenades live. Named rather than guessed, so every machine

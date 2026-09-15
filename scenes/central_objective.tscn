@@ -1,0 +1,7 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/central_objective.gd" id="1_central"]
+
+[node name="CentralObjective" type="Node2D"]
+z_index = 2
+script = ExtResource("1_central")
