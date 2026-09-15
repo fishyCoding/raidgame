@@ -2325,14 +2325,14 @@ speed = 800.0
 
 [node name="ZipPit4" parent="Ziplines" unique_id=1737164011 instance=ExtResource("9_dnabq")]
 position = Vector2(3418, 1222)
-top = Vector2(-205.56616, 593.4603)
-bottom = Vector2(46.656555, -99.36328)
+top = Vector2(46.656555, -99.36328)
+bottom = Vector2(-205.56616, 593.4603)
 speed = 800.0
 
 [node name="ZipPit5" parent="Ziplines" unique_id=111115228 instance=ExtResource("9_dnabq")]
 position = Vector2(4315, 522)
-top = Vector2(-205.56616, 593.4603)
-bottom = Vector2(599.86255, 79.410706)
+top = Vector2(599.86255, 79.410706)
+bottom = Vector2(-205.56616, 593.4603)
 speed = 800.0
 
 [node name="ZipPit7" parent="Ziplines" unique_id=741417183 instance=ExtResource("9_dnabq")]
